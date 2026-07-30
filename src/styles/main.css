@@ -48,7 +48,7 @@
   inset: 0;
   z-index: 2147483647;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
 
   font-family: var(--font-sans);
   font-size: 16px;
