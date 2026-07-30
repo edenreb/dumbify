@@ -1,0 +1,62 @@
+interface YTDataMessage {
+  type: 'GET_YT_DATA'
+  name: string
+}
+
+interface YTCfgMessage {
+  type: 'GET_YT_CFG'
+}
+
+type BGMessage = YTDataMessage | YTCfgMessage
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.storage.local.set({ 'dumbify:installed': true })
+})
+
+chrome.runtime.onMessage.addListener((message: BGMessage, sender, sendResponse) => {
+  if (message.type === 'GET_YT_DATA') {
+    const tabId = sender.tab?.id
+    if (!tabId) { sendResponse(null); return }
+
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: (name: string) => {
+        try {
+          const val = (window as any)[name]
+          if (val === undefined || val === null) return null
+          return JSON.parse(JSON.stringify(val))
+        } catch { return null }
+      },
+      args: [message.name],
+    }).then((results) => {
+      const data = results?.[0]?.result ?? null
+      sendResponse(data)
+    }).catch(() => sendResponse(null))
+
+    return true
+  }
+
+  if (message.type === 'GET_YT_CFG') {
+    const tabId = sender.tab?.id
+    if (!tabId) { sendResponse(null); return }
+
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => {
+        try {
+          const cfg = (window as any).ytcfg
+          if (!cfg) return null
+          const data = cfg.data_ ?? cfg
+          return JSON.parse(JSON.stringify(data))
+        } catch { return null }
+      },
+    }).then((results) => {
+      const data = results?.[0]?.result ?? null
+      sendResponse(data)
+    }).catch(() => sendResponse(null))
+
+    return true
+  }
+})

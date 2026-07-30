@@ -1,0 +1,17 @@
+{
+  "name": "dumbify",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.26",
+    "@types/chrome": "^0.0.280",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
