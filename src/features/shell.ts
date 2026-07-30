@@ -1,7 +1,18 @@
 import type { NavigationState, Route } from '../types'
+import type { DumbifySettings } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { root } from '../core/UIEngine'
+import { sidebar } from '../core/UIEngine'
 import { onNavigate, navigateTo } from '../core/PageManager'
+import { getSettings, setSettings } from '../core/storage'
+
+function injectFonts() {
+  if (document.getElementById('df-fonts')) return
+  const link = document.createElement('link')
+  link.id = 'df-fonts'
+  link.rel = 'stylesheet'
+  link.href = 'https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Inter+Tight:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap'
+  document.head.appendChild(link)
+}
 
 const ROUTE_NAMES: Record<Route, string> = {
   home: 'Home',
@@ -23,10 +34,10 @@ const NAV: { label: string; route: Route; path: string }[] = [
   { label: 'Watch Later', route: 'watch-later', path: '/playlist?list=WL' },
 ]
 
-let navEl: HTMLElement | null = null
 let linkEls: HTMLElement[] = []
 let currentRoute: Route = 'home'
 let unsubNav: (() => void) | null = null
+let sidebarEl: HTMLElement | null = null
 
 function updateActiveLink() {
   linkEls.forEach((el, i) => {
@@ -46,45 +57,91 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
-function buildNavbar() {
-  navEl = document.createElement('nav')
-  navEl.id = 'df-nav'
+function buildSidebar() {
+  if (!sidebar) return
 
-  const brand = document.createElement('span')
-  brand.id = 'df-brand'
-  brand.textContent = 'Dumbify'
+  sidebarEl = sidebar
+  sidebarEl.innerHTML = ''
+
+  const brand = document.createElement('a')
+  brand.className = 'df-brand'
   brand.onclick = () => navigateTo('/')
-  navEl.appendChild(brand)
+  const brandName = document.createElement('span')
+  brandName.className = 'df-brand-name'
+  brandName.textContent = 'Dumbify'
+  brand.appendChild(brandName)
+  const tagline = document.createElement('span')
+  tagline.className = 'df-brand-tagline'
+  tagline.textContent = 'youtube, quieted'
+  brand.appendChild(tagline)
+  sidebarEl.appendChild(brand)
 
-  const links = document.createElement('div')
-  links.id = 'df-links'
+  const nav = document.createElement('nav')
+  nav.className = 'df-nav'
 
   NAV.forEach((item) => {
     const btn = document.createElement('button')
     btn.className = 'df-nav-link'
-    btn.textContent = item.label
+    const span = document.createElement('span')
+    span.textContent = item.label
+    btn.appendChild(span)
     btn.onclick = () => navigateTo(item.path)
     linkEls.push(btn)
-    links.appendChild(btn)
+    nav.appendChild(btn)
   })
 
-  navEl.appendChild(links)
+  sidebarEl.appendChild(nav)
 
-  const cmd = document.createElement('button')
-  cmd.id = 'df-cmd'
-  cmd.textContent = '\u2318K'
-  cmd.title = 'Search (Cmd+K)'
-  cmd.onclick = showSearchPrompt
-  navEl.appendChild(cmd)
+  const footer = document.createElement('div')
+  footer.className = 'df-sidebar-footer'
+
+  const toggle = document.createElement('button')
+  toggle.className = 'df-theme-toggle'
+  toggle.setAttribute('aria-label', 'Toggle dark mode')
+
+  const track = document.createElement('span')
+  track.className = 'df-theme-track'
+
+  const knob = document.createElement('span')
+  knob.className = 'df-theme-knob'
+
+  const label = document.createElement('span')
+  label.className = 'df-theme-label'
+
+  toggle.appendChild(track)
+  track.appendChild(knob)
+  toggle.appendChild(label)
+
+  getSettings().then((s) => {
+    const isDark = s.theme === 'dark'
+    knob.className = `df-theme-knob ${isDark ? 'dark' : 'light'}`
+    label.textContent = isDark ? 'Night' : 'Day'
+  })
+
+  toggle.onclick = () => {
+    getSettings().then((s) => {
+      const next = s.theme === 'dark' ? 'light' : 'dark'
+      setSettings({ theme: next })
+      knob.className = `df-theme-knob ${next === 'dark' ? 'dark' : 'light'}`
+      label.textContent = next === 'dark' ? 'Night' : 'Day'
+    })
+  }
+
+  footer.appendChild(toggle)
+
+  const bottomTagline = document.createElement('p')
+  bottomTagline.className = 'df-sidebar-tagline'
+  bottomTagline.textContent = 'no thumbnails · no autoplay'
+  footer.appendChild(bottomTagline)
+
+  sidebarEl.appendChild(footer)
 
   updateActiveLink()
-  root.prepend(navEl)
   document.addEventListener('keydown', onKeyDown)
 }
 
-function removeNavbar() {
-  navEl?.remove()
-  navEl = null
+function removeSidebar() {
+  if (sidebarEl) sidebarEl.innerHTML = ''
   linkEls = []
   document.removeEventListener('keydown', onKeyDown)
 }
@@ -93,22 +150,23 @@ export const shellFeature: Feature = {
   id: 'shell',
 
   mount(nav: NavigationState) {
+    injectFonts()
     currentRoute = nav.route
-    buildNavbar()
+    buildSidebar()
 
     const pageName = ROUTE_NAMES[nav.route] ?? 'YouTube'
-    document.title = `${pageName} \u00B7 Dumbify`
+    document.title = `${pageName} · Dumbify`
 
     unsubNav = onNavigate((s) => {
       currentRoute = s.route
       updateActiveLink()
       const name = ROUTE_NAMES[s.route] ?? 'YouTube'
-      document.title = `${name} \u00B7 Dumbify`
+      document.title = `${name} · Dumbify`
     })
   },
 
   unmount() {
-    removeNavbar()
+    removeSidebar()
     if (unsubNav) {
       unsubNav()
       unsubNav = null

@@ -4,66 +4,57 @@ import type { DumbifySettings } from '../types'
 
 export let root: HTMLElement
 export let content: HTMLElement
-export let overlay: HTMLElement
-
-function createEl(tag: string, id: string): HTMLElement {
-  const el = document.createElement(tag)
-  el.id = id
-  return el
-}
+export let sidebar: HTMLElement | null = null
+export let main: HTMLElement | null = null
 
 function applyFont(s: DumbifySettings) {
   if (!root) return
-  root.style.font = `${s.fontSize}px/1.6 ${s.fontFamily}`
   root.style.setProperty('--df-font-family', s.fontFamily)
   root.style.setProperty('--df-font-size', s.fontSize + 'px')
 }
 
+function applyTheme(s: DumbifySettings) {
+  if (!root) return
+  root.classList.toggle('dark', s.theme === 'dark')
+}
+
 export function mountUI() {
-  root = createEl('div', 'dumbify-root')
-  root.style.cssText = `
-    all: initial;
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 2147483647;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    background: #202020;
-    color: #fff;
-  `
+  root = document.createElement('div')
+  root.id = 'dumbify-root'
   document.documentElement.style.overflow = 'hidden'
   document.body.style.overflow = 'hidden'
   document.body.appendChild(root)
 
-  content = createEl('div', 'dumbify-content')
-  root.appendChild(content)
+  const layout = document.createElement('div')
+  layout.className = 'df-layout'
+  root.appendChild(layout)
 
-  overlay = createEl('div', 'dumbify-overlay')
-  overlay.style.display = 'none'
-  root.appendChild(overlay)
+  sidebar = document.createElement('aside')
+  sidebar.className = 'df-sidebar'
+  layout.appendChild(sidebar)
 
-  getSettings().then((s) => applyFont(s))
-  onSettingsChange((s) => applyFont(s))
+  main = document.createElement('main')
+  main.className = 'df-main'
+  layout.appendChild(main)
+
+  content = document.createElement('div')
+  content.id = 'dumbify-content'
+  main.appendChild(content)
+
+  getSettings().then((s) => {
+    applyTheme(s)
+    applyFont(s)
+  })
+  onSettingsChange((s) => {
+    applyTheme(s)
+    applyFont(s)
+  })
 }
 
 export function unmountUI() {
   root?.remove()
 }
 
-export function showOverlay(html: string, onClose: () => void) {
-  overlay.innerHTML = html
-  overlay.style.display = ''
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) onClose()
-  })
-}
-
-export function hideOverlay() {
-  overlay.style.display = 'none'
-  overlay.innerHTML = ''
-}
-
 export function clearContent() {
-  content.innerHTML = ''
+  if (content) content.innerHTML = ''
 }

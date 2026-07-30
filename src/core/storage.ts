@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS: DumbifySettings = {
   autoFocusMode: false,
   fontSize: 20,
   fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+  theme: 'light',
 }
 
 function get<T>(key: string): Promise<T | null> {

@@ -10,6 +10,9 @@ export interface Video {
   verified: boolean
   live: boolean
   description?: string
+  words?: string
+  meta?: string
+  progress?: string
 }
 
 export interface WatchData {
@@ -29,6 +32,7 @@ export interface DumbifySettings {
   autoFocusMode: boolean
   fontSize: number
   fontFamily: string
+  theme: 'light' | 'dark'
 }
 
 export type Route =
