@@ -19,13 +19,23 @@ function applyFont(s: DumbifySettings) {
 function applyTheme(s: DumbifySettings) {
   if (!root) return
   root.classList.toggle('dark', s.theme === 'dark')
-  document.documentElement.style.backgroundColor = s.theme === 'dark' ? DARK_BG : LIGHT_BG
-  document.body.style.backgroundColor = s.theme === 'dark' ? DARK_BG : LIGHT_BG
+  const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
+  document.documentElement.style.backgroundColor = bg
+  document.body.style.backgroundColor = bg
+  root.style.setProperty('background', bg, 'important')
 }
 
 export function mountUI() {
+  document.documentElement.style.backgroundColor = LIGHT_BG
+  document.body.style.backgroundColor = LIGHT_BG
+
   root = document.createElement('div')
   root.id = 'dumbify-root'
+  root.style.setProperty('position', 'fixed', 'important')
+  root.style.setProperty('inset', '0', 'important')
+  root.style.setProperty('z-index', '2147483647', 'important')
+  root.style.setProperty('background', LIGHT_BG, 'important')
+  root.style.setProperty('visibility', 'visible', 'important')
 
   document.documentElement.style.overflow = 'hidden'
   document.documentElement.style.overscrollBehavior = 'none'

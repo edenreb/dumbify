@@ -1,7 +1,7 @@
 import type { NavigationState, Video, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
-import { extractPageVideos, extractHistoryVideos, extractPageVideosWithContinuation, fetchContinuation, diag } from '../core/DataExtractor'
+import { extractPageVideosWithContinuation, fetchContinuation, diag } from '../core/DataExtractor'
 import { navigateTo } from '../core/PageManager'
 
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
@@ -268,10 +268,10 @@ export const homeFeedFeature: Feature = {
         const result = await extractPageVideosWithContinuation()
         videos = result.videos
         continuationToken = result.continuation
-      } else if (nav.route === 'history') {
-        videos = await extractHistoryVideos()
       } else {
-        videos = await extractPageVideos()
+        const result = await fetchContinuation('', nav.route)
+        videos = result.videos
+        continuationToken = result.token
       }
 
       if (feedCancelled) return
@@ -297,5 +297,9 @@ export const homeFeedFeature: Feature = {
     if (h) root!.removeEventListener('scroll', h)
     delete (root as any).__dfScrollHandler
     content!.innerHTML = ''
+  },
+
+  update(nav: NavigationState) {
+    this.mount(nav)
   },
 }

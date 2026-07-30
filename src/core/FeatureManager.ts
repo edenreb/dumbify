@@ -3,6 +3,7 @@ import type { NavigationState } from '../types'
 export interface Feature {
   id: string
   mount(nav: NavigationState): void
+  update?(nav: NavigationState): void
   unmount(): void
 }
 
@@ -16,6 +17,7 @@ export function registerFeature(feature: Feature) {
 export function activateFeatures(ids: string[], nav: NavigationState) {
   const toUnmount = activeIds.filter((id) => !ids.includes(id))
   const toMount = ids.filter((id) => !activeIds.includes(id))
+  const toUpdate = ids.filter((id) => activeIds.includes(id))
 
   for (const id of toUnmount) {
     registry.get(id)?.unmount()
@@ -23,6 +25,11 @@ export function activateFeatures(ids: string[], nav: NavigationState) {
 
   for (const id of toMount) {
     registry.get(id)?.mount(nav)
+  }
+
+  for (const id of toUpdate) {
+    const feature = registry.get(id)
+    if (feature?.update) feature.update(nav)
   }
 
   activeIds.length = 0

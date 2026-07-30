@@ -1,6 +1,23 @@
 /* ===== Dumbify — paper & ink design system ===== */
 /* WARNING: never use `rem` — YouTube sets html { font-size: 10px } */
 
+/* Hide YouTube the instant CSS is injected at document_end */
+html {
+  background: #f7f5ee !important;
+  min-height: 100%;
+}
+@media (prefers-color-scheme: dark) {
+  html {
+    background: #1d1d1d !important;
+  }
+}
+body {
+  visibility: hidden !important;
+}
+#dumbify-root {
+  visibility: visible !important;
+}
+
 #dumbify-root,
 #dumbify-root * {
   box-sizing: border-box;
@@ -287,7 +304,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 16px;
-  padding-bottom: 32px;
+  padding-bottom: 44px;
 }
 
 .df-page-head-body {
@@ -303,7 +320,7 @@
 }
 
 .df-page-title {
-  margin-top: 12px;
+  margin-top: 16px;
   font-family: var(--font-serif);
   font-size: 36px;
   line-height: 1.05;
@@ -318,7 +335,7 @@
 }
 
 .df-page-note {
-  margin-top: 12px;
+  margin-top: 16px;
   max-width: 68ch;
   font-size: 14px;
   line-height: 1.6;
@@ -337,7 +354,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 20px;
-  padding-bottom: 32px;
+  padding-bottom: 44px;
 }
 
 .df-toolbar-item {
@@ -372,7 +389,7 @@
   align-items: baseline;
   gap: 16px;
   border-bottom: 1px solid var(--border);
-  padding: 20px 0;
+  padding: 28px 0;
   cursor: pointer;
   text-decoration: none;
   transition: background-color 200ms ease, padding 200ms ease;
@@ -424,7 +441,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 8px;
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 14px;
   color: var(--muted-foreground);
 }

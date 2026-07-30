@@ -65,7 +65,7 @@ function buildSidebar() {
 
   const brand = document.createElement('a')
   brand.className = 'df-brand'
-  brand.onclick = () => navigateTo('/')
+  brand.onclick = (e) => { e.stopPropagation(); navigateTo('/') }
   const brandName = document.createElement('span')
   brandName.className = 'df-brand-name'
   brandName.textContent = 'Dumbify'
@@ -85,7 +85,7 @@ function buildSidebar() {
     const span = document.createElement('span')
     span.textContent = item.label
     btn.appendChild(span)
-    btn.onclick = () => navigateTo(item.path)
+    btn.onclick = (e) => { e.stopPropagation(); navigateTo(item.path) }
     linkEls.push(btn)
     nav.appendChild(btn)
   })
@@ -171,5 +171,12 @@ export const shellFeature: Feature = {
       unsubNav()
       unsubNav = null
     }
+  },
+
+  update(nav: NavigationState) {
+    currentRoute = nav.route
+    updateActiveLink()
+    const name = ROUTE_NAMES[nav.route] ?? 'YouTube'
+    document.title = `${name} · Dumbify`
   },
 }

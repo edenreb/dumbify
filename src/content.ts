@@ -35,8 +35,9 @@ function init() {
   startPageManager()
   syncFeatures()
 
-  onNavigate(() => {
-    syncFeatures()
+  onNavigate((nav) => {
+    const ids = getFeatureIdsForRoute(nav.route)
+    activateFeatures(ids, nav)
   })
 }
 
