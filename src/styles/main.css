@@ -22,7 +22,6 @@ body {
 #dumbify-root * {
   box-sizing: border-box;
   margin: 0;
-  padding: 0;
   border-color: var(--border);
 }
 
@@ -122,7 +121,7 @@ body {
     position: sticky;
     top: 0;
     height: 100vh;
-    width: 208px;
+    width: 240px;
     padding-top: 56px;
   }
 }
@@ -160,7 +159,7 @@ body {
   .df-nav {
     margin-top: 48px;
     flex-direction: column;
-    gap: 0;
+    gap: 4px;
   }
 }
 
