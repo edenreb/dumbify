@@ -1,8 +1,8 @@
-import type { NavigationState, Video, Route } from '../types'
+import type { NavigationState, Video, Channel, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
-import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, diag } from '../core/DataExtractor'
-import { navigateTo } from '../core/PageManager'
+import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, diag } from '../core/DataExtractor'
+import type { SearchItem } from '../core/DataExtractor'
 
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
   home: {
@@ -52,7 +52,7 @@ const TOOLBAR_OPTIONS: Partial<Record<Route, string[]>> = {
 
 function renderPageHead(nav: NavigationState) {
   const info = ROUTE_TITLES[nav.route]
-  if (!info) return
+  if (!info || nav.route === 'channel') return
 
   const head = document.createElement('header')
   head.className = 'df-page-head'
@@ -109,6 +109,160 @@ function renderToolbar(route: Route) {
   })
 
   content!.appendChild(bar)
+}
+
+function renderChannelBanner(ch: Channel, before?: HTMLElement) {
+  const banner = document.createElement('a')
+  banner.className = 'df-channel-banner'
+  banner.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/channel/${ch.id}` }
+  banner.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); window.location.href = `/channel/${ch.id}` } }
+  banner.setAttribute('role', 'link')
+  banner.tabIndex = 0
+
+  const label = document.createElement('span')
+  label.className = 'df-channel-banner-label'
+  label.textContent = ch.verified ? 'Channel · Verified' : 'Channel'
+  banner.appendChild(label)
+
+  const row = document.createElement('div')
+  row.className = 'df-channel-banner-row'
+
+  const title = document.createElement('span')
+  title.className = 'df-channel-banner-name'
+  title.textContent = ch.name
+  row.appendChild(title)
+
+  const meta = document.createElement('span')
+  meta.className = 'df-channel-banner-meta'
+  const parts: string[] = []
+  if (ch.subscribers) parts.push(ch.subscribers)
+  if (ch.videoCount) parts.push(ch.videoCount)
+  meta.textContent = parts.join(' · ')
+  row.appendChild(meta)
+
+  banner.appendChild(row)
+
+  if (ch.description) {
+    const desc = document.createElement('p')
+    desc.className = 'df-channel-banner-desc'
+    desc.textContent = ch.description
+    banner.appendChild(desc)
+  }
+
+  const cta = document.createElement('span')
+  cta.className = 'df-channel-banner-cta'
+  cta.textContent = 'View channel'
+  banner.appendChild(cta)
+
+  if (before && before.parentNode) before.parentNode.insertBefore(banner, before)
+  else content!.appendChild(banner)
+}
+
+function renderChannelHead(ch: Channel, before?: HTMLElement) {
+  const head = document.createElement('header')
+  head.className = 'df-page-head'
+
+  const body = document.createElement('div')
+  body.className = 'df-page-head-body'
+
+  const eyebrow = document.createElement('p')
+  eyebrow.className = 'df-page-eyebrow'
+  eyebrow.textContent = ch.handle ? `Channel · ${ch.handle.replace('@', '')}` : 'Channel'
+  body.appendChild(eyebrow)
+
+  const title = document.createElement('h1')
+  title.className = 'df-page-title df-channel-page-title'
+  title.textContent = ch.name
+  body.appendChild(title)
+
+  head.appendChild(body)
+
+  const aside = document.createElement('div')
+  aside.className = 'df-page-aside'
+  const badge = document.createElement('span')
+  badge.className = 'df-sub-badge'
+  badge.textContent = ch.verified ? 'Verified' : 'Subscribed'
+  aside.appendChild(badge)
+  head.appendChild(aside)
+
+  if (before && before.parentNode) before.parentNode.insertBefore(head, before)
+  else content!.appendChild(head)
+}
+
+function renderChannelStats(ch: Channel, videos: Video[], before?: HTMLElement) {
+  const stats = document.createElement('dl')
+  stats.className = 'df-channel-stats'
+
+  const entries: { k: string; v: string }[] = [
+    { k: 'Subscribers', v: (ch.subscribers || '—').replace(/\s*subscribers?\s*/i, '').trim() },
+    { k: 'Videos', v: (ch.videoCount || String(videos.length)).replace(/\s*videos?\s*/i, '').trim() },
+  ]
+
+  entries.forEach((entry) => {
+    const cell = document.createElement('div')
+    const dt = document.createElement('dt')
+    dt.className = 'df-stat-label'
+    dt.textContent = entry.k
+    const dd = document.createElement('dd')
+    dd.className = 'df-stat-value'
+    dd.textContent = entry.v
+    cell.appendChild(dt)
+    cell.appendChild(dd)
+    stats.appendChild(cell)
+  })
+
+  if (before && before.parentNode) before.parentNode.insertBefore(stats, before)
+  else content!.appendChild(stats)
+}
+
+function renderChannelCard(ch: Channel): HTMLElement {
+  const card = document.createElement('a')
+  card.className = 'df-channel-card'
+  card.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/channel/${ch.id}` }
+  card.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); window.location.href = `/channel/${ch.id}` } }
+  card.setAttribute('role', 'link')
+  card.tabIndex = 0
+
+  const label = document.createElement('span')
+  label.className = 'df-channel-card-label'
+  label.textContent = ch.verified ? 'Channel · Verified' : 'Channel'
+  card.appendChild(label)
+
+  const name = document.createElement('span')
+  name.className = 'df-channel-card-name'
+  name.textContent = ch.name
+  card.appendChild(name)
+
+  const meta = document.createElement('span')
+  meta.className = 'df-channel-card-meta'
+  const parts: string[] = []
+  if (ch.subscribers) parts.push(ch.subscribers)
+  if (ch.videoCount) parts.push(ch.videoCount)
+  meta.textContent = parts.join(' · ')
+  card.appendChild(meta)
+
+  if (ch.description) {
+    const desc = document.createElement('p')
+    desc.className = 'df-channel-card-desc'
+    desc.textContent = ch.description
+    card.appendChild(desc)
+  }
+
+  const cta = document.createElement('span')
+  cta.className = 'df-channel-card-cta'
+  cta.textContent = 'View channel'
+  card.appendChild(cta)
+
+  return card
+}
+
+function parseViews(v: string): number {
+  const m = v.replace(/,/g, '').match(/([\d.]+)\s*([KMB])?\s*(?:views?)?/i)
+  if (!m) return 0
+  const n = parseFloat(m[1])
+  if (Number.isNaN(n)) return 0
+  const mult = m[2]?.toUpperCase() === 'K' ? 1e3 : m[2]?.toUpperCase() === 'M' ? 1e6 : m[2]?.toUpperCase() === 'B' ? 1e9 : 1
+  return n * mult
 }
 
 function renderVideo(v: Video): HTMLElement {
@@ -223,6 +377,11 @@ export const homeFeedFeature: Feature = {
     let loadCount = 0
     let initialLoadDone = false
     const videoIds = new Set<string>()
+    const channelIds = new Set<string>()
+    let featuredChannelId: string | null = null
+    let channelVideos: Video[] = []
+    let aboutEl: HTMLElement | null = null
+    let tabsEl: HTMLElement | null = null
 
     const onScroll = () => {
       if (loadingMore || !initialLoadDone) return
@@ -239,6 +398,90 @@ export const homeFeedFeature: Feature = {
       updateItemNumbers()
     }
 
+    function appendSearchItems(items: SearchItem[]) {
+      if (feedCancelled) return
+      if (list.querySelector('.df-loading, .df-empty')) list.innerHTML = ''
+      const channels: Channel[] = []
+      const videos: Video[] = []
+      for (const item of items) {
+        if (item.kind === 'channel') {
+          if (item.channel.id === featuredChannelId) continue
+          if (channelIds.has(item.channel.id)) continue
+          channelIds.add(item.channel.id)
+          channels.push(item.channel)
+        } else {
+          if (videoIds.has(item.video.id)) continue
+          videoIds.add(item.video.id)
+          videos.push(item.video)
+        }
+      }
+      channels.forEach((c) => list.appendChild(renderChannelCard(c)))
+      videos.forEach((v) => list.appendChild(renderVideo(v)))
+      updateItemNumbers()
+    }
+
+    function rerenderChannelList(sorted: Video[]) {
+      if (feedCancelled) return
+      list.innerHTML = ''
+      videoIds.clear()
+      const newVids = sorted.filter((v) => !videoIds.has(v.id))
+      newVids.forEach((v) => { videoIds.add(v.id); list.appendChild(renderVideo(v)) })
+      updateItemNumbers()
+    }
+
+    function setTab(tab: string) {
+      if (tabsEl) {
+        const spans = tabsEl.querySelectorAll('.df-toolbar-item')
+        spans.forEach((s, i) => s.classList.toggle('df-active', i === (tab === 'videos' ? 0 : tab === 'popular' ? 1 : tab === 'playlists' ? 2 : 3)))
+      }
+      if (aboutEl) aboutEl.style.display = tab === 'about' ? '' : 'none'
+      if (list) list.style.display = tab === 'about' ? 'none' : ''
+      if (tab === 'popular') rerenderChannelList([...channelVideos].sort((a, b) => parseViews(b.views) - parseViews(a.views)))
+      if (tab === 'videos') rerenderChannelList(channelVideos)
+      if (tab === 'playlists') { list.innerHTML = ''; const e = document.createElement('div'); e.className = 'df-empty'; e.textContent = 'No playlists to display'; list.appendChild(e) }
+    }
+
+    function renderChannelTabs(before: HTMLElement) {
+      tabsEl = document.createElement('div')
+      tabsEl.className = 'df-toolbar df-channel-tabs'
+      const labels = ['Videos', 'Popular', 'Playlists', 'About']
+      labels.forEach((o, i) => {
+        const span = document.createElement('span')
+        span.className = i === 0 ? 'df-toolbar-item df-active' : 'df-toolbar-item'
+        span.textContent = o
+        span.onclick = () => setTab(i === 0 ? 'videos' : i === 1 ? 'popular' : i === 2 ? 'playlists' : 'about')
+        tabsEl!.appendChild(span)
+      })
+      if (before && before.parentNode) before.parentNode.insertBefore(tabsEl, before)
+      else content!.appendChild(tabsEl)
+    }
+
+    function renderChannelAbout(ch: Channel, before: HTMLElement) {
+      aboutEl = document.createElement('div')
+      aboutEl.className = 'df-channel-about'
+      aboutEl.style.display = 'none'
+
+      const desc = document.createElement('p')
+      desc.className = 'df-channel-about-desc'
+      desc.textContent = ch.description || 'No description yet.'
+      aboutEl.appendChild(desc)
+
+      if (ch.handle) {
+        const links = document.createElement('div')
+        links.className = 'df-channel-about-links'
+        const link = document.createElement('a')
+        link.href = `https://www.youtube.com${ch.handle}`
+        link.target = '_blank'
+        link.rel = 'noopener noreferrer'
+        link.textContent = `youtube.com${ch.handle}`
+        links.appendChild(link)
+        aboutEl.appendChild(links)
+      }
+
+      if (before && before.parentNode) before.parentNode.insertBefore(aboutEl, before)
+      else content!.appendChild(aboutEl)
+    }
+
     function showEmpty() {
       if (feedCancelled) return
       list.innerHTML = ''
@@ -252,10 +495,13 @@ export const homeFeedFeature: Feature = {
       if (loadingMore || feedCancelled) return
       loadingMore = true
       try {
-        const result = await fetchContinuation(continuationToken || '', nav.route, nav.searchQuery ?? '')
+        const result = await fetchContinuation(continuationToken || '', nav.route, nav.searchQuery ?? '', nav.channelId ?? '')
         if (feedCancelled) return
         continuationToken = result.token
-        if (result.videos.length) {
+        if (nav.route === 'search' && result.items?.length) {
+          loadCount++
+          appendSearchItems(result.items)
+        } else if (result.videos.length) {
           loadCount++
           appendVideos(result.videos)
         }
@@ -272,6 +518,34 @@ export const homeFeedFeature: Feature = {
         continuationToken = result.continuation
       } else if (nav.route === 'search') {
         const result = await fetchSearchResults(nav.searchQuery ?? '')
+        videos = result.videos
+        continuationToken = result.continuation
+        if (feedCancelled) return
+        featuredChannelId = result.channels[0]?.id ?? null
+        if (featuredChannelId) renderChannelBanner(result.channels[0], list)
+        if (result.items?.length) {
+          appendSearchItems(result.items)
+          initialLoadDone = true
+          return
+        }
+      } else if (nav.route === 'channel') {
+        const result = await fetchChannelPage(nav.channelId ?? '')
+        if (feedCancelled) return
+        const channelName = result.channel?.name || result.videos[0]?.channel || 'Channel'
+        const channel = result.channel ?? {
+          id: nav.channelId ?? '',
+          name: channelName,
+          handle: '',
+          subscribers: '',
+          videoCount: String(result.videos.length),
+          description: '',
+          verified: false,
+        }
+        renderChannelHead(channel, list)
+        renderChannelStats(channel, result.videos, list)
+        renderChannelTabs(list)
+        renderChannelAbout(channel, list)
+        channelVideos = result.videos
         videos = result.videos
         continuationToken = result.continuation
       } else {
