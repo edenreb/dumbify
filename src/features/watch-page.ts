@@ -271,15 +271,35 @@ function clickNativeWl(btn: HTMLButtonElement) {
   }, 500)
 }
 
-function movePlayerInto(target: HTMLElement) {
-  if (movedPlayer) {
-    if (movedPlayer.parentElement !== target) target.appendChild(movedPlayer)
-    fitPlayer()
-    bindAspectSync()
-    return
-  }
-  const el = findPlayer()
-  if (!el) return
+let moveCheck: number | null = null
+let moveSafety: number | null = null
+
+function playerReady(el: HTMLElement): boolean {
+  const video = el.querySelector('video')
+  return !!video && (!!video.currentSrc || video.readyState > 0)
+}
+
+function checkPlaybackHealth() {
+  window.setTimeout(() => {
+    const video = movedPlayer?.querySelector('video')
+    if (!video || !movedPlayer) return
+    console.log(
+      '[dumbify] video state:',
+      JSON.stringify({
+        src: video.currentSrc?.slice(0, 100),
+        readyState: video.readyState,
+        error: video.error ? `${video.error.code}: ${video.error.message}` : null,
+      })
+    )
+    if (video.readyState === 0 && video.currentSrc && !video.error) {
+      console.log('[dumbify] nudging video.load()')
+      video.load()
+    }
+  }, 4000)
+}
+
+function movePlayerNow(target: HTMLElement, el: HTMLElement) {
+  if (movedPlayer) return
   console.log('[dumbify] player found:', el.tagName, el.id || el.className)
   originalParent = el.parentElement
   originalSibling = el.nextSibling
@@ -294,6 +314,52 @@ function movePlayerInto(target: HTMLElement) {
   }
   fitPlayer()
   bindAspectSync()
+  checkPlaybackHealth()
+}
+
+function movePlayerInto(target: HTMLElement) {
+  if (movedPlayer) {
+    if (movedPlayer.parentElement !== target) target.appendChild(movedPlayer)
+    fitPlayer()
+    bindAspectSync()
+    return
+  }
+  const el = findPlayer()
+  if (!el) return
+  if (playerReady(el)) {
+    if (moveCheck !== null) {
+      window.clearInterval(moveCheck)
+      moveCheck = null
+    }
+    if (moveSafety !== null) {
+      window.clearTimeout(moveSafety)
+      moveSafety = null
+    }
+    movePlayerNow(target, el)
+    return
+  }
+  if (moveCheck !== null) return
+  const interval = window.setInterval(() => {
+    const el2 = findPlayer()
+    if (el2 && playerReady(el2)) {
+      window.clearInterval(interval)
+      moveCheck = null
+      if (moveSafety !== null) {
+        window.clearTimeout(moveSafety)
+        moveSafety = null
+      }
+      movePlayerNow(target, el2)
+    }
+  }, 250)
+  moveCheck = interval
+  moveSafety = window.setTimeout(() => {
+    if (moveCheck !== null) {
+      window.clearInterval(moveCheck)
+      moveCheck = null
+    }
+    const el2 = findPlayer()
+    if (el2 && !movedPlayer) movePlayerNow(target, el2)
+  }, 3000)
 }
 
 function restorePlayer() {
@@ -302,6 +368,14 @@ function restorePlayer() {
   if (playerTimeout !== null) {
     window.clearTimeout(playerTimeout)
     playerTimeout = null
+  }
+  if (moveCheck !== null) {
+    window.clearInterval(moveCheck)
+    moveCheck = null
+  }
+  if (moveSafety !== null) {
+    window.clearTimeout(moveSafety)
+    moveSafety = null
   }
   likeObserver?.disconnect()
   likeObserver = null
