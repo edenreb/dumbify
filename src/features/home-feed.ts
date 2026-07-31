@@ -1,7 +1,7 @@
 import type { NavigationState, Video, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
-import { extractPageVideosWithContinuation, fetchContinuation, diag } from '../core/DataExtractor'
+import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, diag } from '../core/DataExtractor'
 import { navigateTo } from '../core/PageManager'
 
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
@@ -73,7 +73,9 @@ function renderPageHead(nav: NavigationState) {
   if (info.note) {
     const note = document.createElement('p')
     note.className = 'df-page-note'
-    note.textContent = info.note
+    note.textContent = nav.route === 'search' && nav.searchQuery
+      ? `Results for “${nav.searchQuery}”`
+      : info.note
     body.appendChild(note)
   }
 
@@ -250,7 +252,7 @@ export const homeFeedFeature: Feature = {
       if (loadingMore || feedCancelled) return
       loadingMore = true
       try {
-        const result = await fetchContinuation(continuationToken || '', nav.route)
+        const result = await fetchContinuation(continuationToken || '', nav.route, nav.searchQuery ?? '')
         if (feedCancelled) return
         continuationToken = result.token
         if (result.videos.length) {
@@ -266,6 +268,10 @@ export const homeFeedFeature: Feature = {
       let videos: Video[] = []
       if (nav.route === 'home') {
         const result = await extractPageVideosWithContinuation()
+        videos = result.videos
+        continuationToken = result.continuation
+      } else if (nav.route === 'search') {
+        const result = await fetchSearchResults(nav.searchQuery ?? '')
         videos = result.videos
         continuationToken = result.continuation
       } else {

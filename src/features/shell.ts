@@ -1,7 +1,7 @@
 import type { NavigationState, Route } from '../types'
 import type { DumbifySettings } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { sidebar } from '../core/UIEngine'
+import { sidebar, main } from '../core/UIEngine'
 import { onNavigate, navigateTo } from '../core/PageManager'
 import { getSettings, setSettings } from '../core/storage'
 
@@ -42,6 +42,7 @@ let linkEls: HTMLElement[] = []
 let currentRoute: Route = 'home'
 let unsubNav: (() => void) | null = null
 let sidebarEl: HTMLElement | null = null
+let searchInput: HTMLInputElement | null = null
 
 function updateActiveLink() {
   linkEls.forEach((el, i) => {
@@ -49,15 +50,51 @@ function updateActiveLink() {
   })
 }
 
-function showSearchPrompt() {
-  const q = prompt('Search YouTube:')
-  if (q?.trim()) navigateTo(`/results?search_query=${encodeURIComponent(q.trim())}`)
+function submitSearch() {
+  const q = searchInput?.value.trim()
+  if (q) navigateTo(`/results?search_query=${encodeURIComponent(q)}`)
+}
+
+function buildTopbar() {
+  if (!main || main.querySelector('.df-topbar')) return
+
+  const topbar = document.createElement('header')
+  topbar.className = 'df-topbar'
+
+  const form = document.createElement('form')
+  form.className = 'df-search'
+  form.onsubmit = (e) => { e.preventDefault(); submitSearch() }
+
+  const input = document.createElement('input')
+  input.className = 'df-search-input'
+  input.type = 'text'
+  input.placeholder = 'Search YouTube'
+  input.setAttribute('aria-label', 'Search YouTube')
+  input.autocomplete = 'off'
+  searchInput = input
+
+  const btn = document.createElement('button')
+  btn.className = 'df-search-btn'
+  btn.type = 'submit'
+  btn.textContent = 'Search'
+
+  form.appendChild(input)
+  form.appendChild(btn)
+  topbar.appendChild(form)
+
+  main.insertBefore(topbar, main.firstChild)
+}
+
+function removeTopbar() {
+  main?.querySelector('.df-topbar')?.remove()
+  searchInput = null
 }
 
 function onKeyDown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault()
-    showSearchPrompt()
+    searchInput?.focus()
+    searchInput?.select()
   }
 }
 
@@ -158,6 +195,11 @@ export const shellFeature: Feature = {
     injectFonts()
     currentRoute = nav.route
     buildSidebar()
+    buildTopbar()
+
+    if (searchInput) {
+      searchInput.value = nav.route === 'search' ? (nav.searchQuery ?? '') : ''
+    }
 
     const pageName = ROUTE_NAMES[nav.route] ?? 'YouTube'
     document.title = `${pageName} · Dumbify`
@@ -172,6 +214,7 @@ export const shellFeature: Feature = {
 
   unmount() {
     removeSidebar()
+    removeTopbar()
     if (unsubNav) {
       unsubNav()
       unsubNav = null
@@ -181,6 +224,9 @@ export const shellFeature: Feature = {
   update(nav: NavigationState) {
     currentRoute = nav.route
     updateActiveLink()
+    if (searchInput) {
+      searchInput.value = nav.route === 'search' ? (nav.searchQuery ?? '') : ''
+    }
     const name = ROUTE_NAMES[nav.route] ?? 'YouTube'
     document.title = `${name} · Dumbify`
   },

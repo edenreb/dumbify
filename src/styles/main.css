@@ -307,6 +307,63 @@ body {
   }
 }
 
+/* ---- Topbar / search ---- */
+
+.df-topbar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 24px;
+}
+
+.df-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+}
+
+.df-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--foreground);
+  outline: none;
+  transition: border-color 150ms;
+}
+
+.df-search-input::placeholder {
+  color: var(--ink-soft);
+}
+
+.df-search-input:focus {
+  border-color: var(--mark);
+}
+
+.df-search-btn {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  padding: 8px 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms;
+}
+
+.df-search-btn:hover {
+  color: var(--foreground);
+  border-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+}
+
 /* ---- Page head ---- */
 
 .df-page-head {

@@ -413,6 +413,19 @@ function extractContinuationToken(data: any): string | null {
   } catch (e: any) { log(`  extractContinuationToken ERROR: ${e.message}`); return null }
 }
 
+function extractSearchContinuationToken(data: any): string | null {
+  try {
+    const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
+      ?.sectionListRenderer?.contents ?? []
+    for (const sec of sections) {
+      const token = sec?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? null
+      if (token) return token
+    }
+    log('  extractSearchContinuationToken: no continuation item found')
+    return null
+  } catch (e: any) { log(`  extractSearchContinuationToken ERROR: ${e.message}`); return null }
+}
+
 function extractContinuationVideos(data: any): { videos: Video[]; token: string | null } {
   const videos: Video[] = []
   let token: string | null = null
@@ -483,6 +496,24 @@ const ROUTE_URLS: Record<string, string> = {
   trending: '/feed/trending',
 }
 
+function parseInitialData(text: string): any | null {
+  for (const p of ['window.ytInitialData = ', 'ytInitialData = ']) {
+    const idx = text.indexOf(p)
+    if (idx === -1) continue
+    const start = text.indexOf('{', idx + p.length)
+    if (start === -1) continue
+    let depth = 0, inStr = false, strChar = ''
+    for (let i = start; i < text.length; i++) {
+      const c = text[i]
+      if (inStr) { if (c === strChar && text[i-1] !== '\\') inStr = false; continue }
+      if (c === '"' || c === "'") { inStr = true; strChar = c; continue }
+      if (c === '{') depth++
+      if (c === '}') { depth--; if (depth === 0) { try { return JSON.parse(text.slice(start, i + 1)) } catch { return null } } }
+    }
+  }
+  return null
+}
+
 async function fetchFreshData(route = 'home'): Promise<{ videos: Video[]; token: string | null } | null> {
   const url = (ROUTE_URLS[route] || '/') + '?df=' + Date.now()
   try {
@@ -491,26 +522,40 @@ async function fetchFreshData(route = 'home'): Promise<{ videos: Video[]; token:
       headers: { 'Accept': 'text/html', 'Range': 'bytes=0-400000' },
     })
     if (!res.ok && res.status !== 206) return null
-    const text = await res.text()
-    for (const p of ['window.ytInitialData = ', 'ytInitialData = ']) {
-      const idx = text.indexOf(p)
-      if (idx === -1) continue
-      const start = text.indexOf('{', idx + p.length)
-      if (start === -1) continue
-      let depth = 0, inStr = false, strChar = ''
-      for (let i = start; i < text.length; i++) {
-        const c = text[i]
-        if (inStr) { if (c === strChar && text[i-1] !== '\\') inStr = false; continue }
-        if (c === '"' || c === "'") { inStr = true; strChar = c; continue }
-        if (c === '{') depth++
-        if (c === '}') { depth--; if (depth === 0) { try { const d = JSON.parse(text.slice(start, i + 1)); return { videos: extractFromData(d), token: extractContinuationToken(d) } } catch { return null } } }
-      }
-    }
-    return null
+    const d = parseInitialData(await res.text())
+    if (!d) return null
+    return { videos: extractFromData(d), token: extractContinuationToken(d) }
   } catch { return null }
 }
 
-export async function fetchContinuation(token: string, route = 'home'): Promise<{ videos: Video[]; token: string | null }> {
+export async function fetchSearchResults(query: string): Promise<PageResult> {
+  diag.length = 0
+  log(`=== fetchSearchResults: "${query}" ===`)
+  if (!query.trim()) return { videos: [], continuation: null }
+  const url = `/results?search_query=${encodeURIComponent(query.trim())}&df=${Date.now()}`
+  try {
+    const res = await fetch(location.origin + url, {
+      credentials: 'include',
+      headers: { 'Accept': 'text/html', 'Range': 'bytes=0-400000' },
+    })
+    if (!res.ok && res.status !== 206) return { videos: [], continuation: null }
+    const d = parseInitialData(await res.text())
+    if (!d) return { videos: [], continuation: null }
+    const videos = extractFromData(d)
+    const token = extractSearchContinuationToken(d)
+    log(`fetchSearchResults: ${videos.length} videos, token=${token ? 'yes' : 'no'}`)
+    return { videos, continuation: token }
+  } catch { return { videos: [], continuation: null } }
+}
+
+export async function fetchContinuation(token: string, route = 'home', searchQuery = ''): Promise<{ videos: Video[]; token: string | null }> {
+  if (route === 'search') {
+    const q = searchQuery || (new URLSearchParams(location.search).get('search_query') ?? '')
+    const result = await fetchSearchResults(q)
+    if (!result) return { videos: [], token: null }
+    log(`fetchContinuation(search): got ${result.videos.length} videos, token=${result.continuation ? 'yes' : 'no'}`)
+    return { videos: result.videos, token: result.continuation }
+  }
   const result = await fetchFreshData(route)
   if (!result) return { videos: [], token: null }
   log(`fetchContinuation: got ${result.videos.length} videos for ${route}, token=${result.token ? 'yes' : 'no'}`)
