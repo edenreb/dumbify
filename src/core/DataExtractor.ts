@@ -356,6 +356,8 @@ function extractJoinedDate(data: any): string {
   const chMeta = data?.metadata?.channelMetadataRenderer
   if (chMeta?.creationDate) return chMeta.creationDate
   return ''
+}
+
 const DURATION_RX = /^\d{1,3}:\d{2}(:\d{2})?$/
 
 function findDurationText(node: any, depth = 0): string {
