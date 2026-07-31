@@ -23,6 +23,9 @@ let aspectBound = false
 let aspectTimer: number | null = null
 let boundVideo: HTMLVideoElement | null = null
 let likeObserver: MutationObserver | null = null
+let wlObserver: MutationObserver | null = null
+let commentsOpen = false
+let commentsSection: HTMLElement | null = null
 
 function playerContainer(): HTMLElement | null {
   if (!movedPlayer) return null
@@ -119,8 +122,10 @@ function nativeLikeEl(): HTMLElement | null {
 function nativeLikeState(): boolean {
   const el = nativeLikeEl()
   if (!el) return false
-  const btn = el.querySelector<HTMLElement>('button[aria-pressed]')
-  return (btn ?? el).getAttribute('aria-pressed') === 'true'
+  const btn = el.querySelector<HTMLElement>('button[aria-pressed], button[aria-label]')
+  const target = btn ?? el
+  if (target.getAttribute('aria-pressed') === 'true') return true
+  return /unlike/i.test(target.getAttribute('aria-label') ?? '')
 }
 
 function setLikeUi(btn: HTMLButtonElement, liked: boolean) {
@@ -134,15 +139,19 @@ function syncLikeState(btn: HTMLButtonElement) {
 
 function watchLikeState(btn: HTMLButtonElement) {
   likeObserver?.disconnect()
-  const renderer = document.querySelector<HTMLElement>('ytd-segmented-like-dislike-button-renderer')
-  if (renderer) {
+  const target = nativeLikeEl()
+  if (target) {
     likeObserver = new MutationObserver(() => syncLikeState(btn))
-    likeObserver.observe(renderer, { attributes: true, subtree: true, attributeFilter: ['aria-pressed'] })
+    likeObserver.observe(target, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ['aria-pressed', 'aria-label'],
+    })
     syncLikeState(btn)
     return
   }
   const wait = new MutationObserver(() => {
-    if (!document.querySelector('ytd-segmented-like-dislike-button-renderer')) return
+    if (!nativeLikeEl()) return
     wait.disconnect()
     watchLikeState(btn)
   })
@@ -176,6 +185,92 @@ function clickNativeLike(btn: HTMLButtonElement) {
   }, 500)
 }
 
+const WL_SELECTORS = [
+  '.ytp-watch-later-button',
+  'ytd-watch-later-button-renderer ytd-toggle-button-renderer button#button',
+  'ytd-watch-later-button-renderer ytd-toggle-button-renderer',
+  'ytd-watch-later-button-renderer',
+  '#top-level-buttons-computed ytd-toggle-button-renderer[watch-later-button] button#button',
+  '#top-level-buttons-computed ytd-toggle-button-renderer[watch-later-button]',
+  '#top-level-buttons-computed button[aria-label*="atch later" i]',
+  '#top-level-buttons-computed button[title*="atch later" i]',
+]
+
+function nativeWlEl(): HTMLElement | null {
+  for (const sel of WL_SELECTORS) {
+    const el = document.querySelector<HTMLElement>(sel)
+    if (el) return el
+  }
+  return null
+}
+
+function nativeWlState(): boolean {
+  const el = nativeWlEl()
+  if (!el) return false
+  const btn = el.querySelector<HTMLElement>('button[aria-pressed], button[aria-label]')
+  const target = btn ?? el
+  if (target.getAttribute('aria-pressed') === 'true') return true
+  const label = target.getAttribute('aria-label') ?? target.textContent ?? ''
+  return /(?:remove from|added to) watch later/i.test(label)
+}
+
+function setWlUi(btn: HTMLButtonElement, saved: boolean) {
+  btn.classList.toggle('df-saved', saved)
+  btn.textContent = saved ? 'Saved' : 'Watch later'
+}
+
+function syncWlState(btn: HTMLButtonElement) {
+  setWlUi(btn, nativeWlState())
+}
+
+function watchWlState(btn: HTMLButtonElement) {
+  wlObserver?.disconnect()
+  const target = nativeWlEl()
+  if (target) {
+    wlObserver = new MutationObserver(() => syncWlState(btn))
+    wlObserver.observe(target, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ['aria-pressed', 'aria-label', 'class'],
+    })
+    syncWlState(btn)
+    return
+  }
+  const wait = new MutationObserver(() => {
+    if (!nativeWlEl()) return
+    wait.disconnect()
+    watchWlState(btn)
+  })
+  wait.observe(document.body, { childList: true, subtree: true })
+}
+
+function clickWlTarget(btn: HTMLButtonElement, target: HTMLElement) {
+  const wasSaved = nativeWlState()
+  setWlUi(btn, !wasSaved)
+  target.click()
+  console.log('[dumbify] clicked watch later target:', target)
+  window.setTimeout(() => syncWlState(btn), 600)
+}
+
+function clickNativeWl(btn: HTMLButtonElement) {
+  const target = nativeWlEl()
+  if (target) {
+    clickWlTarget(btn, target)
+    return
+  }
+  console.warn('[dumbify] native watch later button not found; buttons:', topLevelButtonsJson())
+  let tries = 0
+  const poll = window.setInterval(() => {
+    const t = nativeWlEl()
+    if (t) {
+      window.clearInterval(poll)
+      clickWlTarget(btn, t)
+    } else if (++tries >= 4) {
+      window.clearInterval(poll)
+    }
+  }, 500)
+}
+
 function movePlayerInto(target: HTMLElement) {
   if (movedPlayer) {
     if (movedPlayer.parentElement !== target) target.appendChild(movedPlayer)
@@ -185,6 +280,7 @@ function movePlayerInto(target: HTMLElement) {
   }
   const el = findPlayer()
   if (!el) return
+  console.log('[dumbify] player found:', el.tagName, el.id || el.className)
   originalParent = el.parentElement
   originalSibling = el.nextSibling
   el.classList.add('df-native-player')
@@ -209,6 +305,8 @@ function restorePlayer() {
   }
   likeObserver?.disconnect()
   likeObserver = null
+  wlObserver?.disconnect()
+  wlObserver = null
   unbindAspectSync()
   if (onFullscreenChange) {
     document.removeEventListener('fullscreenchange', onFullscreenChange)
@@ -237,8 +335,169 @@ function restorePlayer() {
   originalSibling = null
 }
 
+function topLevelButtonsJson(): string {
+  const tlb = document.querySelector('#top-level-buttons-computed')
+  if (!tlb) return 'NO #top-level-buttons-computed'
+  return JSON.stringify(
+    [...tlb.querySelectorAll('button')].map((b) => ({
+      aria: b.getAttribute('aria-label'),
+      title: b.getAttribute('title'),
+      pressed: b.getAttribute('aria-pressed'),
+      text: b.textContent?.trim().slice(0, 40),
+    }))
+  )
+}
+
+function logLikeDiagnostics() {
+  for (const sel of LIKE_SELECTORS) {
+    if (document.querySelector(sel)) console.log('[dumbify] like selector ok:', sel)
+  }
+  for (const sel of WL_SELECTORS) {
+    if (document.querySelector(sel)) console.log('[dumbify] wl selector ok:', sel)
+  }
+  console.log('[dumbify] top-level buttons:', topLevelButtonsJson())
+}
+
+type WatchComment = {
+  author: string
+  time: string
+  text: string
+  likes: string
+}
+
+function extractComments(): WatchComment[] {
+  const nodes = document.querySelectorAll<HTMLElement>(
+    'ytd-comments ytd-comment-thread-renderer ytd-comment-renderer'
+  )
+  const list: WatchComment[] = []
+  nodes.forEach((t) => {
+    const text = t.querySelector('#content-text')?.textContent?.trim() ?? ''
+    if (!text) return
+    const likes = t.querySelector('#vote-count-middle')?.textContent?.trim() ?? ''
+    list.push({
+      author: t.querySelector('#author-text')?.textContent?.trim() ?? 'Unknown',
+      time: t.querySelector('#published-time-text')?.textContent?.trim() ?? '',
+      text,
+      likes: likes && likes !== '0' ? likes : '',
+    })
+  })
+  return list
+}
+
+function postComment(comment: string) {
+  const placeholder = document.querySelector<HTMLElement>(
+    'ytd-comments ytd-comment-simplebox-renderer #placeholder-area'
+  )
+  if (!placeholder) {
+    console.warn('[dumbify] comment box not found (not signed in?)')
+    return
+  }
+  placeholder.click()
+  window.setTimeout(() => {
+    const editable = document.querySelector<HTMLElement>('ytd-comments #contenteditable-root')
+    if (!editable) {
+      console.warn('[dumbify] comment editor not found')
+      return
+    }
+    editable.focus()
+    const inserted = document.execCommand('insertText', false, comment)
+    if (!inserted) {
+      editable.textContent = comment
+      editable.dispatchEvent(
+        new InputEvent('input', { bubbles: true, inputType: 'insertText', data: comment })
+      )
+    }
+    window.setTimeout(() => {
+      const submit = document.querySelector<HTMLElement>('ytd-comments #submit-button button')
+      if (submit) submit.click()
+      else console.warn('[dumbify] comment submit button not found')
+    }, 150)
+  }, 150)
+}
+
+function renderComments(list: HTMLElement) {
+  const comments = extractComments()
+  list.innerHTML = ''
+  if (comments.length === 0) {
+    const empty = document.createElement('p')
+    empty.className = 'df-comment-empty'
+    empty.textContent = 'No comments yet'
+    list.appendChild(empty)
+    return
+  }
+  comments.forEach((c) => {
+    const item = document.createElement('article')
+    item.className = 'df-comment'
+    const meta = document.createElement('p')
+    meta.className = 'df-comment-meta'
+    meta.textContent = [c.author, c.time, c.likes ? `${c.likes} likes` : ''].filter(Boolean).join(' · ')
+    const text = document.createElement('p')
+    text.className = 'df-comment-text'
+    text.textContent = c.text
+    item.appendChild(meta)
+    item.appendChild(text)
+    list.appendChild(item)
+  })
+}
+
+function buildCommentsSection(): HTMLElement {
+  const section = document.createElement('section')
+  section.className = 'df-comments'
+
+  const composer = document.createElement('div')
+  composer.className = 'df-comment-composer'
+
+  const input = document.createElement('textarea')
+  input.className = 'df-comment-input'
+  input.placeholder = 'Add a comment…'
+  input.rows = 2
+
+  const postBtn = document.createElement('button')
+  postBtn.className = 'df-comment-submit'
+  postBtn.textContent = 'Post'
+  postBtn.onclick = () => {
+    const text = input.value.trim()
+    if (!text) return
+    postComment(text)
+    input.value = ''
+    window.setTimeout(() => {
+      const list = commentsSection?.querySelector<HTMLElement>('.df-comment-list')
+      if (list) renderComments(list)
+    }, 2500)
+  }
+
+  composer.appendChild(input)
+  composer.appendChild(postBtn)
+  section.appendChild(composer)
+
+  const list = document.createElement('div')
+  list.className = 'df-comment-list'
+  section.appendChild(list)
+
+  document.querySelector<HTMLElement>('ytd-comments')?.scrollIntoView({ block: 'start' })
+  renderComments(list)
+  window.setTimeout(() => renderComments(list), 800)
+
+  return section
+}
+
+function toggleComments() {
+  commentsOpen = !commentsOpen
+  if (commentsOpen) {
+    if (!commentsSection) {
+      commentsSection = buildCommentsSection()
+      content!.appendChild(commentsSection)
+    }
+  } else if (commentsSection) {
+    commentsSection.remove()
+    commentsSection = null
+  }
+}
+
 function buildWatchPage(nav: NavigationState) {
   content!.innerHTML = ''
+  commentsOpen = false
+  commentsSection = null
 
   const nowPlaying = document.createElement('p')
   nowPlaying.className = 'df-now-playing'
@@ -267,6 +526,7 @@ function buildWatchPage(nav: NavigationState) {
       playerWatcher?.disconnect()
       playerWatcher = null
       if (!movedPlayer) {
+        console.warn('[dumbify] player not found after 10s; selectors:', PLAYER_SELECTORS.join(', '))
         const msg = document.createElement('p')
         msg.className = 'df-play-label'
         msg.textContent = 'Video not available'
@@ -343,15 +603,25 @@ function buildWatchPage(nav: NavigationState) {
   syncLikeState(likeBtn)
   watchLikeState(likeBtn)
 
-  ;['Watch later', 'Transcript'].forEach((a) => {
-    const btn = document.createElement('button')
-    btn.className = 'df-watch-action'
-    btn.textContent = a
-    actions.appendChild(btn)
-  })
+  const wlBtn = document.createElement('button')
+  wlBtn.className = 'df-watch-action'
+  wlBtn.textContent = 'Watch later'
+  wlBtn.onclick = () => clickNativeWl(wlBtn)
+  actions.appendChild(wlBtn)
+  syncWlState(wlBtn)
+  watchWlState(wlBtn)
+
+  const commentsBtn = document.createElement('button')
+  commentsBtn.className = 'df-watch-action'
+  commentsBtn.textContent = 'Comments'
+  commentsBtn.onclick = () => toggleComments()
+  actions.appendChild(commentsBtn)
+
   metaBar.appendChild(actions)
 
   content!.appendChild(metaBar)
+
+  logLikeDiagnostics()
 }
 
 export const watchPageFeature: Feature = {

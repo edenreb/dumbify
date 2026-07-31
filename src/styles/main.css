@@ -732,8 +732,93 @@ body {
   color: var(--foreground);
 }
 
-.df-watch-action.df-liked {
+.df-watch-action.df-liked,
+.df-watch-action.df-saved {
   color: var(--mark);
+}
+
+.df-comments {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.df-comment-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.df-comment-input {
+  flex: 1;
+  resize: vertical;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 8px 0;
+  outline: none;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--foreground);
+}
+
+.df-comment-input:focus {
+  border-bottom-color: var(--mark);
+}
+
+.df-comment-input::placeholder {
+  color: var(--ink-soft);
+}
+
+.df-comment-submit {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: none;
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms;
+}
+
+.df-comment-submit:hover {
+  color: var(--foreground);
+  border-color: var(--foreground);
+}
+
+.df-comment-list {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.df-comment-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.df-comment-text {
+  margin-top: 6px;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--foreground);
+}
+
+.df-comment-empty {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }
 
 /* ---- Watch page grid ---- */

@@ -18,7 +18,9 @@ const DEFAULT_SETTINGS: DumbifySettings = {
 }
 
 function get<T>(key: string): Promise<T | null> {
-  return new Promise((r) => chrome.storage.local.get(key, (res) => r(res[key] ?? null)))
+  return new Promise((r) =>
+    chrome.storage.local.get(key, (res) => r((res as Record<string, T | undefined>)[key] ?? null))
+  )
 }
 
 function set(key: string, value: unknown): Promise<void> {
@@ -40,7 +42,7 @@ export async function resetSettings(): Promise<void> {
 
 export function onSettingsChange(cb: (s: DumbifySettings) => void): () => void {
   const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
-    if (changes[SETTINGS_KEY]) cb(changes[SETTINGS_KEY].newValue ?? DEFAULT_SETTINGS)
+    if (changes[SETTINGS_KEY]) cb((changes[SETTINGS_KEY].newValue as DumbifySettings) ?? DEFAULT_SETTINGS)
   }
   chrome.storage.local.onChanged.addListener(listener)
   return () => chrome.storage.local.onChanged.removeListener(listener)
