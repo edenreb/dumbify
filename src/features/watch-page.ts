@@ -22,6 +22,7 @@ let onFullscreenKey: ((e: KeyboardEvent) => void) | null = null
 let aspectBound = false
 let aspectTimer: number | null = null
 let boundVideo: HTMLVideoElement | null = null
+let likeObserver: MutationObserver | null = null
 
 function playerContainer(): HTMLElement | null {
   if (!movedPlayer) return null
@@ -98,6 +99,83 @@ function unbindAspectSync() {
   aspectBound = false
 }
 
+const LIKE_SELECTORS = [
+  'ytd-segmented-like-dislike-button-renderer ytd-toggle-button-renderer button#button',
+  'ytd-segmented-like-dislike-button-renderer ytd-toggle-button-renderer',
+  'ytd-segmented-like-dislike-button-renderer',
+  '#top-level-buttons-computed ytd-toggle-button-renderer[like-button] button#button',
+  '#top-level-buttons-computed ytd-toggle-button-renderer[like-button]',
+  '#top-level-buttons-computed button[aria-pressed]',
+]
+
+function nativeLikeEl(): HTMLElement | null {
+  for (const sel of LIKE_SELECTORS) {
+    const el = document.querySelector<HTMLElement>(sel)
+    if (el) return el
+  }
+  return null
+}
+
+function nativeLikeState(): boolean {
+  const el = nativeLikeEl()
+  if (!el) return false
+  const btn = el.querySelector<HTMLElement>('button[aria-pressed]')
+  return (btn ?? el).getAttribute('aria-pressed') === 'true'
+}
+
+function setLikeUi(btn: HTMLButtonElement, liked: boolean) {
+  btn.classList.toggle('df-liked', liked)
+  btn.textContent = liked ? 'Liked' : 'Like'
+}
+
+function syncLikeState(btn: HTMLButtonElement) {
+  setLikeUi(btn, nativeLikeState())
+}
+
+function watchLikeState(btn: HTMLButtonElement) {
+  likeObserver?.disconnect()
+  const renderer = document.querySelector<HTMLElement>('ytd-segmented-like-dislike-button-renderer')
+  if (renderer) {
+    likeObserver = new MutationObserver(() => syncLikeState(btn))
+    likeObserver.observe(renderer, { attributes: true, subtree: true, attributeFilter: ['aria-pressed'] })
+    syncLikeState(btn)
+    return
+  }
+  const wait = new MutationObserver(() => {
+    if (!document.querySelector('ytd-segmented-like-dislike-button-renderer')) return
+    wait.disconnect()
+    watchLikeState(btn)
+  })
+  wait.observe(document.body, { childList: true, subtree: true })
+}
+
+function clickLikeTarget(btn: HTMLButtonElement, target: HTMLElement) {
+  const wasLiked = nativeLikeState()
+  setLikeUi(btn, !wasLiked)
+  target.click()
+  console.log('[dumbify] clicked like target:', target)
+  window.setTimeout(() => syncLikeState(btn), 600)
+}
+
+function clickNativeLike(btn: HTMLButtonElement) {
+  const target = nativeLikeEl()
+  if (target) {
+    clickLikeTarget(btn, target)
+    return
+  }
+  console.warn('[dumbify] native like button not found')
+  let tries = 0
+  const poll = window.setInterval(() => {
+    const t = nativeLikeEl()
+    if (t) {
+      window.clearInterval(poll)
+      clickLikeTarget(btn, t)
+    } else if (++tries >= 4) {
+      window.clearInterval(poll)
+    }
+  }, 500)
+}
+
 function movePlayerInto(target: HTMLElement) {
   if (movedPlayer) {
     if (movedPlayer.parentElement !== target) target.appendChild(movedPlayer)
@@ -129,6 +207,8 @@ function restorePlayer() {
     window.clearTimeout(playerTimeout)
     playerTimeout = null
   }
+  likeObserver?.disconnect()
+  likeObserver = null
   unbindAspectSync()
   if (onFullscreenChange) {
     document.removeEventListener('fullscreenchange', onFullscreenChange)
@@ -254,7 +334,16 @@ function buildWatchPage(nav: NavigationState) {
 
   const actions = document.createElement('div')
   actions.className = 'df-watch-actions'
-  ;['Like', 'Watch later', 'Transcript'].forEach((a) => {
+
+  const likeBtn = document.createElement('button')
+  likeBtn.className = 'df-watch-action'
+  likeBtn.textContent = 'Like'
+  likeBtn.onclick = () => clickNativeLike(likeBtn)
+  actions.appendChild(likeBtn)
+  syncLikeState(likeBtn)
+  watchLikeState(likeBtn)
+
+  ;['Watch later', 'Transcript'].forEach((a) => {
     const btn = document.createElement('button')
     btn.className = 'df-watch-action'
     btn.textContent = a

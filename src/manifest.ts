@@ -23,4 +23,10 @@ export default defineManifest({
   options_page: 'src/options/index.html',
   permissions: ['storage', 'scripting'],
   host_permissions: ['https://www.youtube.com/*'],
+  web_accessible_resources: [
+    {
+      resources: ['icons/logo.png'],
+      matches: ['https://www.youtube.com/*'],
+    },
+  ],
 })

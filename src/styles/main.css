@@ -137,11 +137,16 @@ body {
   user-select: none;
 }
 
-.df-brand-name {
-  font-family: var(--font-serif);
-  font-size: 22px;
-  letter-spacing: -0.02em;
-  color: var(--foreground);
+.df-brand-logo {
+  display: block;
+  height: auto;
+  width: 100%;
+  max-width: 160px;
+  filter: invert(1);
+}
+
+#dumbify-root.dark .df-brand-logo {
+  filter: none;
 }
 
 .df-brand-tagline {
@@ -725,6 +730,10 @@ body {
 
 .df-watch-action:hover {
   color: var(--foreground);
+}
+
+.df-watch-action.df-liked {
+  color: var(--mark);
 }
 
 /* ---- Watch page grid ---- */

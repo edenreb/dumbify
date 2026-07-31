@@ -70,10 +70,11 @@ function buildSidebar() {
   const brand = document.createElement('a')
   brand.className = 'df-brand'
   brand.onclick = (e) => { e.stopPropagation(); navigateTo('/') }
-  const brandName = document.createElement('span')
-  brandName.className = 'df-brand-name'
-  brandName.textContent = 'Dumbify'
-  brand.appendChild(brandName)
+  const logo = document.createElement('img')
+  logo.className = 'df-brand-logo'
+  logo.src = chrome.runtime.getURL('icons/logo.png')
+  logo.alt = 'Dumbify'
+  brand.appendChild(logo)
   const tagline = document.createElement('span')
   tagline.className = 'df-brand-tagline'
   tagline.textContent = 'youtube, quieted'
