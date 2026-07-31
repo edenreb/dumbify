@@ -1,4 +1,4 @@
-import type { Video, WatchData } from '../types'
+import type { Video, Channel, WatchData } from '../types'
 
 export const diag: string[] = []
 function log(...args: any[]) {
@@ -202,6 +202,160 @@ function extractText(v: any): string {
   return ''
 }
 
+function channelFromRenderer(r: any): Channel | null {
+  if (!r?.channelId) return null
+  const name = extractText(r.title)
+  if (!name) return null
+  return {
+    id: r.channelId,
+    name,
+    handle: r.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl ?? '',
+    subscribers: extractText(r.subscriberCountText),
+    videoCount: extractText(r.videoCountText),
+    description: extractText(r.descriptionSnippet),
+    verified: !!r.ownerBadges?.some((b: any) => b?.metadataBadgeRenderer?.tooltip === 'Verified'),
+  }
+}
+
+export type SearchItem =
+  | { kind: 'video'; video: Video }
+  | { kind: 'channel'; channel: Channel }
+
+function scanChannelRenderers(obj: any, depth = 0, maxDepth = 20, out: Channel[] = []): Channel[] {
+  if (depth > maxDepth || typeof obj !== 'object' || obj === null) return out
+  if (Array.isArray(obj)) {
+    for (const item of obj) scanChannelRenderers(item, depth + 1, maxDepth, out)
+    return out
+  }
+  const c = channelFromRenderer(obj.channelRenderer)
+  if (c) out.push(c)
+  for (const key of Object.keys(obj)) scanChannelRenderers(obj[key], depth + 1, maxDepth, out)
+  return out
+}
+
+function extractSearchItems(data: any): SearchItem[] {
+  const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
+    ?.sectionListRenderer?.contents ?? []
+  const items: SearchItem[] = []
+  const seenVideos = new Set<string>()
+  const seenChannels = new Set<string>()
+
+  for (const sec of sections) {
+    for (const item of (sec?.itemSectionRenderer?.contents ?? [])) {
+      if (item?.videoRenderer?.videoId) {
+        const v = vidFromRenderer(item.videoRenderer)
+        if (v && !seenVideos.has(v.id)) { seenVideos.add(v.id); items.push({ kind: 'video', video: v }) }
+      } else if (item?.channelRenderer?.channelId) {
+        const c = channelFromRenderer(item.channelRenderer)
+        if (c && !seenChannels.has(c.id)) { seenChannels.add(c.id); items.push({ kind: 'channel', channel: c }) }
+      } else if (item?.lockupViewModel?.contentId) {
+        const v = vidFromLockup(item.lockupViewModel)
+        if (v && !seenVideos.has(v.id)) { seenVideos.add(v.id); items.push({ kind: 'video', video: v }) }
+      }
+    }
+  }
+
+  for (const c of scanChannelRenderers(data)) {
+    if (!seenChannels.has(c.id)) { seenChannels.add(c.id); items.push({ kind: 'channel', channel: c }) }
+  }
+  return items
+}
+
+function extractChannelsFromData(data: any): Channel[] {
+  return extractSearchItems(data)
+    .filter((i) => i.kind === 'channel')
+    .map((i) => (i.kind === 'channel' ? i.channel : null))
+    .filter((c): c is Channel => !!c)
+}
+
+function extractChannelHeader(data: any): Channel | null {
+  const meta = data?.metadata?.channelMetadataRenderer
+
+  // Try c4TabbedHeaderRenderer (legacy)
+  const h = data?.header?.c4TabbedHeaderRenderer
+  if (h?.channelId) {
+    return {
+      id: h.channelId,
+      name: extractText(h.title) || (meta?.title ?? ''),
+      handle: meta?.vanityChannelUrl ?? '',
+      subscribers: extractText(h.subscriberCountText),
+      videoCount: extractText(h.videosCountText),
+      description: meta?.description ?? '',
+      verified: !!h?.badges?.some((b: any) => b?.metadataBadgeRenderer?.tooltip === 'Verified'),
+    }
+  }
+
+  // Try pageHeaderRenderer (modern YouTube)
+  const ph = data?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel
+  if (ph) {
+    const rows = ph?.metadata?.contentMetadataViewModel?.metadataRows ?? []
+    let channelId = meta?.channelId || ''
+    let subs = ''
+    let vids = ''
+    for (const row of rows) {
+      for (const part of row.metadataParts ?? []) {
+        const t = part?.text?.content ?? ''
+        if (!t) continue
+        if (!channelId && t.startsWith('UC')) channelId = t
+        else if (!channelId && t.startsWith('@')) channelId = t
+        else if (/subscriber/i.test(t)) subs = t
+        else if (/video/i.test(t)) vids = t
+      }
+    }
+    if (channelId) {
+      return {
+        id: channelId,
+        name: extractText(ph.title) || meta?.title || '',
+        handle: meta?.vanityChannelUrl ?? '',
+        subscribers: subs,
+        videoCount: vids,
+        description: meta?.description ?? '',
+        verified: false,
+      }
+    }
+  }
+
+  // Try metadata only
+  if (meta?.channelId) {
+    return {
+      id: meta.channelId,
+      name: meta.title ?? '',
+      handle: meta.vanityChannelUrl ?? '',
+      subscribers: meta.subscriberCountText ?? '',
+      videoCount: meta.videosCountText ?? '',
+      description: meta.description ?? '',
+      verified: false,
+    }
+  }
+
+  return null
+}
+
+function extractJoinedDate(data: any): string {
+  // Try channelAboutFullViewModel in about tab
+  const tabs = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? []
+  for (const tab of tabs) {
+    const content = tab?.tabRenderer?.content?.sectionListRenderer?.contents ?? []
+    for (const section of content) {
+      const items = section?.itemSectionRenderer?.contents ?? []
+      for (const item of items) {
+        const about = item?.channelAboutFullViewModel
+        if (about?.joinedDateText) return extractText(about.joinedDateText)
+      }
+    }
+  }
+  // Try pageHeaderRenderer metadata
+  const meta = data?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel?.metadata?.contentMetadataViewModel?.metadataRows ?? []
+  for (const row of meta) {
+    for (const part of row.metadataParts ?? []) {
+      const text = extractText(part.text)
+      if (/joined|since/i.test(text)) return text
+    }
+  }
+  // Try channelMetadataRenderer
+  const chMeta = data?.metadata?.channelMetadataRenderer
+  if (chMeta?.creationDate) return chMeta.creationDate
+  return ''
 const DURATION_RX = /^\d{1,3}:\d{2}(:\d{2})?$/
 
 function findDurationText(node: any, depth = 0): string {
@@ -638,6 +792,19 @@ function extractContinuationToken(data: any): string | null {
   } catch (e: any) { log(`  extractContinuationToken ERROR: ${e.message}`); return null }
 }
 
+function extractSearchContinuationToken(data: any): string | null {
+  try {
+    const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
+      ?.sectionListRenderer?.contents ?? []
+    for (const sec of sections) {
+      const token = sec?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? null
+      if (token) return token
+    }
+    log('  extractSearchContinuationToken: no continuation item found')
+    return null
+  } catch (e: any) { log(`  extractSearchContinuationToken ERROR: ${e.message}`); return null }
+}
+
 function extractContinuationVideos(data: any): { videos: Video[]; token: string | null } {
   const videos: Video[] = []
   let token: string | null = null
@@ -708,6 +875,24 @@ const ROUTE_URLS: Record<string, string> = {
   trending: '/feed/trending',
 }
 
+function parseInitialData(text: string): any | null {
+  for (const p of ['window.ytInitialData = ', 'ytInitialData = ']) {
+    const idx = text.indexOf(p)
+    if (idx === -1) continue
+    const start = text.indexOf('{', idx + p.length)
+    if (start === -1) continue
+    let depth = 0, inStr = false, strChar = ''
+    for (let i = start; i < text.length; i++) {
+      const c = text[i]
+      if (inStr) { if (c === strChar && text[i-1] !== '\\') inStr = false; continue }
+      if (c === '"' || c === "'") { inStr = true; strChar = c; continue }
+      if (c === '{') depth++
+      if (c === '}') { depth--; if (depth === 0) { try { return JSON.parse(text.slice(start, i + 1)) } catch { return null } } }
+    }
+  }
+  return null
+}
+
 async function fetchFreshData(route = 'home'): Promise<{ videos: Video[]; token: string | null } | null> {
   const url = (ROUTE_URLS[route] || '/') + '?df=' + Date.now()
   try {
@@ -743,7 +928,76 @@ async function fetchFreshData(route = 'home'): Promise<{ videos: Video[]; token:
   } catch (e: any) { log(`fetchFreshData(${route}) ERROR: ${e.message}`); return null }
 }
 
-export async function fetchContinuation(token: string, route = 'home'): Promise<{ videos: Video[]; token: string | null }> {
+export async function fetchSearchResults(query: string): Promise<PageResult> {
+  diag.length = 0
+  log(`=== fetchSearchResults: "${query}" ===`)
+  if (!query.trim()) return emptyPageResult()
+  const url = `/results?search_query=${encodeURIComponent(query.trim())}&df=${Date.now()}`
+  try {
+    const res = await fetch(location.origin + url, {
+      credentials: 'include',
+      headers: { 'Accept': 'text/html', 'Range': 'bytes=0-400000' },
+    })
+    if (!res.ok && res.status !== 206) return emptyPageResult()
+    const d = parseInitialData(await res.text())
+    if (!d) return emptyPageResult()
+    const videos = extractFromData(d)
+    const items = extractSearchItems(d)
+    const channels = extractChannelsFromData(d)
+    const token = extractSearchContinuationToken(d)
+    log(`fetchSearchResults: ${videos.length} videos, ${channels.length} channels, token=${token ? 'yes' : 'no'}`)
+    return { videos, channels, items, continuation: token }
+  } catch { return emptyPageResult() }
+}
+
+export interface ChannelPageResult {
+  channel: Channel | null
+  videos: Video[]
+  continuation: string | null
+}
+
+export async function fetchChannelPage(channelId: string): Promise<ChannelPageResult> {
+  diag.length = 0
+  log(`=== fetchChannelPage: ${channelId} ===`)
+  if (!channelId) return { channel: null, videos: [], continuation: null }
+
+  const data = await callInnerTube('browse', { browseId: channelId })
+  if (!data) return { channel: null, videos: [], continuation: null }
+
+  log(`browse header keys: ${Object.keys(data?.header ?? {}).join(', ')}`)
+  log(`browse metadata keys: ${Object.keys(data?.metadata ?? {}).join(', ')}`)
+  log(`channelMetadataRenderer keys: ${Object.keys(data?.metadata?.channelMetadataRenderer ?? {}).join(', ')}`)
+
+  const channel = extractChannelHeader(data)
+  if (channel) {
+    channel.joinedAt = extractJoinedDate(data)
+  }
+  const videos = extractFromData(data)
+  const token = extractContinuationToken(data)
+  log(`fetchChannelPage: "${channel?.name ?? ''}" joined=${channel?.joinedAt ?? ''} ${videos.length} videos, token=${token ? 'yes' : 'no'}`)
+  return { channel, videos, continuation: token }
+}
+
+export async function fetchChannelContinuation(token: string): Promise<{ videos: Video[]; token: string | null }> {
+  const data = await callInnerTube('browse', { continuation: token })
+  if (!data) return { videos: [], token: null }
+  return extractContinuationVideos(data)
+}
+
+export async function fetchContinuation(token: string, route = 'home', searchQuery = '', channelId = ''): Promise<{ videos: Video[]; token: string | null; items?: SearchItem[] }> {
+  if (route === 'search') {
+    const q = searchQuery || (new URLSearchParams(location.search).get('search_query') ?? '')
+    const result = await fetchSearchResults(q)
+    if (!result) return { videos: [], token: null }
+    log(`fetchContinuation(search): got ${result.videos.length} videos, token=${result.continuation ? 'yes' : 'no'}`)
+    return { videos: result.videos, token: result.continuation, items: result.items }
+  }
+  if (route === 'channel') {
+    if (token) return fetchChannelContinuation(token)
+    const result = await fetchChannelPage(channelId)
+    if (!result) return { videos: [], token: null }
+    return { videos: result.videos, token: result.continuation }
+  }
   const result = await fetchFreshData(route)
   if (!result) return { videos: [], token: null }
   log(`fetchContinuation: got ${result.videos.length} videos for ${route}, token=${result.token ? 'yes' : 'no'}`)
@@ -752,7 +1006,13 @@ export async function fetchContinuation(token: string, route = 'home'): Promise<
 
 export interface PageResult {
   videos: Video[]
+  channels: Channel[]
+  items?: SearchItem[]
   continuation: string | null
+}
+
+function emptyPageResult(): PageResult {
+  return { videos: [], channels: [], continuation: null }
 }
 
 export async function extractPageVideosWithContinuation(): Promise<PageResult> {
@@ -778,25 +1038,25 @@ export async function extractPageVideosWithContinuation(): Promise<PageResult> {
         log(`  continuation token prefix=${cmd.token.slice(0,40)} request=${cmd.request ? cmd.request.slice(0,40) : 'none'}`)
       }
     } catch {}
-    if (videos.length) return { videos, continuation: token }
+    if (videos.length) return { videos, channels: [], continuation: token }
   }
 
   const data = await callInnerTube('browse', { browseId: 'FEwhat_to_watch' })
   if (data) {
     const videos = extractFromData(data)
     const token = extractContinuationToken(data)
-    if (videos.length) return { videos, continuation: token }
+    if (videos.length) return { videos, channels: [], continuation: token }
   }
 
   const asyncData = await getYTDataAsync('ytInitialData')
   if (asyncData) {
     const videos = extractFromData(asyncData)
     const token = extractContinuationToken(asyncData)
-    if (videos.length) return { videos, continuation: token }
+    if (videos.length) return { videos, channels: [], continuation: token }
   }
 
   const domVideos = extractFromDOM()
-  return { videos: domVideos, continuation: null }
+  return { videos: domVideos, channels: [], continuation: null }
 }
 
 export async function extractPageVideos(): Promise<Video[]> {

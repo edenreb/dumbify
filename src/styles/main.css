@@ -307,6 +307,266 @@ body {
   }
 }
 
+/* ---- Topbar / search ---- */
+
+.df-topbar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 24px;
+}
+
+.df-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+}
+
+.df-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--foreground);
+  outline: none;
+  transition: border-color 150ms;
+}
+
+.df-search-input::placeholder {
+  color: var(--ink-soft);
+}
+
+.df-search-input:focus {
+  border-color: var(--mark);
+}
+
+.df-search-btn {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  padding: 8px 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms;
+}
+
+.df-search-btn:hover {
+  color: var(--foreground);
+  border-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+}
+
+/* ---- Channel banner ---- */
+
+.df-channel-banner {
+  display: block;
+  border: 1px solid var(--border);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+
+.df-channel-banner:hover {
+  background-color: color-mix(in oklab, var(--ink) 4%, transparent);
+  border-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+}
+
+.df-channel-banner-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.df-channel-banner-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin-top: 10px;
+}
+
+.df-channel-banner-name {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  line-height: 1.2;
+  text-decoration: underline 1px transparent;
+  text-underline-offset: 4px;
+  transition: text-decoration-color 200ms;
+}
+
+.df-channel-banner:hover .df-channel-banner-name {
+  text-decoration-color: var(--ink);
+}
+
+.df-channel-banner-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.df-channel-banner-desc {
+  margin-top: 10px;
+  max-width: 68ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.df-channel-banner-cta {
+  display: inline-block;
+  margin-top: 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--foreground);
+  border-bottom: 1px solid var(--foreground);
+  padding-bottom: 2px;
+}
+
+.df-channel-banner-spacer {
+  height: 0;
+}
+
+/* ---- Inline channel card ---- */
+
+.df-channel-card {
+  display: block;
+  border: 1px solid var(--border);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+
+.df-channel-card:hover {
+  background-color: color-mix(in oklab, var(--ink) 4%, transparent);
+  border-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+}
+
+.df-channel-card-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.df-channel-card-name {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 1.2;
+  text-decoration: underline 1px transparent;
+  text-underline-offset: 4px;
+  transition: text-decoration-color 200ms;
+}
+
+.df-channel-card:hover .df-channel-card-name {
+  text-decoration-color: var(--ink);
+}
+
+.df-channel-card-meta {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.df-channel-card-desc {
+  margin-top: 10px;
+  max-width: 68ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.df-channel-card-cta {
+  display: inline-block;
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--foreground);
+  border-bottom: 1px solid var(--foreground);
+  padding-bottom: 2px;
+}
+
+/* ---- Channel page tabs ---- */
+
+.df-channel-tabs {
+  padding-bottom: 20px;
+}
+
+.df-channel-tabs .df-toolbar-item {
+  cursor: pointer;
+}
+
+/* ---- Channel about ---- */
+
+.df-channel-about {
+  padding: 8px 0 32px;
+}
+
+.df-channel-about-desc {
+  max-width: 68ch;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--muted-foreground);
+  white-space: pre-wrap;
+}
+
+.df-channel-about-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin-top: 16px;
+}
+
+.df-channel-about-links a {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--foreground);
+  border-bottom: 1px solid var(--foreground);
+  padding-bottom: 1px;
+  text-decoration: none;
+}
+
+.df-channel-about-links a:hover {
+  color: var(--ink);
+}
+
 /* ---- Page head ---- */
 
 .df-page-head {
@@ -338,9 +598,17 @@ body {
   color: var(--foreground);
 }
 
+.df-channel-page-title {
+  font-size: 52px;
+}
+
 @media (min-width: 640px) {
   .df-page-title {
     font-size: 48px;
+  }
+
+  .df-channel-page-title {
+    font-size: 64px;
   }
 }
 

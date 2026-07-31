@@ -15,6 +15,17 @@ export interface Video {
   progress?: string
 }
 
+export interface Channel {
+  id: string
+  name: string
+  handle: string
+  subscribers: string
+  videoCount: string
+  description: string
+  verified: boolean
+  joinedAt?: string
+}
+
 export interface WatchData {
   video: Video
   playerReady: boolean
