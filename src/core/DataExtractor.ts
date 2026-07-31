@@ -104,6 +104,25 @@ function fetchDataViaBackground<T>(name: string): Promise<T | null> {
   })
 }
 
+async function sapisidAuthHeader(): Promise<string | null> {
+  try {
+    const cookies = document.cookie.split(';')
+    const get = (n: string) => {
+      const c = cookies.find((x) => x.trim().startsWith(`${n}=`))
+      return c ? c.trim().slice(n.length + 1) : null
+    }
+    const sid = get('SAPISID') ?? get('__Secure-3PAPISID')
+    if (!sid) return null
+    const ts = Math.floor(Date.now() / 1000)
+    const msg = `${ts} ${sid} https://www.youtube.com`
+    const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(msg))
+    const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
+    return `SAPISIDHASH ${ts}_${hex}`
+  } catch {
+    return null
+  }
+}
+
 async function callInnerTube(endpoint: string, body: any): Promise<any> {
   try {
     let cfg = tryFindYTCfg()
@@ -130,13 +149,15 @@ async function callInnerTube(endpoint: string, body: any): Promise<any> {
       },
     }
 
+    const auth = await sapisidAuthHeader()
     const res = await fetch(`https://www.youtube.com/youtubei/v1/${endpoint}?key=${cfg.INNERTUBE_API_KEY}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Youtube-Client-Name': cfg.INNERTUBE_CLIENT_NAME || 'WEB',
+        'X-Youtube-Client-Name': cfg.INNERTUBE_CLIENT_NAME === 'WEB' ? '1' : '2',
         'X-Youtube-Client-Version': cfg.INNERTUBE_CLIENT_VERSION || '2.20250101',
         'X-Goog-AuthUser': '0',
+        ...(auth ? { Authorization: auth } : {}),
         ...(cfg.VISITOR_DATA ? { 'X-Goog-Visitor-Id': cfg.VISITOR_DATA } : {}),
         ...(cfg.ID_TOKEN ? { 'X-Youtube-Identity-Token': cfg.ID_TOKEN } : {}),
       },

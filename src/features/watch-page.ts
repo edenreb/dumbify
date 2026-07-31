@@ -649,11 +649,13 @@ function buildCommentsSection(): HTMLElement {
   const input = document.createElement('textarea')
   input.className = 'df-comment-input'
   input.placeholder = 'Add a comment…'
-  input.rows = 2
-  input.addEventListener('input', () => {
+  input.rows = 1
+  const autoGrow = () => {
     input.style.height = 'auto'
     input.style.height = `${Math.min(input.scrollHeight, 200)}px`
-  })
+  }
+  input.addEventListener('input', autoGrow)
+  autoGrow()
 
   const postBtn = document.createElement('button')
   postBtn.className = 'df-comment-submit'
@@ -694,6 +696,8 @@ function toggleComments() {
     if (!commentsSection) {
       commentsSection = buildCommentsSection()
       content!.appendChild(commentsSection)
+      const inp = commentsSection.querySelector<HTMLTextAreaElement>('.df-comment-input')
+      if (inp) inp.dispatchEvent(new Event('input'))
       commentsSection.scrollIntoView({ block: 'start' })
       window.dispatchEvent(new Event('scroll'))
       refreshCommentsFromData()
