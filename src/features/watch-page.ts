@@ -1,17 +1,163 @@
-import type { NavigationState, WatchData } from '../types'
+import type { NavigationState } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content } from '../core/UIEngine'
 import { extractWatchData } from '../core/DataExtractor'
 
-const chapters = [
-  { at: '00:00', label: 'Introduction' },
-  { at: '03:12', label: 'Chapter one' },
-  { at: '08:40', label: 'Chapter two' },
-  { at: '13:05', label: 'Chapter three' },
-  { at: '16:20', label: 'Conclusion' },
+const PLAYER_SELECTORS = [
+  'ytd-player',
+  '#movie_player',
+  '#player-container',
+  '#player',
+  '.html5-video-player',
 ]
 
-function buildWatchPage(data: WatchData) {
+let movedPlayer: HTMLElement | null = null
+let originalParent: HTMLElement | null = null
+let originalSibling: Node | null = null
+let playerWatcher: MutationObserver | null = null
+let playerTimeout: number | null = null
+let onFullscreenChange: (() => void) | null = null
+let onFullscreenClick: ((e: Event) => void) | null = null
+let onFullscreenKey: ((e: KeyboardEvent) => void) | null = null
+let aspectBound = false
+let aspectTimer: number | null = null
+let boundVideo: HTMLVideoElement | null = null
+
+function playerContainer(): HTMLElement | null {
+  if (!movedPlayer) return null
+  return movedPlayer.querySelector<HTMLElement>('.html5-video-player') ?? movedPlayer
+}
+
+function toggleFullscreen() {
+  const el = playerContainer()
+  if (!el) return
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {})
+  } else {
+    el.requestFullscreen?.().catch(() => {})
+  }
+}
+
+function findPlayer(): HTMLElement | null {
+  for (const sel of PLAYER_SELECTORS) {
+    const el = document.querySelector<HTMLElement>(sel)
+    if (el) return el
+  }
+  return null
+}
+
+function fitPlayer() {
+  if (!movedPlayer) return
+  movedPlayer.style.width = ''
+  movedPlayer.style.height = ''
+  const container = movedPlayer.querySelector<HTMLElement>('.html5-video-player')
+  if (container) {
+    container.style.width = ''
+    container.style.height = ''
+  }
+}
+
+function syncPlayerAspect() {
+  const el = playerContainer()
+  if (!el) return
+  if (document.fullscreenElement) return
+  const width = el.clientWidth
+  if (width <= 0) return
+  const video = el.querySelector('video')
+  let ratio = 9 / 16
+  if (video?.videoWidth && video.videoHeight) {
+    ratio = video.videoHeight / video.videoWidth
+  }
+  el.style.height = `${Math.round(width * ratio)}px`
+}
+
+function bindAspectSync() {
+  if (!movedPlayer || aspectBound) return
+  const video = movedPlayer.querySelector('video')
+  if (!video) return
+  aspectBound = true
+  boundVideo = video
+  video.addEventListener('resize', syncPlayerAspect)
+  video.addEventListener('loadedmetadata', syncPlayerAspect)
+  window.addEventListener('resize', syncPlayerAspect)
+  syncPlayerAspect()
+  aspectTimer = window.setInterval(syncPlayerAspect, 1000)
+}
+
+function unbindAspectSync() {
+  if (boundVideo) {
+    boundVideo.removeEventListener('resize', syncPlayerAspect)
+    boundVideo.removeEventListener('loadedmetadata', syncPlayerAspect)
+    boundVideo = null
+  }
+  window.removeEventListener('resize', syncPlayerAspect)
+  if (aspectTimer !== null) {
+    window.clearInterval(aspectTimer)
+    aspectTimer = null
+  }
+  aspectBound = false
+}
+
+function movePlayerInto(target: HTMLElement) {
+  if (movedPlayer) {
+    if (movedPlayer.parentElement !== target) target.appendChild(movedPlayer)
+    fitPlayer()
+    bindAspectSync()
+    return
+  }
+  const el = findPlayer()
+  if (!el) return
+  originalParent = el.parentElement
+  originalSibling = el.nextSibling
+  el.classList.add('df-native-player')
+  target.appendChild(el)
+  movedPlayer = el
+  playerWatcher?.disconnect()
+  playerWatcher = null
+  if (playerTimeout !== null) {
+    window.clearTimeout(playerTimeout)
+    playerTimeout = null
+  }
+  fitPlayer()
+  bindAspectSync()
+}
+
+function restorePlayer() {
+  playerWatcher?.disconnect()
+  playerWatcher = null
+  if (playerTimeout !== null) {
+    window.clearTimeout(playerTimeout)
+    playerTimeout = null
+  }
+  unbindAspectSync()
+  if (onFullscreenChange) {
+    document.removeEventListener('fullscreenchange', onFullscreenChange)
+    onFullscreenChange = null
+  }
+  if (onFullscreenClick) {
+    document.removeEventListener('click', onFullscreenClick, true)
+    onFullscreenClick = null
+  }
+  if (onFullscreenKey) {
+    document.removeEventListener('keydown', onFullscreenKey, true)
+    onFullscreenKey = null
+  }
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {})
+  }
+  if (movedPlayer && originalParent) {
+    const video = movedPlayer.querySelector('video')
+    if (video) video.pause()
+    originalParent.insertBefore(movedPlayer, originalSibling ?? null)
+    movedPlayer.classList.remove('df-native-player')
+    fitPlayer()
+  }
+  movedPlayer = null
+  originalParent = null
+  originalSibling = null
+}
+
+function buildWatchPage(nav: NavigationState) {
   content!.innerHTML = ''
 
   const nowPlaying = document.createElement('p')
@@ -24,71 +170,62 @@ function buildWatchPage(data: WatchData) {
   content!.appendChild(player)
 
   const screen = document.createElement('div')
-  screen.className = 'df-player-screen'
+  screen.className = 'df-player-screen df-player-screen--native'
   player.appendChild(screen)
 
-  const playBtn = document.createElement('button')
-  playBtn.className = 'df-play-btn'
-  playBtn.setAttribute('aria-label', 'Play')
+  movePlayerInto(screen)
 
-  const circle = document.createElement('span')
-  circle.className = 'df-play-circle'
-
-  const icon = document.createElement('span')
-  icon.className = 'df-play-icon'
-  circle.appendChild(icon)
-
-  const label = document.createElement('span')
-  label.className = 'df-play-label'
-  label.textContent = 'Tap to play'
-
-  playBtn.appendChild(circle)
-  playBtn.appendChild(label)
-  screen.appendChild(playBtn)
-
-  let playing = false
-  playBtn.onclick = () => {
-    playing = !playing
-    if (playing) {
-      icon.className = 'df-pause-icon'
-      icon.innerHTML = '<span></span><span></span>'
-      label.textContent = 'Playing · tap to pause'
-    } else {
-      icon.className = 'df-play-icon'
-      icon.innerHTML = ''
-      label.textContent = 'Tap to play'
-    }
+  if (!movedPlayer) {
+    playerWatcher?.disconnect()
+    playerWatcher = new MutationObserver(() => movePlayerInto(screen))
+    playerWatcher.observe(document.documentElement, { childList: true, subtree: true })
+    playerTimeout = window.setTimeout(() => {
+      if (playerTimeout !== null) {
+        window.clearTimeout(playerTimeout)
+        playerTimeout = null
+      }
+      playerWatcher?.disconnect()
+      playerWatcher = null
+      if (!movedPlayer) {
+        const msg = document.createElement('p')
+        msg.className = 'df-play-label'
+        msg.textContent = 'Video not available'
+        screen.appendChild(msg)
+      }
+    }, 10000)
   }
 
-  const controls = document.createElement('div')
-  controls.className = 'df-player-controls'
+  if (movedPlayer && !onFullscreenChange) {
+    onFullscreenChange = () => {
+      const container = playerContainer()
+      if (container) container.classList.toggle('ytp-fullscreen', !!document.fullscreenElement)
+      if (!document.fullscreenElement) {
+        requestAnimationFrame(() => {
+          fitPlayer()
+          syncPlayerAspect()
+        })
+      }
+    }
+    onFullscreenClick = (e) => {
+      const target = e.target as HTMLElement | null
+      if (!target?.closest?.('.ytp-fullscreen-button')) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      toggleFullscreen()
+    }
+    onFullscreenKey = (e) => {
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        toggleFullscreen()
+      }
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    document.addEventListener('click', onFullscreenClick, true)
+    document.addEventListener('keydown', onFullscreenKey, true)
+  }
 
-  const currTime = document.createElement('span')
-  currTime.className = 'df-time-label'
-  currTime.textContent = '00:00'
-  controls.appendChild(currTime)
-
-  const track = document.createElement('div')
-  track.className = 'df-progress-track'
-  const fill = document.createElement('div')
-  fill.className = 'df-progress-fill'
-  track.appendChild(fill)
-  const thumb = document.createElement('div')
-  thumb.className = 'df-progress-thumb'
-  track.appendChild(thumb)
-  controls.appendChild(track)
-
-  const totalTime = document.createElement('span')
-  totalTime.className = 'df-time-label'
-  totalTime.textContent = data.video.duration || '00:00'
-  controls.appendChild(totalTime)
-
-  const speed = document.createElement('span')
-  speed.className = 'df-time-label df-speed-label'
-  speed.textContent = '1.0×'
-  controls.appendChild(speed)
-
-  player.appendChild(controls)
+  const data = extractWatchData()
 
   const title = document.createElement('h1')
   title.className = 'df-watch-title'
@@ -98,12 +235,12 @@ function buildWatchPage(data: WatchData) {
   const metaBar = document.createElement('div')
   metaBar.className = 'df-watch-meta-bar'
 
-  const channelLink = document.createElement('a')
-  channelLink.className = 'df-watch-channel'
-  const channelSpan = document.createElement('span')
-  channelSpan.textContent = data.video.channel || 'Unknown'
-  channelLink.appendChild(channelSpan)
-  metaBar.appendChild(channelLink)
+  if (data.video.channel) {
+    const channelSpan = document.createElement('span')
+    channelSpan.className = 'df-watch-channel'
+    channelSpan.textContent = data.video.channel
+    metaBar.appendChild(channelSpan)
+  }
 
   if (data.video.views || data.video.published) {
     const metaItem = document.createElement('span')
@@ -126,103 +263,21 @@ function buildWatchPage(data: WatchData) {
   metaBar.appendChild(actions)
 
   content!.appendChild(metaBar)
-
-  const grid = document.createElement('div')
-  grid.className = 'df-watch-grid'
-
-  const mainCol = document.createElement('div')
-  mainCol.className = 'df-watch-content'
-
-  if (data.video.description) {
-    const descLabel = document.createElement('p')
-    descLabel.className = 'df-watch-section-label'
-    descLabel.textContent = 'Description'
-    mainCol.appendChild(descLabel)
-
-    const desc = document.createElement('p')
-    desc.className = 'df-watch-desc'
-    desc.textContent = data.video.description
-    mainCol.appendChild(desc)
-  }
-
-  const chapLabel = document.createElement('p')
-  chapLabel.className = 'df-watch-section-label'
-  chapLabel.style.marginTop = '48px'
-  chapLabel.textContent = 'Chapters'
-  mainCol.appendChild(chapLabel)
-
-  const chapList = document.createElement('div')
-  chapList.className = 'df-chapter-list'
-  chapters.forEach((c) => {
-    const btn = document.createElement('button')
-    btn.className = 'df-chapter-item'
-    const time = document.createElement('span')
-    time.className = 'df-chapter-time'
-    time.textContent = c.at
-    btn.appendChild(time)
-    const lab = document.createElement('span')
-    lab.className = 'df-chapter-label'
-    lab.textContent = c.label
-    btn.appendChild(lab)
-    chapList.appendChild(btn)
-  })
-  mainCol.appendChild(chapList)
-
-  grid.appendChild(mainCol)
-
-  const aside = document.createElement('aside')
-  aside.className = 'df-upnext'
-
-  const upnextLabel = document.createElement('p')
-  upnextLabel.className = 'df-upnext-label'
-  upnextLabel.textContent = 'Up next'
-  aside.appendChild(upnextLabel)
-
-  const upnextList = document.createElement('ul')
-  upnextList.className = 'df-upnext-list'
-
-  const upnextDefault = [
-    { title: 'A history of the page number', duration: '16:02' },
-    { title: 'Everything I know about focus, in one sitting', duration: '44:31' },
-    { title: 'The economics of doing less', duration: '29:18' },
-  ]
-
-  upnextDefault.forEach((v) => {
-    const li = document.createElement('li')
-    const a = document.createElement('span')
-    a.className = 'df-upnext-item'
-    const titleSpan = document.createElement('span')
-    titleSpan.className = 'df-upnext-title'
-    titleSpan.textContent = v.title
-    a.appendChild(titleSpan)
-    const durSpan = document.createElement('span')
-    durSpan.className = 'df-upnext-duration'
-    durSpan.textContent = v.duration
-    a.appendChild(durSpan)
-    li.appendChild(a)
-    upnextList.appendChild(li)
-  })
-
-  aside.appendChild(upnextList)
-
-  const autoplayOff = document.createElement('p')
-  autoplayOff.className = 'df-autoplay-off'
-  autoplayOff.textContent = 'Autoplay off, permanently.'
-  aside.appendChild(autoplayOff)
-
-  grid.appendChild(aside)
-  content!.appendChild(grid)
 }
 
 export const watchPageFeature: Feature = {
   id: 'watch-page',
 
   mount(nav: NavigationState) {
-    const data = extractWatchData()
-    buildWatchPage(data)
+    buildWatchPage(nav)
+  },
+
+  update(nav: NavigationState) {
+    buildWatchPage(nav)
   },
 
   unmount() {
+    restorePlayer()
     content!.innerHTML = ''
   },
 }
