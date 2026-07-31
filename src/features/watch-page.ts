@@ -1,7 +1,7 @@
 import type { NavigationState } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content } from '../core/UIEngine'
-import { extractWatchData } from '../core/DataExtractor'
+import { extractWatchData, extractCommentsFromPage, fetchMoreComments, parseCountText, postCommentAPI, fetchCreateParams } from '../core/DataExtractor'
 
 const PLAYER_SELECTORS = [
   'ytd-player',
@@ -26,6 +26,74 @@ let likeObserver: MutationObserver | null = null
 let wlObserver: MutationObserver | null = null
 let commentsOpen = false
 let commentsSection: HTMLElement | null = null
+let commentsBtnEl: HTMLButtonElement | null = null
+let commentsObserver: MutationObserver | null = null
+let renderTimer: number | null = null
+let dataCommentCount = ''
+let dataRefreshAttempted = false
+let dataRefreshPending = false
+let moreToken: string | null = null
+let dataComments: WatchComment[] = []
+let createParams: string | null = null
+
+function findNativeComments(): HTMLElement | null {
+  return (
+    document.querySelector<HTMLElement>('ytd-comments') ??
+    document.querySelector<HTMLElement>('#comments')
+  )
+}
+
+async function refreshCommentsFromData() {
+  const list = commentsSection?.querySelector<HTMLElement>('.df-comment-list')
+  if (!list) return
+  if (dataComments.length > 0) {
+    renderComments(list, dataComments)
+    renderMoreButton(list)
+    return
+  }
+  if (dataRefreshAttempted || dataRefreshPending) return
+  if (extractComments().length > 0) return
+  dataRefreshPending = true
+  const { count, comments, token, createParams: params } = await extractCommentsFromPage()
+  dataRefreshPending = false
+  dataRefreshAttempted = true
+  if (!commentsSection?.isConnected) return
+  if (comments.length > 0) {
+    dataComments = comments
+    moreToken = token
+    renderComments(list, dataComments)
+    renderMoreButton(list)
+  }
+  if (params) createParams = params
+  if (count) {
+    dataCommentCount = count
+    updateCommentsToggle()
+  }
+}
+
+function renderMoreButton(list: HTMLElement) {
+  list.querySelector('.df-comment-more')?.remove()
+  if (!moreToken) return
+  const btn = document.createElement('button')
+  btn.className = 'df-comment-more'
+  btn.textContent = 'Load more'
+  btn.onclick = async () => {
+    if (!moreToken || btn.disabled) return
+    btn.disabled = true
+    const { count, comments, token } = await fetchMoreComments(moreToken)
+    moreToken = token
+    if (count) {
+      dataCommentCount = count
+      updateCommentsToggle()
+    }
+    if (commentsSection?.isConnected) {
+      dataComments = [...dataComments, ...comments]
+      renderComments(list, dataComments)
+      renderMoreButton(list)
+    }
+  }
+  list.appendChild(btn)
+}
 
 function playerContainer(): HTMLElement | null {
   if (!movedPlayer) return null
@@ -441,7 +509,7 @@ type WatchComment = {
 
 function extractComments(): WatchComment[] {
   const nodes = document.querySelectorAll<HTMLElement>(
-    'ytd-comments ytd-comment-thread-renderer ytd-comment-renderer'
+    'ytd-comment-thread-renderer ytd-comment-renderer'
   )
   const list: WatchComment[] = []
   nodes.forEach((t) => {
@@ -458,41 +526,98 @@ function extractComments(): WatchComment[] {
   return list
 }
 
-function postComment(comment: string) {
-  const placeholder = document.querySelector<HTMLElement>(
-    'ytd-comments ytd-comment-simplebox-renderer #placeholder-area'
-  )
-  if (!placeholder) {
-    console.warn('[dumbify] comment box not found (not signed in?)')
-    return
-  }
-  placeholder.click()
-  window.setTimeout(() => {
-    const editable = document.querySelector<HTMLElement>('ytd-comments #contenteditable-root')
-    if (!editable) {
-      console.warn('[dumbify] comment editor not found')
-      return
+function postComment(comment: string): Promise<'ok' | 'signin' | 'failed'> {
+  return new Promise((resolve) => {
+    const find = (sel: string): HTMLElement | null => document.querySelector<HTMLElement>(sel)
+    const findPlaceholder = () =>
+      find('ytd-comments ytd-comment-simplebox-renderer #placeholder-area, ytd-comment-simplebox-renderer #placeholder-area')
+
+    const postViaApi = () => postCommentViaApi(comment).then(resolve)
+
+    const submitNative = () => {
+      const editable = find('ytd-comments #contenteditable-root, ytd-comment-simplebox-renderer #contenteditable-root, #contenteditable-root')
+      if (!editable) {
+        postViaApi()
+        return
+      }
+      editable.focus()
+      const inserted = document.execCommand('insertText', false, comment)
+      if (!inserted) {
+        editable.textContent = comment
+        editable.dispatchEvent(
+          new InputEvent('input', { bubbles: true, inputType: 'insertText', data: comment })
+        )
+      }
+      window.setTimeout(() => {
+        const submit = find('ytd-comments #submit-button button, ytd-comment-simplebox-renderer #submit-button button, #submit-button button')
+        if (submit) submit.click()
+        else postViaApi()
+      }, 200)
+      window.setTimeout(() => resolve('ok'), 400)
     }
-    editable.focus()
-    const inserted = document.execCommand('insertText', false, comment)
-    if (!inserted) {
-      editable.textContent = comment
-      editable.dispatchEvent(
-        new InputEvent('input', { bubbles: true, inputType: 'insertText', data: comment })
-      )
+
+    let attempts = 0
+    const tryNative = () => {
+      const placeholder = findPlaceholder()
+      if (placeholder) {
+        placeholder.click()
+        window.setTimeout(submitNative, 300)
+        return
+      }
+      attempts += 1
+      if (attempts >= 8) {
+        postViaApi()
+        return
+      }
+      window.setTimeout(tryNative, 250)
     }
-    window.setTimeout(() => {
-      const submit = document.querySelector<HTMLElement>('ytd-comments #submit-button button')
-      if (submit) submit.click()
-      else console.warn('[dumbify] comment submit button not found')
-    }, 150)
-  }, 150)
+    tryNative()
+  })
 }
 
-function renderComments(list: HTMLElement) {
-  const comments = extractComments()
+async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'failed'> {
+  let params = createParams
+  if (!params) {
+    params = await fetchCreateParams()
+    if (params) createParams = params
+  }
+  if (!params) {
+    console.warn('[dumbify] cannot post: not signed in to YouTube (no createCommentParams)')
+    return 'signin'
+  }
+  let ok = await postCommentAPI(comment, params)
+  if (!ok && createParams) {
+    const fresh = await fetchCreateParams()
+    if (fresh && fresh !== createParams) {
+      createParams = fresh
+      ok = await postCommentAPI(comment, fresh)
+    }
+  }
+  if (ok) {
+    dataComments = [{ author: 'You', time: 'now', text: comment, likes: '' }, ...dataComments]
+    const next = parseInt(dataCommentCount.replace(/[^0-9]/g, ''), 10) || 0
+    dataCommentCount = `${next + 1}`
+    updateCommentsToggle()
+    const list = commentsSection?.querySelector<HTMLElement>('.df-comment-list')
+    if (list && commentsSection?.isConnected) {
+      renderComments(list, dataComments)
+      renderMoreButton(list)
+    }
+  } else {
+    console.warn('[dumbify] comment post failed (not signed in?)')
+  }
+  return ok ? 'ok' : 'failed'
+}
+
+function renderComments(list: HTMLElement, source: WatchComment[] | null = null) {
+  const comments = source ?? extractComments()
   list.innerHTML = ''
   if (comments.length === 0) {
+    const threads = document.querySelectorAll('ytd-comment-thread-renderer').length
+    const withText = [...document.querySelectorAll('ytd-comment-thread-renderer')].filter(
+      (t) => t.querySelector('#content-text')?.textContent?.trim()
+    ).length
+    console.log('[dumbify] no comments rendered; threads:', threads, 'with text:', withText)
     const empty = document.createElement('p')
     empty.className = 'df-comment-empty'
     empty.textContent = 'No comments yet'
@@ -524,20 +649,30 @@ function buildCommentsSection(): HTMLElement {
   const input = document.createElement('textarea')
   input.className = 'df-comment-input'
   input.placeholder = 'Add a comment…'
-  input.rows = 2
+  input.rows = 1
+  const autoGrow = () => {
+    input.style.height = 'auto'
+    input.style.height = `${Math.min(input.scrollHeight, 200)}px`
+  }
+  input.addEventListener('input', autoGrow)
+  autoGrow()
 
   const postBtn = document.createElement('button')
   postBtn.className = 'df-comment-submit'
   postBtn.textContent = 'Post'
-  postBtn.onclick = () => {
+  postBtn.onclick = async () => {
     const text = input.value.trim()
-    if (!text) return
-    postComment(text)
+    if (!text || postBtn.disabled) return
     input.value = ''
+    input.style.height = ''
+    postBtn.disabled = true
+    postBtn.textContent = 'Posting…'
+    const r = await postComment(text)
+    postBtn.textContent = r === 'ok' ? 'Posted' : r === 'signin' ? 'Sign in to post' : 'Failed'
     window.setTimeout(() => {
-      const list = commentsSection?.querySelector<HTMLElement>('.df-comment-list')
-      if (list) renderComments(list)
-    }, 2500)
+      postBtn.disabled = false
+      postBtn.textContent = 'Post'
+    }, 1500)
   }
 
   composer.appendChild(input)
@@ -548,9 +683,9 @@ function buildCommentsSection(): HTMLElement {
   list.className = 'df-comment-list'
   section.appendChild(list)
 
-  document.querySelector<HTMLElement>('ytd-comments')?.scrollIntoView({ block: 'start' })
+  commentsSection = section
   renderComments(list)
-  window.setTimeout(() => renderComments(list), 800)
+  watchComments()
 
   return section
 }
@@ -561,17 +696,88 @@ function toggleComments() {
     if (!commentsSection) {
       commentsSection = buildCommentsSection()
       content!.appendChild(commentsSection)
+      const inp = commentsSection.querySelector<HTMLTextAreaElement>('.df-comment-input')
+      if (inp) inp.dispatchEvent(new Event('input'))
+      commentsSection.scrollIntoView({ block: 'start' })
+      window.dispatchEvent(new Event('scroll'))
+      refreshCommentsFromData()
     }
   } else if (commentsSection) {
+    commentsObserver?.disconnect()
+    commentsObserver = null
     commentsSection.remove()
     commentsSection = null
   }
 }
 
-function buildWatchPage(nav: NavigationState) {
-  content!.innerHTML = ''
+function commentCount(): string {
+  if (dataCommentCount) return dataCommentCount
+  const el = document.querySelector<HTMLElement>('ytd-comments-header-renderer #count')
+  if (el?.textContent) return parseCountText(el.textContent)
+  return ''
+}
+
+function updateCommentsToggle() {
+  if (!commentsBtnEl) return
+  const count = commentCount()
+  commentsBtnEl.textContent = count ? `Comments · ${count}` : 'Comments'
+}
+
+function scheduleRender() {
+  if (renderTimer !== null) window.clearTimeout(renderTimer)
+  renderTimer = window.setTimeout(() => {
+    renderTimer = null
+    const list = commentsSection?.querySelector<HTMLElement>('.df-comment-list')
+    if (list && commentsSection?.isConnected) {
+      if (dataComments.length > 0) {
+        renderComments(list, dataComments)
+        renderMoreButton(list)
+      } else {
+        renderComments(list)
+      }
+    }
+    updateCommentsToggle()
+  }, 300)
+}
+
+function watchComments() {
+  const commentsNative = findNativeComments()
+  if (commentsNative) {
+    commentsObserver?.disconnect()
+    commentsObserver = new MutationObserver(scheduleRender)
+    commentsObserver.observe(commentsNative, { childList: true, subtree: true })
+    updateCommentsToggle()
+    return
+  }
+  const wait = new MutationObserver(() => {
+    if (!findNativeComments()) return
+    wait.disconnect()
+    watchComments()
+  })
+  wait.observe(document.body, { childList: true, subtree: true })
+}
+
+function resetComments() {
   commentsOpen = false
   commentsSection = null
+  commentsBtnEl = null
+  commentsObserver?.disconnect()
+  commentsObserver = null
+  if (renderTimer !== null) {
+    window.clearTimeout(renderTimer)
+    renderTimer = null
+  }
+  dataCommentCount = ''
+  dataRefreshAttempted = false
+  dataRefreshPending = false
+  moreToken = null
+  dataComments = []
+  createParams = null
+}
+
+function buildWatchPage(nav: NavigationState) {
+  content!.innerHTML = ''
+  resetComments()
 
   const nowPlaying = document.createElement('p')
   nowPlaying.className = 'df-now-playing'
@@ -688,12 +894,25 @@ function buildWatchPage(nav: NavigationState) {
   const commentsBtn = document.createElement('button')
   commentsBtn.className = 'df-watch-action'
   commentsBtn.textContent = 'Comments'
+  commentsBtnEl = commentsBtn
   commentsBtn.onclick = () => toggleComments()
   actions.appendChild(commentsBtn)
+  updateCommentsToggle()
 
   metaBar.appendChild(actions)
 
   content!.appendChild(metaBar)
+
+  const description = document.createElement('details')
+  description.className = 'df-watch-description'
+  const summary = document.createElement('summary')
+  summary.textContent = 'Description'
+  description.appendChild(summary)
+  const text = document.createElement('p')
+  text.className = 'df-watch-description-text'
+  text.textContent = (data.video.description ?? '').trim() || 'No description'
+  description.appendChild(text)
+  content!.appendChild(description)
 
   logLikeDiagnostics()
 }
@@ -710,6 +929,7 @@ export const watchPageFeature: Feature = {
   },
 
   unmount() {
+    resetComments()
     restorePlayer()
     content!.innerHTML = ''
   },

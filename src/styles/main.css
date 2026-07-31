@@ -1005,6 +1005,51 @@ body {
   color: var(--mark);
 }
 
+.df-watch-description {
+  margin-top: 24px;
+}
+
+.df-watch-description summary {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.df-watch-description summary::-webkit-details-marker {
+  display: none;
+}
+
+.df-watch-description summary::before {
+  content: '+';
+  display: inline-block;
+  width: 14px;
+  color: var(--border);
+}
+
+.df-watch-description[open] summary::before {
+  content: '−';
+}
+
+.df-watch-description summary:hover {
+  color: var(--foreground);
+}
+
+.df-watch-description-text {
+  margin-top: 12px;
+  max-width: 68ch;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  line-height: 1.7;
+  color: color-mix(in oklab, var(--foreground) 90%, transparent);
+  white-space: pre-line;
+}
+
 .df-comments {
   margin-top: 32px;
   padding-top: 24px;
@@ -1019,7 +1064,8 @@ body {
 
 .df-comment-input {
   flex: 1;
-  resize: vertical;
+  resize: none;
+  overflow: hidden;
   background: none;
   border: none;
   border-bottom: 1px solid var(--border);
@@ -1058,11 +1104,40 @@ body {
   border-color: var(--foreground);
 }
 
+.df-comment-submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .df-comment-list {
   margin-top: 24px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.df-comment-more {
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: none;
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms;
+}
+
+.df-comment-more:hover {
+  color: var(--foreground);
+  border-color: var(--foreground);
+}
+
+.df-comment-more:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .df-comment-meta {

@@ -104,6 +104,25 @@ function fetchDataViaBackground<T>(name: string): Promise<T | null> {
   })
 }
 
+async function sapisidAuthHeader(): Promise<string | null> {
+  try {
+    const cookies = document.cookie.split(';')
+    const get = (n: string) => {
+      const c = cookies.find((x) => x.trim().startsWith(`${n}=`))
+      return c ? c.trim().slice(n.length + 1) : null
+    }
+    const sid = get('SAPISID') ?? get('__Secure-3PAPISID')
+    if (!sid) return null
+    const ts = Math.floor(Date.now() / 1000)
+    const msg = `${ts} ${sid} https://www.youtube.com`
+    const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(msg))
+    const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
+    return `SAPISIDHASH ${ts}_${hex}`
+  } catch {
+    return null
+  }
+}
+
 async function callInnerTube(endpoint: string, body: any): Promise<any> {
   try {
     let cfg = tryFindYTCfg()
@@ -130,19 +149,34 @@ async function callInnerTube(endpoint: string, body: any): Promise<any> {
       },
     }
 
+    const auth = await sapisidAuthHeader()
     const res = await fetch(`https://www.youtube.com/youtubei/v1/${endpoint}?key=${cfg.INNERTUBE_API_KEY}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Youtube-Client-Name': cfg.INNERTUBE_CLIENT_NAME === 'WEB' ? '1' : '2',
+        'X-Youtube-Client-Version': cfg.INNERTUBE_CLIENT_VERSION || '2.20250101',
+        'X-Goog-AuthUser': '0',
+        ...(auth ? { Authorization: auth } : {}),
+        ...(cfg.VISITOR_DATA ? { 'X-Goog-Visitor-Id': cfg.VISITOR_DATA } : {}),
+        ...(cfg.ID_TOKEN ? { 'X-Youtube-Identity-Token': cfg.ID_TOKEN } : {}),
+      },
       body: JSON.stringify({ context, ...body }),
       credentials: 'include',
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      log(`callInnerTube ${endpoint} HTTP ${res.status}`)
+      return null
+    }
     return await res.json()
   } catch { return null }
 }
 
 function vidFromRenderer(r: any): Video | null {
   if (!r?.videoId) return null
+  const overlayDur = r.thumbnailOverlays?.find(
+    (o: any) => o?.thumbnailOverlayTimeStatusRenderer?.text
+  )?.thumbnailOverlayTimeStatusRenderer?.text?.simpleText
   return {
     id: r.videoId,
     title: r.title?.runs?.[0]?.text ?? '',
@@ -152,7 +186,7 @@ function vidFromRenderer(r: any): Video | null {
     url: `/watch?v=${r.videoId}`,
     views: r.viewCountText?.simpleText ?? r.viewCountText?.runs?.map((x: any) => x.text).join('') ?? '',
     published: r.publishedTimeText?.simpleText ?? '',
-    duration: r.lengthText?.simpleText ?? '',
+    duration: r.lengthText?.simpleText ?? overlayDur ?? '',
     verified: !!r.ownerBadges?.some((b: any) => b?.metadataBadgeRenderer?.tooltip === 'Verified'),
     live: !!r.badges?.some((b: any) => b?.metadataBadgeRenderer?.style === 'BADGE_STYLE_TYPE_LIVE_NOW'),
   }
@@ -162,6 +196,7 @@ function extractText(v: any): string {
   if (typeof v === 'string') return v
   if (!v || typeof v !== 'object') return ''
   if (typeof v.content === 'string') return v.content
+  if (typeof v.text === 'string') return v.text
   if (v.runs?.[0]?.text) return v.runs[0].text
   if (v.simpleText) return v.simpleText
   return ''
@@ -321,6 +356,76 @@ function extractJoinedDate(data: any): string {
   const chMeta = data?.metadata?.channelMetadataRenderer
   if (chMeta?.creationDate) return chMeta.creationDate
   return ''
+const DURATION_RX = /^\d{1,3}:\d{2}(:\d{2})?$/
+
+function findDurationText(node: any, depth = 0): string {
+  if (depth > 14 || typeof node !== 'object' || node === null) return ''
+  if (Array.isArray(node)) {
+    for (const x of node) {
+      const t = findDurationText(x, depth + 1)
+      if (t) return t
+    }
+    return ''
+  }
+  if (typeof node.text === 'string' && DURATION_RX.test(node.text)) return node.text
+  if (typeof node.simpleText === 'string' && DURATION_RX.test(node.simpleText)) return node.simpleText
+  if (typeof node.content === 'string' && DURATION_RX.test(node.content)) return node.content
+  for (const k of Object.keys(node)) {
+    if (k === 'lockupMetadataViewModel' || k === 'title') continue
+    const t = findDurationText(node[k], depth + 1)
+    if (t) return t
+  }
+  return ''
+}
+
+function vidFromReel(r: any): Video | null {
+  if (!r?.videoId) return null
+  const a11y = r?.accessibility?.accessibilityData?.label ?? ''
+  let duration = ''
+  const m = a11y.match(/(\d+)\s+minutes?\s+(\d+)\s+seconds?/)
+  if (m) {
+    const total = Number(m[1]) * 60 + Number(m[2])
+    duration = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+  } else {
+    const s = a11y.match(/(\d+)\s+seconds?/)
+    if (s) duration = `0:${String(Number(s[1])).padStart(2, '0')}`
+  }
+  return {
+    id: r.videoId,
+    title: r.headline?.simpleText ?? r.title?.runs?.[0]?.text ?? '',
+    channel: r.channelName?.simpleText ?? r.channelTitleText?.runs?.[0]?.text ?? '',
+    channelId: r.channelNavigationEndpoint?.browseEndpoint?.browseId ?? '',
+    url: `/shorts/${r.videoId}`,
+    views: r.viewCountText?.simpleText ?? '',
+    published: '',
+    duration,
+    verified: false,
+    live: false,
+  }
+}
+
+function vidFromShortsLockup(sl: any): Video | null {
+  const videoId =
+    sl?.onTap?.innertubeCommand?.reelWatchEndpoint?.videoId ??
+    sl?.onTap?.innertubeCommand?.watchEndpoint?.videoId ??
+    String(sl?.entityId ?? '').split('-').pop() ??
+    ''
+  if (!videoId || videoId.length !== 11) return null
+  return {
+    id: videoId,
+    title:
+      sl?.overlayMetadata?.primaryText?.content ??
+      sl?.accessibilityText?.split(',')[0] ??
+      '',
+    channel: '',
+    channelId: '',
+    url: `/shorts/${videoId}`,
+    views: sl?.overlayMetadata?.secondaryText?.content ?? '',
+    published: '',
+    duration: '',
+    verified: false,
+    live: false,
+  }
 }
 
 function vidFromLockup(lockup: any): Video | null {
@@ -344,10 +449,18 @@ function vidFromLockup(lockup: any): Video | null {
 
   let duration = ''
   try {
-    const ov = lockup.contentImage?.thumbnailViewModel?.overlays
-    const badge = ov?.[0]?.thumbnailBottomOverlayViewModel?.badges?.[0]?.thumbnailBadgeViewModel
-    if (typeof badge === 'string') duration = badge
-    else duration = extractText(badge)
+    const ov = lockup.contentImage?.thumbnailViewModel?.overlays ?? []
+    for (const o of ov) {
+      const badges = o?.thumbnailBottomOverlayViewModel?.badges ?? []
+      for (const b of badges) {
+        const badge = b?.thumbnailBadgeViewModel
+        if (typeof badge === 'string') { duration = badge; break }
+        const text = extractText(badge)
+        if (text) { duration = text; break }
+      }
+      if (duration) break
+    }
+    if (!duration) duration = findDurationText(lockup)
   } catch {}
 
   return {
@@ -365,20 +478,24 @@ function vidFromLockup(lockup: any): Video | null {
 }
 
 function vidFromDOM(el: Element): Video | null {
-  const link = el.querySelector<HTMLAnchorElement>('a#video-title, #video-title a, a#video-title-link')
-  const title = link?.title?.trim() ?? link?.textContent?.trim() ?? ''
+  const link = el.querySelector<HTMLAnchorElement>(
+    'a#video-title, #video-title a, a#video-title-link, a[href*="/watch?v="], a[href*="/shorts/"]'
+  )
+  const title = link?.getAttribute('title')?.trim() ?? link?.textContent?.trim() ?? ''
   const href = link?.getAttribute('href') ?? ''
-  const idMatch = href.match(/(?:v=|\/)([\w-]{11})(?:\?|&|$)/)
+  const idMatch = href.match(/[?&]v=([\w-]{11})|\/shorts\/([\w-]{11})/)
   if (!idMatch) return null
-  const channelEl = el.querySelector('ytd-channel-name a, ytd-channel-name yt-formatted-string')
-  const channel = channelEl?.textContent?.trim() ?? ''
-  const meta = el.querySelector('#metadata-line, ytd-video-meta-block')
+  const id = idMatch[1] ?? idMatch[2]
+  const channelEl = el.querySelector('ytd-channel-name a, ytd-channel-name yt-formatted-string, [aria-label^="Go to channel"]')
+  const channel = channelEl?.getAttribute('aria-label')?.replace(/^Go to channel[:\s]+/i, '') ?? channelEl?.textContent?.trim() ?? ''
+  const meta = el.querySelector('#metadata-line, ytd-video-meta-block, yt-content-metadata-view-model')
   const spans = meta ? Array.from(meta.querySelectorAll('span')) : []
-  const durEl = el.querySelector('ytd-thumbnail-overlay-time-status-renderer')
+  const durEl = el.querySelector('ytd-thumbnail-overlay-time-status-renderer, yt-thumbnail-badge-view-model, yt-thumbnail-overlay-badge-view-model')
   const dur = durEl?.textContent?.trim() ?? ''
+  const isShort = /\/shorts\//.test(href)
   return {
-    id: idMatch[1], title, channel, channelId: '',
-    url: href.startsWith('/') ? href : `/watch?v=${idMatch[1]}`,
+    id, title, channel, channelId: '',
+    url: isShort ? `/shorts/${id}` : `/watch?v=${id}`,
     views: spans[0]?.textContent?.trim() ?? '',
     published: spans[1]?.textContent?.trim() ?? '',
     duration: dur, verified: false, live: false,
@@ -396,7 +513,101 @@ function extractLockupVideos(data: any): Video[] {
   return out
 }
 
+function collectItemVideos(item: any, out: Video[], seen: Set<string>) {
+  if (!item || typeof item !== 'object') return
+  if (item.continuationItemRenderer) return
+  let node: any = item
+  if (item.richItemRenderer) node = item.richItemRenderer.content ?? item.richItemRenderer
+  else if (item.richSectionRenderer?.content) {
+    const inner = item.richSectionRenderer.content
+    if (inner.richGridRenderer) {
+      for (const sub of inner.richGridRenderer.contents ?? []) collectItemVideos(sub, out, seen)
+      return
+    }
+    node = inner
+  }
+  else if (item.itemSectionRenderer?.contents) {
+    for (const sub of item.itemSectionRenderer.contents) collectItemVideos(sub, out, seen)
+    return
+  }
+  else if (item.playlistVideoListRenderer?.contents) {
+    for (const sub of item.playlistVideoListRenderer.contents) collectItemVideos(sub, out, seen)
+    return
+  }
+  else if (item.gridRenderer?.items) {
+    for (const sub of item.gridRenderer.items) collectItemVideos(sub, out, seen)
+    return
+  }
+  else if (item.reelShelfRenderer?.items) {
+    for (const sub of item.reelShelfRenderer.items) collectItemVideos(sub, out, seen)
+    return
+  }
+  else if (item.richGridRenderer?.contents) {
+    for (const sub of item.richGridRenderer.contents) collectItemVideos(sub, out, seen)
+    return
+  }
+  if (node && typeof node === 'object') {
+    let v: Video | null = null
+    if (node.videoRenderer) v = vidFromRenderer(node.videoRenderer)
+    else if (node.lockupViewModel) v = vidFromLockup(node.lockupViewModel)
+    else if (node.reelItemRenderer) v = vidFromReel(node.reelItemRenderer)
+    else if (node.shortsLockupViewModel) v = vidFromShortsLockup(node.shortsLockupViewModel)
+    else if (node.shortsLockupViewModelV2) v = vidFromShortsLockup(node.shortsLockupViewModelV2)
+    else if (node.gridVideoRenderer) v = vidFromRenderer(node.gridVideoRenderer)
+    else if (node.compactVideoRenderer) v = vidFromRenderer(node.compactVideoRenderer)
+    else if (node.playlistVideoRenderer) v = vidFromRenderer(node.playlistVideoRenderer)
+    else if (node.movieRenderer) v = vidFromRenderer(node.movieRenderer)
+    else if (node.watchCardCompactVideoRenderer) v = vidFromRenderer(node.watchCardCompactVideoRenderer)
+    if (v && !seen.has(v.id)) { seen.add(v.id); out.push(v) }
+  }
+}
+
+function collectFeedVideos(data: any): { videos: Video[]; itemKeys: Record<string, number> } {
+  const out: Video[] = []
+  const seen = new Set<string>()
+  const itemKeys: Record<string, number> = {}
+  const tab = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer
+  const content = tab?.content ?? data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
+  const walk = (parent: any) => {
+    if (!parent || typeof parent !== 'object') return
+    const items = parent.sectionListRenderer?.contents ?? parent.richGridRenderer?.contents ?? []
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue
+      if (item.itemSectionRenderer?.contents) {
+        for (const sub of item.itemSectionRenderer.contents) {
+          const k = Object.keys(sub)[0]
+          if (k) itemKeys[k] = (itemKeys[k] ?? 0) + 1
+          collectItemVideos(sub, out, seen)
+        }
+        continue
+      }
+      if (item.richSectionRenderer || item.richItemRenderer) {
+        const k = Object.keys(item)[0]
+        if (k) itemKeys[k] = (itemKeys[k] ?? 0) + 1
+        collectItemVideos(item, out, seen)
+        continue
+      }
+      const k = Object.keys(item)[0]
+      if (k) itemKeys[k] = (itemKeys[k] ?? 0) + 1
+      if (k === 'continuationItemRenderer') continue
+      collectItemVideos(item, out, seen)
+    }
+  }
+  walk(content)
+  return { videos: out, itemKeys }
+}
+
 function extractFromData(data: any): Video[] {
+  const { videos, itemKeys } = collectFeedVideos(data)
+  if (videos.length) {
+    const summary = Object.entries(itemKeys)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${k}x${n}`)
+      .join(', ')
+    log(`collectFeedVideos: ${videos.length} videos | item shapes: ${summary}`)
+    return videos
+  }
+
   const attempts: ((d: any) => Video[])[] = [
     (d) => {
       const c = d?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
@@ -513,7 +724,8 @@ function findVideoRenderers(obj: any, depth = 0, maxDepth = 20): any[] {
 
 function extractFromDOM(): Video[] {
   const selectors = ['ytd-rich-item-renderer', 'ytd-video-renderer', 'ytd-grid-video-renderer',
-    'ytd-compact-video-renderer', 'ytd-playlist-video-renderer']
+    'ytd-compact-video-renderer', 'ytd-playlist-video-renderer', 'yt-lockup-view-model',
+    'ytd-reel-item-renderer', 'ytm-shorts-lockup-view-model', 'ytm-shorts-lockup-view-model-v2']
   const videos: Video[] = []
   const seen = new Set<string>()
   for (const sel of selectors) {
@@ -560,10 +772,21 @@ function extractContinuationToken(data: any): string | null {
   try {
     const c = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
     if (!c) { log('  extractContinuationToken: no content'); return null }
-    const items = c?.richGridRenderer?.contents ?? []
-    const last = items[items.length - 1]
-    if (!last) { log('  extractContinuationToken: no last item'); return null }
-    const token = last?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? null
+    const rich = c?.richGridRenderer?.contents ?? []
+    const last = rich[rich.length - 1]
+    let token = last?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? null
+    if (!token) {
+      const sections = c?.sectionListRenderer?.contents ?? []
+      for (const sec of sections) {
+        const items = sec?.itemSectionRenderer?.contents ?? []
+        for (const item of items) {
+          const t = item?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token
+          if (t) token = t
+        }
+        const t = sec?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token
+        if (t) token = t
+      }
+    }
     log(`  extractContinuationToken => ${token ? token.slice(0,30)+'...' : 'null'}`)
     return token
   } catch (e: any) { log(`  extractContinuationToken ERROR: ${e.message}`); return null }
@@ -675,13 +898,34 @@ async function fetchFreshData(route = 'home'): Promise<{ videos: Video[]; token:
   try {
     const res = await fetch(location.origin + url, {
       credentials: 'include',
-      headers: { 'Accept': 'text/html', 'Range': 'bytes=0-400000' },
+      headers: { 'Accept': 'text/html' },
     })
-    if (!res.ok && res.status !== 206) return null
-    const d = parseInitialData(await res.text())
-    if (!d) return null
-    return { videos: extractFromData(d), token: extractContinuationToken(d) }
-  } catch { return null }
+    if (!res.ok && res.status !== 206) { log(`fetchFreshData(${route}): HTTP ${res.status}`); return null }
+    const text = await res.text()
+    log(`fetchFreshData(${route}): HTTP ${res.status}, ${text.length} bytes`)
+    for (const p of ['window.ytInitialData = ', 'ytInitialData = ']) {
+      const idx = text.indexOf(p)
+      if (idx === -1) continue
+      const start = text.indexOf('{', idx + p.length)
+      if (start === -1) continue
+      let depth = 0, inStr = false, strChar = ''
+      for (let i = start; i < text.length; i++) {
+        const c = text[i]
+        if (inStr) { if (c === strChar && text[i-1] !== '\\') inStr = false; continue }
+        if (c === '"' || c === "'") { inStr = true; strChar = c; continue }
+        if (c === '{') depth++
+        if (c === '}') { depth--; if (depth === 0) { try {
+          const d = JSON.parse(text.slice(start, i + 1))
+          const t0 = d?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
+          const contentKeys = t0 ? Object.keys(t0).join(',') : 'none'
+          log(`fetchFreshData(${route}): parsed ytInitialData, tab content keys: ${contentKeys}`)
+          return { videos: extractFromData(d), token: extractContinuationToken(d) }
+        } catch { log(`fetchFreshData(${route}): JSON parse failed`); return null } } }
+      }
+    }
+    log(`fetchFreshData(${route}): no ytInitialData found in HTML`)
+    return null
+  } catch (e: any) { log(`fetchFreshData(${route}) ERROR: ${e.message}`); return null }
 }
 
 export async function fetchSearchResults(query: string): Promise<PageResult> {
@@ -893,4 +1137,395 @@ function fmtSec(s: number): string {
   const sec = s % 60
   if (h) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
   return `${m}:${String(sec).padStart(2,'0')}`
+}
+
+export interface CommentItem {
+  author: string
+  time: string
+  text: string
+  likes: string
+}
+
+function findCommentThreads(obj: any, out: any[] = [], depth = 0): any[] {
+  if (depth > 25 || typeof obj !== 'object' || obj === null) return out
+  if (Array.isArray(obj)) {
+    for (const item of obj) findCommentThreads(item, out, depth + 1)
+    return out
+  }
+  if (obj.commentThreadRenderer) {
+    out.push(obj.commentThreadRenderer)
+    return out
+  }
+  for (const key of Object.keys(obj)) {
+    findCommentThreads(obj[key], out, depth + 1)
+  }
+  return out
+}
+
+function findCommentsHeader(obj: any, depth = 0): any {
+  if (depth > 25 || typeof obj !== 'object' || obj === null) return null
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const h = findCommentsHeader(item, depth + 1)
+      if (h) return h
+    }
+    return null
+  }
+  if (obj.commentsHeaderRenderer) return obj.commentsHeaderRenderer
+  if (obj.commentsEntryPointHeaderRenderer) return obj.commentsEntryPointHeaderRenderer
+  for (const key of Object.keys(obj)) {
+    const h = findCommentsHeader(obj[key], depth + 1)
+    if (h) return h
+  }
+  return null
+}
+
+function findCommentViewModels(obj: any, out: any[] = [], depth = 0): any[] {
+  if (depth > 25 || typeof obj !== 'object' || obj === null) return out
+  if (Array.isArray(obj)) {
+    for (const item of obj) findCommentViewModels(item, out, depth + 1)
+    return out
+  }
+  if (obj.commentViewModel) {
+    out.push(obj.commentViewModel)
+    return out
+  }
+  for (const key of Object.keys(obj)) {
+    findCommentViewModels(obj[key], out, depth + 1)
+  }
+  return out
+}
+
+function findCommentMutations(obj: any, out: any[] = [], depth = 0): any[] {
+  if (depth > 25 || typeof obj !== 'object' || obj === null) return out
+  if (Array.isArray(obj)) {
+    for (const item of obj) findCommentMutations(item, out, depth + 1)
+    return out
+  }
+  if (obj.entityKey && obj.payload?.commentEntityPayload) {
+    out.push(obj)
+    return out
+  }
+  for (const key of Object.keys(obj)) {
+    findCommentMutations(obj[key], out, depth + 1)
+  }
+  return out
+}
+
+function commentKeyFromVm(vm: any): string | null {
+  if (!vm || typeof vm !== 'object') return null
+  let v = vm
+  while (v.commentViewModel && typeof v.commentViewModel === 'object') v = v.commentViewModel
+  return v.commentKey ?? null
+}
+
+function buildCommentEntityMap(mutations: any[]): Map<string, any> {
+  const map = new Map<string, any>()
+  for (const m of mutations) {
+    const key = m.entityKey
+    const payload = m.payload?.commentEntityPayload
+    if (key && payload) map.set(key, payload)
+  }
+  return map
+}
+
+function parseCommentEntity(p: any): CommentItem | null {
+  const text = p?.properties?.content?.content ?? ''
+  if (!text) return null
+  const likes = p?.toolbar?.likeCountNotliked ?? p?.toolbar?.likeCountLiked ?? ''
+  return {
+    author: p?.author?.displayName ?? 'Unknown',
+    time: p?.properties?.publishedTime ?? '',
+    text,
+    likes: likes && likes !== '0' ? likes : '',
+  }
+}
+
+function logCommentStructure(data: any) {
+  const keys = new Set<string>()
+  const walk = (o: any, depth: number) => {
+    if (depth > 8 || typeof o !== 'object' || o === null || keys.size >= 25) return
+    if (Array.isArray(o)) {
+      for (const x of o) walk(x, depth + 1)
+      return
+    }
+    for (const k of Object.keys(o)) {
+      if (/comment/i.test(k)) {
+        if (!keys.has(k)) {
+          keys.add(k)
+          const v = o[k]
+          const shape = v && typeof v === 'object' ? Object.keys(v).join(',') : String(v).slice(0, 50)
+          log(`  [comment key] ${k} => ${shape}`)
+        }
+      }
+      walk(o[k], depth + 1)
+    }
+  }
+  walk(data, 0)
+}
+
+function parseCommentRenderer(c: any): CommentItem | null {
+  const text =
+    c?.contentText?.runs?.map((r: any) => r.text).join('') ??
+    c?.contentText?.simpleText ??
+    ''
+  if (!text) return null
+  const likes = c?.voteCount?.simpleText ?? ''
+  return {
+    author: c?.authorText?.simpleText ?? 'Unknown',
+    time: c?.publishedTimeText?.simpleText ?? '',
+    text,
+    likes: likes && likes !== '0' ? likes : '',
+  }
+}
+
+export function parseCountText(t: string): string {
+  const m = t.match(/([\d.,]+)\s*(ألف|مليون|thousand|million|k|m)?/i)
+  if (!m) return ''
+  let n = parseFloat(m[1].replace(/,/g, ''))
+  if (isNaN(n)) return ''
+  const unit = (m[2] || '').toLowerCase()
+  if (unit === 'ألف' || unit === 'الف' || unit === 'thousand' || unit === 'k') n *= 1000
+  else if (unit === 'مليون' || unit === 'million' || unit === 'm') n *= 1000000
+  if (n >= 1000000) return `${(n / 1000000).toFixed(n < 10000000 ? 1 : 0).replace(/\.0$/, '')}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(n < 10000 ? 1 : 0).replace(/\.0$/, '')}K`
+  return String(n)
+}
+
+function extractCommentsFromObject(data: any): { count: string; comments: CommentItem[] } {
+  const comments: CommentItem[] = []
+  const header = findCommentsHeader(data)
+  const countText =
+    header?.commentsCount?.runs?.map((r: any) => r.text).join('') ??
+    header?.commentsCount?.simpleText ??
+    header?.countText?.simpleText ??
+    header?.countText?.runs?.map((r: any) => r.text).join('') ??
+    ''
+  const count = parseCountText(countText)
+  for (const t of findCommentThreads(data)) {
+    const c = t.comment?.commentRenderer
+    if (c) {
+      const item = parseCommentRenderer(c)
+      if (item) comments.push(item)
+    }
+  }
+  if (comments.length === 0) {
+    const entities = buildCommentEntityMap(findCommentMutations(data))
+    for (const vm of findCommentViewModels(data)) {
+      const key = commentKeyFromVm(vm)
+      const p = key ? entities.get(key) : null
+      if (p) {
+        const item = parseCommentEntity(p)
+        if (item) comments.push(item)
+      }
+    }
+  }
+  return { count, comments }
+}
+
+function findCommentsContinuation(data: any): string | null {
+  const walk = (o: any, depth = 0): string | null => {
+    if (depth > 25 || typeof o !== 'object' || o === null) return null
+    if (Array.isArray(o)) {
+      for (const item of o) {
+        const t = walk(item, depth + 1)
+        if (t) return t
+      }
+      return null
+    }
+    if ((o.header?.commentsHeaderRenderer || o.commentsHeaderRenderer) && Array.isArray(o.contents)) {
+      const token = o.contents[0]?.continuationItemRenderer?.continuationEndpoint
+        ?.continuationCommand?.token
+      if (token) return token
+    }
+    for (const key of Object.keys(o)) {
+      const t = walk(o[key], depth + 1)
+      if (t) return t
+    }
+    return null
+  }
+  return walk(data)
+}
+
+function findNextCommentsToken(data: any): string | null {
+  const walk = (o: any, depth = 0): string | null => {
+    if (depth > 25 || typeof o !== 'object' || o === null) return null
+    if (Array.isArray(o)) {
+      for (const item of o) {
+        const t = walk(item, depth + 1)
+        if (t) return t
+      }
+      return null
+    }
+    if (Array.isArray(o.continuationItems)) {
+      const items = o.continuationItems
+      if (items.some((x: any) => x.commentThreadRenderer)) {
+        const cont = items.find((x: any) => x.continuationItemRenderer)
+        if (cont) {
+          const token = cont.continuationItemRenderer.continuationEndpoint
+            ?.continuationCommand?.token
+          if (token) return token
+        }
+      }
+    }
+    for (const key of Object.keys(o)) {
+      const t = walk(o[key], depth + 1)
+      if (t) return t
+    }
+    return null
+  }
+  return walk(data)
+}
+
+function findCreateCommentParams(data: any): string | null {
+  const walk = (o: any, depth = 0): string | null => {
+    if (depth > 15 || typeof o !== 'object' || o === null) return null
+    if (Array.isArray(o)) {
+      for (const item of o) {
+        const r = walk(item, depth + 1)
+        if (r) return r
+      }
+      return null
+    }
+    if (typeof o.createCommentParams === 'string') return o.createCommentParams
+    for (const key of Object.keys(o)) {
+      const r = walk(o[key], depth + 1)
+      if (r) return r
+    }
+    return null
+  }
+  return walk(data)
+}
+
+function logCommentBoxState(data: any): void {
+  const walk = (o: any, depth = 0): void => {
+    if (depth > 15 || typeof o !== 'object' || o === null) return
+    if (Array.isArray(o)) {
+      for (const item of o) walk(item, depth + 1)
+      return
+    }
+    if (o.commentSimpleboxRenderer) {
+      if (o.commentSimpleboxRenderer.prepareAccountEndpoint)
+        log('  comment box: signed-out variant (sign in required)')
+      else log('  comment box: present')
+      return
+    }
+    for (const key of Object.keys(o)) walk(o[key], depth + 1)
+  }
+  walk(data)
+}
+
+export interface CommentsPageResult {
+  count: string
+  comments: CommentItem[]
+  token: string | null
+  createParams: string | null
+}
+
+export async function extractCommentsFromPage(): Promise<CommentsPageResult> {
+  const sync = extractFromScripts('ytInitialData')
+  if (sync) {
+    log('  ytInitialData found in scripts')
+    const r = extractCommentsFromObject(sync)
+    log(`  sync data: count='${r.count}' comments=${r.comments.length}`)
+    if (r.comments.length) {
+      return {
+        ...r,
+        token: findNextCommentsToken(sync),
+        createParams: findCreateCommentParams(sync),
+      }
+    }
+  } else {
+    log('  ytInitialData NOT found in scripts')
+  }
+  const token = sync ? findCommentsContinuation(sync) : null
+  log(`  comments continuation token: ${token ? 'yes' : 'no'}`)
+  if (token) {
+    const data = await callInnerTube('next', { continuation: token })
+    if (data) {
+      const r = extractCommentsFromObject(data)
+      log(`  comments continuation API: count='${r.count}' comments=${r.comments.length}`)
+      if (!findCreateCommentParams(data)) logCommentBoxState(data)
+      if (r.comments.length || r.count) {
+        return {
+          ...r,
+          token: findNextCommentsToken(data),
+          createParams: findCreateCommentParams(data),
+        }
+      }
+      logCommentStructure(data)
+    } else {
+      log('  comments continuation API: no response')
+    }
+  }
+  const videoId = new URLSearchParams(location.search).get('v') ?? ''
+  if (videoId) {
+    const data = await callInnerTube('next', { videoId })
+    if (data) {
+      const r = extractCommentsFromObject(data)
+      log(`  next API: count='${r.count}' comments=${r.comments.length}`)
+      if (r.comments.length || r.count) {
+        return {
+          ...r,
+          token: findNextCommentsToken(data),
+          createParams: findCreateCommentParams(data),
+        }
+      }
+    } else {
+      log('  next API: no response')
+    }
+  }
+  return { count: '', comments: [], token: null, createParams: null }
+}
+
+export async function fetchMoreComments(
+  token: string
+): Promise<CommentsPageResult> {
+  const data = await callInnerTube('next', { continuation: token })
+  if (!data) return { count: '', comments: [], token: null, createParams: null }
+  const r = extractCommentsFromObject(data)
+  return {
+    count: r.count,
+    comments: r.comments,
+    token: findNextCommentsToken(data),
+    createParams: findCreateCommentParams(data),
+  }
+}
+
+export async function postCommentAPI(
+  commentText: string,
+  createParams: string
+): Promise<boolean> {
+  const data = await callInnerTube('comment/create_comment', {
+    commentText,
+    createCommentParams: createParams,
+  })
+  if (!data || data.error) {
+    log('postCommentAPI failed', JSON.stringify(data?.error ?? null).slice(0, 200))
+    return false
+  }
+  return true
+}
+
+export async function fetchCreateParams(): Promise<string | null> {
+  const sync = extractFromScripts('ytInitialData')
+  const token = sync ? findCommentsContinuation(sync) : null
+  if (token) {
+    const data = await callInnerTube('next', { continuation: token })
+    if (data) {
+      const params = findCreateCommentParams(data)
+      if (params) return params
+      logCommentBoxState(data)
+    }
+  }
+  const videoId = new URLSearchParams(location.search).get('v') ?? ''
+  if (videoId) {
+    const data = await callInnerTube('next', { videoId })
+    if (data) {
+      const params = findCreateCommentParams(data)
+      if (params) return params
+      logCommentBoxState(data)
+    }
+  }
+  return null
 }
