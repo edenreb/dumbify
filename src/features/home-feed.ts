@@ -113,8 +113,23 @@ function renderVideo(v: Video): HTMLElement {
   const article = document.createElement('a')
   article.className = 'df-item-row'
   article.href = v.url
-  article.onclick = (e) => { e.preventDefault(); navigateTo(v.url) }
-  article.onkeydown = (e) => { if (e.key === 'Enter') navigateTo(v.url) }
+  article.onclick = (e) => {
+    e.preventDefault()
+    if (v.url.startsWith('/watch')) {
+      window.location.href = v.url
+    } else {
+      navigateTo(v.url)
+    }
+  }
+  article.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      if (v.url.startsWith('/watch')) {
+        window.location.href = v.url
+      } else {
+        navigateTo(v.url)
+      }
+    }
+  }
 
   const number = document.createElement('span')
   number.className = 'df-item-number'
