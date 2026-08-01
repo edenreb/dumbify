@@ -84,7 +84,7 @@ export function getNavigationState(): NavigationState {
 
 export function navigateTo(path: string) {
   const state = buildStateFromPath(path)
-  lastHref = state.href
-  callbacks.forEach((cb) => cb(state))
-  window.scrollTo(0, 0)
+  const href = state.href
+  if (href === location.href) return
+  window.location.href = href
 }

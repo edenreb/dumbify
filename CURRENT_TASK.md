@@ -37,13 +37,18 @@ Progress notes:
 
 # 🔴 Priority 2 - Navigation System
 
-Status: Pending
+Status: In Progress
 
 Tasks:
 
 - Fix page navigation state issues.
 - Ensure pages properly reload their own content.
 - Ensure video components unmount correctly.
+
+Progress notes:
+
+- **Navigation links (1st iteration):** `navigateTo(path)` in PageManager.ts no longer just fires feature callbacks with a fabricated state — it now performs a real full-page navigation via `window.location.href = href` (and no-ops if already on that URL). Sidebar buttons, the brand/logo, and the search submit all go through `navigateTo`, so clicking them now updates the browser URL and reloads the page to the correct link. This matches the existing full-page navigation pattern already used by video cards and channel cards/links. Active link highlighting still works because shell re-reads the route on the fresh page load.
+- Status: code complete, typecheck + build pass. Manual Chrome testing still needed (load `dist` unpacked).
 
 ---
 
