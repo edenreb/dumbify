@@ -165,7 +165,8 @@ async function callInnerTube(endpoint: string, body: any): Promise<any> {
       credentials: 'include',
     })
     if (!res.ok) {
-      log(`callInnerTube ${endpoint} HTTP ${res.status}`)
+      const text = await res.text().catch(() => '')
+      log(`callInnerTube ${endpoint} HTTP ${res.status}: ${text.slice(0, 300)}`)
       return null
     }
     return await res.json()
@@ -274,6 +275,7 @@ function extractChannelHeader(data: any): Channel | null {
   // Try c4TabbedHeaderRenderer (legacy)
   const h = data?.header?.c4TabbedHeaderRenderer
   if (h?.channelId) {
+    const sub = extractSubscriptionInfo(data, h.channelId) ?? undefined
     return {
       id: h.channelId,
       name: extractText(h.title) || (meta?.title ?? ''),
@@ -282,6 +284,9 @@ function extractChannelHeader(data: any): Channel | null {
       videoCount: extractText(h.videosCountText),
       description: meta?.description ?? '',
       verified: !!h?.badges?.some((b: any) => b?.metadataBadgeRenderer?.tooltip === 'Verified'),
+      subscribed: sub?.subscribed,
+      subParams: sub?.subParams,
+      unsubParams: sub?.unsubParams,
     }
   }
 
@@ -303,6 +308,7 @@ function extractChannelHeader(data: any): Channel | null {
       }
     }
     if (channelId) {
+      const sub = extractSubscriptionInfo(data, channelId) ?? undefined
       return {
         id: channelId,
         name: extractText(ph.title) || meta?.title || '',
@@ -311,12 +317,16 @@ function extractChannelHeader(data: any): Channel | null {
         videoCount: vids,
         description: meta?.description ?? '',
         verified: false,
+        subscribed: sub?.subscribed,
+        subParams: sub?.subParams,
+        unsubParams: sub?.unsubParams,
       }
     }
   }
 
   // Try metadata only
   if (meta?.channelId) {
+    const sub = extractSubscriptionInfo(data, meta.channelId) ?? undefined
     return {
       id: meta.channelId,
       name: meta.title ?? '',
@@ -325,10 +335,97 @@ function extractChannelHeader(data: any): Channel | null {
       videoCount: meta.videosCountText ?? '',
       description: meta.description ?? '',
       verified: false,
+      subscribed: sub?.subscribed,
+      subParams: sub?.subParams,
+      unsubParams: sub?.unsubParams,
     }
   }
 
   return null
+}
+
+interface SubscriptionInfo {
+  subscribed: boolean
+  subParams: string
+  unsubParams: string
+  channelIds: string[]
+}
+
+function extractSubscriptionInfo(data: any, channelId: string): SubscriptionInfo | null {
+  const found: SubscriptionInfo[] = []
+  const walk = (o: any, depth = 0): void => {
+    if (depth > 20 || typeof o !== 'object' || o === null) return
+    if (Array.isArray(o)) {
+      for (const item of o) walk(item, depth + 1)
+      return
+    }
+    let info: SubscriptionInfo | null = null
+    const btn = o.subscribeButtonRenderer
+    if (btn) {
+      const subEp = btn.subscribeEndpoint?.subscribeEndpoint
+      const unsubEp = btn.unsubscribeEndpoint?.unsubscribeEndpoint
+      if (subEp?.params || unsubEp?.params) {
+        info = {
+          subscribed: btn.subscribed === true,
+          subParams: subEp?.params ?? '',
+          unsubParams: unsubEp?.params ?? '',
+          channelIds: subEp?.channelIds ?? unsubEp?.channelIds ?? [],
+        }
+      }
+    }
+    const vm = o.subscribeButtonViewModel
+    if (vm && !info) {
+      const subContent = vm.subscribeButtonContent
+      const unsubContent = vm.unsubscribeButtonContent
+      const subEp = subContent?.onTapCommand?.innertubeCommand?.subscribeEndpoint
+      const unsubEp = unsubContent?.onTapCommand?.innertubeCommand?.unsubscribeEndpoint
+      if (subEp || unsubEp) {
+        info = {
+          subscribed: subContent?.subscribeState?.subscribed === true,
+          subParams: subEp?.params ?? '',
+          unsubParams: unsubEp?.params ?? '',
+          channelIds: subEp?.channelIds ?? unsubEp?.channelIds ?? [],
+        }
+      }
+    }
+    const bv = o.buttonViewModel
+    if (bv && !info) {
+      const cmd = bv.onTap?.innertubeCommand
+      const subEp = cmd?.subscribeEndpoint?.subscribeEndpoint
+      const unsubEp = cmd?.unsubscribeEndpoint?.unsubscribeEndpoint
+      if (subEp?.params || unsubEp?.params) {
+        const title = extractText(bv.title)
+        info = {
+          subscribed: !!unsubEp || /subscribed/i.test(title),
+          subParams: subEp?.params ?? '',
+          unsubParams: unsubEp?.params ?? '',
+          channelIds: subEp?.channelIds ?? unsubEp?.channelIds ?? [],
+        }
+      }
+    }
+    if (info) found.push(info)
+    for (const key of Object.keys(o)) walk(o[key], depth + 1)
+  }
+  walk(data)
+  if (!found.length) return null
+  const own = found.filter((f) => f.channelIds.includes(channelId))
+  const pool = own.length ? own : found
+  return pool.find((f) => f.subParams && f.unsubParams) ?? pool.find((f) => f.subParams || f.unsubParams) ?? pool[0]
+}
+
+export async function setChannelSubscription(
+  channelId: string,
+  subscribe: boolean,
+  params: string
+): Promise<boolean> {
+  const endpoint = subscribe ? 'subscription/subscribe' : 'subscription/unsubscribe'
+  const data = await callInnerTube(endpoint, { channelIds: [channelId], params })
+  if (!data || data.error) {
+    log(`setChannelSubscription(${subscribe ? 'sub' : 'unsub'}) failed`,
+      JSON.stringify(data?.error ?? null).slice(0, 200))
+    return false
+  }
+  return true
 }
 
 function extractJoinedDate(data: any): string {
@@ -437,15 +534,21 @@ function vidFromLockup(lockup: any): Video | null {
   const title = extractText(lmv.title?.content)
   if (!title) return null
 
-  const rows = lmv.metadata?.contentMetadataViewModel?.metadataRows
+  const rows = lmv.metadata?.contentMetadataViewModel?.metadataRows ?? []
   let channel = '', views = '', published = ''
 
-  if (Array.isArray(rows)) {
-    if (rows[0]?.metadataParts?.[0]) channel = extractText(rows[0].metadataParts[0].text)
-    if (rows[1]?.metadataParts) {
-      const parts = rows[1].metadataParts
-      if (parts[0]) views = extractText(parts[0].text)
-      if (parts[1]) published = extractText(parts[1].text)
+  if (rows[0]?.metadataParts?.[0]) {
+    const t = extractText(rows[0].metadataParts[0].text)
+    if (t && !/views?|ago\b|premiered|streamed/i.test(t)) channel = t
+  }
+  for (const row of rows) {
+    for (const part of row?.metadataParts ?? []) {
+      const t = extractText(part?.text)
+      if (!t) continue
+      for (const bit of t.split('•').map((s) => s.trim()).filter(Boolean)) {
+        if (!views && /[\d.,]+\s*views?/i.test(bit)) views = bit
+        else if (!published && /ago|premiered|streamed|yesterday|today|\d{1,2}, \d{4}/i.test(bit)) published = bit
+      }
     }
   }
 
@@ -963,21 +1066,51 @@ export async function fetchChannelPage(channelId: string): Promise<ChannelPageRe
   log(`=== fetchChannelPage: ${channelId} ===`)
   if (!channelId) return { channel: null, videos: [], continuation: null }
 
-  const data = await callInnerTube('browse', { browseId: channelId })
-  if (!data) return { channel: null, videos: [], continuation: null }
+  const url = `/channel/${channelId}/videos?df=${Date.now()}`
+  let channelFromAPI: Channel | null = null
+  let d: any = null
 
-  log(`browse header keys: ${Object.keys(data?.header ?? {}).join(', ')}`)
-  log(`browse metadata keys: ${Object.keys(data?.metadata ?? {}).join(', ')}`)
-  log(`channelMetadataRenderer keys: ${Object.keys(data?.metadata?.channelMetadataRenderer ?? {}).join(', ')}`)
+  try {
+    const res = await fetch(location.origin + url, {
+      credentials: 'include',
+      headers: { 'Accept': 'text/html' },
+    })
+    if (res.ok) d = parseInitialData(await res.text())
+  } catch {}
 
-  const channel = extractChannelHeader(data)
-  if (channel) {
-    channel.joinedAt = extractJoinedDate(data)
+  if (!d) {
+    const data = await callInnerTube('browse', { browseId: channelId })
+    if (!data) return { channel: null, videos: [], continuation: null }
+    d = data
+    channelFromAPI = extractChannelHeader(d)
+    if (channelFromAPI) channelFromAPI.joinedAt = extractJoinedDate(d)
   }
-  const videos = extractFromData(data)
-  const token = extractContinuationToken(data)
-  log(`fetchChannelPage: "${channel?.name ?? ''}" joined=${channel?.joinedAt ?? ''} ${videos.length} videos, token=${token ? 'yes' : 'no'}`)
-  return { channel, videos, continuation: token }
+
+  if (!channelFromAPI) {
+    channelFromAPI = extractChannelHeader(d)
+    if (channelFromAPI) channelFromAPI.joinedAt = extractJoinedDate(d)
+  }
+  if (!channelFromAPI) {
+    const md = d?.metadata?.channelMetadataRenderer
+    if (md) {
+      channelFromAPI = {
+        id: channelId,
+        name: md.title ?? '',
+        handle: md.vanityChannelUrl ?? '',
+        subscribers: '',
+        videoCount: md.externalId ? '' : '',
+        description: md.shortDescription ?? '',
+        verified: false,
+        subscribed: false,
+      }
+    }
+  }
+
+  log(`browse header keys: ${Object.keys(d?.header ?? {}).join(', ')}`)
+  const videos = extractFromData(d)
+  const token = extractContinuationToken(d)
+  log(`fetchChannelPage: "${channelFromAPI?.name ?? ''}" ${videos.length} videos, token=${token ? 'yes' : 'no'}`)
+  return { channel: channelFromAPI, videos, continuation: token }
 }
 
 export async function fetchChannelContinuation(token: string): Promise<{ videos: Video[]; token: string | null }> {

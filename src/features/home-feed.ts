@@ -1,7 +1,7 @@
 import type { NavigationState, Video, Channel, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
-import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, diag } from '../core/DataExtractor'
+import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, diag, setChannelSubscription } from '../core/DataExtractor'
 import type { SearchItem } from '../core/DataExtractor'
 
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
@@ -179,10 +179,45 @@ function renderChannelHead(ch: Channel, before?: HTMLElement) {
 
   const aside = document.createElement('div')
   aside.className = 'df-page-aside'
-  const badge = document.createElement('span')
-  badge.className = 'df-sub-badge'
-  badge.textContent = ch.verified ? 'Verified' : 'Subscribed'
-  aside.appendChild(badge)
+
+  if (ch.verified) {
+    const verified = document.createElement('span')
+    verified.className = 'df-sub-badge'
+    verified.textContent = 'Verified'
+    aside.appendChild(verified)
+  }
+
+  if (ch.id) {
+    const subBtn = document.createElement('button')
+    const subscribed = ch.subscribed === true
+    subBtn.className = subscribed ? 'df-sub-btn df-sub-btn--on' : 'df-sub-btn'
+    subBtn.textContent = subscribed ? 'Subscribed' : 'Subscribe'
+    subBtn.onclick = async () => {
+      if (subBtn.disabled) return
+      const target = !subscribed
+      const params = target ? (ch.subParams ?? '') : (ch.unsubParams ?? '')
+      if (!params) {
+        subBtn.textContent = 'Sign in to subscribe'
+        window.setTimeout(() => {
+          subBtn.textContent = subscribed ? 'Subscribed' : 'Subscribe'
+        }, 1500)
+        return
+      }
+      subBtn.disabled = true
+      const ok = await setChannelSubscription(ch.id, target, params)
+      if (!ok) {
+        subBtn.disabled = false
+        subBtn.textContent = subscribed ? 'Subscribed' : 'Subscribe'
+        return
+      }
+      ch.subscribed = target
+      subBtn.disabled = false
+      subBtn.className = target ? 'df-sub-btn df-sub-btn--on' : 'df-sub-btn'
+      subBtn.textContent = target ? 'Subscribed' : 'Subscribe'
+    }
+    aside.appendChild(subBtn)
+  }
+
   head.appendChild(aside)
 
   if (before && before.parentNode) before.parentNode.insertBefore(head, before)
@@ -300,24 +335,20 @@ function renderVideo(v: Video): HTMLElement {
     mt.textContent = v.meta
     meta.appendChild(mt)
   } else {
-    if (v.views) {
+    const fields: { text: string; cls?: string }[] = []
+    if (v.views) fields.push({ text: v.views })
+    if (v.published) fields.push({ text: v.published })
+    if (dateFirst) fields.reverse()
+    fields.forEach((f) => {
       const sep = document.createElement('span')
       sep.className = 'df-item-meta-sep'
       sep.textContent = '/'
       meta.appendChild(sep)
-      const vw = document.createElement('span')
-      vw.textContent = v.views
-      meta.appendChild(vw)
-    }
-    if (v.published) {
-      const sep = document.createElement('span')
-      sep.className = 'df-item-meta-sep'
-      sep.textContent = '/'
-      meta.appendChild(sep)
-      const pub = document.createElement('span')
-      pub.textContent = v.published
-      meta.appendChild(pub)
-    }
+      const el = document.createElement('span')
+      if (f.cls) el.className = f.cls
+      el.textContent = f.text
+      meta.appendChild(el)
+    })
   }
 
   if (v.words) {
@@ -351,12 +382,14 @@ function updateItemNumbers() {
 }
 
 let feedCancelled = false
+let dateFirst = false
 
 export const homeFeedFeature: Feature = {
   id: 'home-feed',
 
   mount(nav: NavigationState) {
     feedCancelled = false
+    dateFirst = nav.route === 'channel'
     content!.innerHTML = ''
 
     renderPageHead(nav)

@@ -1353,6 +1353,38 @@ body {
   padding: 8px 12px;
 }
 
+.df-sub-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--foreground);
+  background: none;
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms, opacity 150ms;
+}
+
+.df-sub-btn:hover {
+  border-color: var(--mark);
+  color: var(--mark);
+}
+
+.df-sub-btn--on {
+  color: var(--ink-soft);
+}
+
+.df-sub-btn--on:hover {
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.df-sub-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ---- Playlists ---- */
 
 .df-playlist-item {
