@@ -362,8 +362,11 @@ function extractSubscriptionInfo(data: any, channelId: string): SubscriptionInfo
     let info: SubscriptionInfo | null = null
     const btn = o.subscribeButtonRenderer
     if (btn) {
-      const subEp = btn.subscribeEndpoint?.subscribeEndpoint
-      const unsubEp = btn.unsubscribeEndpoint?.unsubscribeEndpoint
+      const subEp = btn.onSubscribeEndpoints?.[0]?.subscribeEndpoint ?? btn.subscribeEndpoint
+      const unsubEp =
+        btn.onUnsubscribeEndpoints?.[0]?.signalServiceEndpoint?.actions?.[0]?.unsubscribeEndpoint ??
+        btn.onUnsubscribeEndpoints?.[0]?.unsubscribeEndpoint ??
+        btn.unsubscribeEndpoint
       if (subEp?.params || unsubEp?.params) {
         info = {
           subscribed: btn.subscribed === true,
@@ -391,8 +394,8 @@ function extractSubscriptionInfo(data: any, channelId: string): SubscriptionInfo
     const bv = o.buttonViewModel
     if (bv && !info) {
       const cmd = bv.onTap?.innertubeCommand
-      const subEp = cmd?.subscribeEndpoint?.subscribeEndpoint
-      const unsubEp = cmd?.unsubscribeEndpoint?.unsubscribeEndpoint
+      const subEp = cmd?.subscribeEndpoint
+      const unsubEp = cmd?.unsubscribeEndpoint
       if (subEp?.params || unsubEp?.params) {
         const title = extractText(bv.title)
         info = {
