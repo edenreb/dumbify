@@ -24,9 +24,6 @@ export interface Channel {
   description: string
   verified: boolean
   joinedAt?: string
-  subscribed?: boolean
-  subParams?: string
-  unsubParams?: string
 }
 
 export interface WatchData {

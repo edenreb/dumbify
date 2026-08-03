@@ -1,7 +1,7 @@
 import type { NavigationState, Video, Channel, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
-import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, diag, setChannelSubscription } from '../core/DataExtractor'
+import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, diag } from '../core/DataExtractor'
 import type { SearchItem } from '../core/DataExtractor'
 
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
@@ -158,6 +158,91 @@ function renderChannelBanner(ch: Channel, before?: HTMLElement) {
   else content!.appendChild(banner)
 }
 
+// Dumbify overlays the real YouTube page rather than replacing it, so the
+// native Subscribe control is still live in the document underneath our UI.
+// Clicking it directly (like the watch page does for Like/Watch Later) is
+// far more reliable than reconstructing InnerTube subscribe params from
+// fetched channel JSON, which YouTube's button/endpoint shapes break often.
+// NOTE: '#subscribe-button' looks like an obvious selector but is a trap - YouTube
+// reuses that id on an unrelated empty placeholder <div> inside shelf renderers
+// (e.g. "featured channels" recommendation cards), so it matches before the real
+// button and silently no-ops on click. Confirmed live; do not add it back.
+const SUBSCRIBE_SELECTORS = [
+  'ytd-subscribe-button-renderer button',
+  'ytd-subscribe-button-renderer',
+  'yt-page-header-view-model yt-flexible-actions-view-model button[aria-label^="Subscribe" i]',
+  'yt-page-header-view-model yt-flexible-actions-view-model button[aria-label^="Unsubscribe" i]',
+  'yt-flexible-actions-view-model button[aria-label^="Subscribe" i]',
+  'yt-flexible-actions-view-model button[aria-label^="Unsubscribe" i]',
+  'button[aria-label^="Subscribe" i]',
+  'button[aria-label^="Unsubscribe" i]',
+]
+
+let subObserver: MutationObserver | null = null
+
+function nativeSubscribeEl(): HTMLElement | null {
+  for (const sel of SUBSCRIBE_SELECTORS) {
+    const el = document.querySelector<HTMLElement>(sel)
+    if (el) return el
+  }
+  return null
+}
+
+function nativeSubscribedState(el: HTMLElement): boolean {
+  const btn = el.querySelector<HTMLElement>('button[aria-label], button[aria-pressed]') ?? el
+  if (btn.getAttribute('aria-pressed') === 'true') return true
+  const label = (btn.getAttribute('aria-label') ?? '').trim()
+  if (/^unsubscribe/i.test(label)) return true
+  if (/^subscribe(?! to)/i.test(label)) return false
+  return /^subscribed$/i.test((btn.textContent ?? '').trim())
+}
+
+function setSubUi(btn: HTMLButtonElement, subscribed: boolean) {
+  btn.classList.toggle('df-sub-btn--on', subscribed)
+  btn.textContent = subscribed ? 'Subscribed' : 'Subscribe'
+}
+
+function syncSubState(btn: HTMLButtonElement) {
+  const el = nativeSubscribeEl()
+  if (el) setSubUi(btn, nativeSubscribedState(el))
+}
+
+function watchSubState(btn: HTMLButtonElement) {
+  subObserver?.disconnect()
+  const target = nativeSubscribeEl()
+  if (target) {
+    subObserver = new MutationObserver(() => syncSubState(btn))
+    subObserver.observe(target.closest('yt-flexible-actions-view-model, ytd-subscribe-button-renderer') ?? target, {
+      attributes: true,
+      subtree: true,
+      childList: true,
+      attributeFilter: ['aria-label', 'aria-pressed', 'class'],
+    })
+    syncSubState(btn)
+    return
+  }
+  const wait = new MutationObserver(() => {
+    if (!nativeSubscribeEl()) return
+    wait.disconnect()
+    watchSubState(btn)
+  })
+  wait.observe(document.body, { childList: true, subtree: true })
+}
+
+function clickNativeSubscribe(btn: HTMLButtonElement) {
+  const el = nativeSubscribeEl()
+  if (!el) {
+    console.warn('[dumbify] native subscribe button not found')
+    return
+  }
+  const target = el.tagName === 'BUTTON' ? el : (el.querySelector<HTMLElement>('button') ?? el)
+  const wasSubscribed = nativeSubscribedState(el)
+  setSubUi(btn, !wasSubscribed)
+  target.click()
+  console.log('[dumbify] clicked subscribe target:', target)
+  window.setTimeout(() => syncSubState(btn), 600)
+}
+
 function renderChannelHead(ch: Channel, before?: HTMLElement) {
   const head = document.createElement('header')
   head.className = 'df-page-head'
@@ -189,33 +274,11 @@ function renderChannelHead(ch: Channel, before?: HTMLElement) {
 
   if (ch.id) {
     const subBtn = document.createElement('button')
-    const subscribed = ch.subscribed === true
-    subBtn.className = subscribed ? 'df-sub-btn df-sub-btn--on' : 'df-sub-btn'
-    subBtn.textContent = subscribed ? 'Subscribed' : 'Subscribe'
-    subBtn.onclick = async () => {
-      if (subBtn.disabled) return
-      const target = !subscribed
-      const params = target ? (ch.subParams ?? '') : (ch.unsubParams ?? '')
-      if (!params) {
-        subBtn.textContent = 'Sign in to subscribe'
-        window.setTimeout(() => {
-          subBtn.textContent = subscribed ? 'Subscribed' : 'Subscribe'
-        }, 1500)
-        return
-      }
-      subBtn.disabled = true
-      const ok = await setChannelSubscription(ch.id, target, params)
-      if (!ok) {
-        subBtn.disabled = false
-        subBtn.textContent = subscribed ? 'Subscribed' : 'Subscribe'
-        return
-      }
-      ch.subscribed = target
-      subBtn.disabled = false
-      subBtn.className = target ? 'df-sub-btn df-sub-btn--on' : 'df-sub-btn'
-      subBtn.textContent = target ? 'Subscribed' : 'Subscribe'
-    }
+    subBtn.className = 'df-sub-btn'
+    subBtn.textContent = 'Subscribe'
+    subBtn.onclick = () => clickNativeSubscribe(subBtn)
     aside.appendChild(subBtn)
+    watchSubState(subBtn)
   }
 
   head.appendChild(aside)
@@ -609,6 +672,8 @@ export const homeFeedFeature: Feature = {
     const h = (root as any).__dfScrollHandler
     if (h) root!.removeEventListener('scroll', h)
     delete (root as any).__dfScrollHandler
+    subObserver?.disconnect()
+    subObserver = null
     content!.innerHTML = ''
   },
 
