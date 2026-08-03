@@ -193,13 +193,18 @@ function nativeSubscribedState(el: HTMLElement): boolean {
   if (btn.getAttribute('aria-pressed') === 'true') return true
   const label = (btn.getAttribute('aria-label') ?? '').trim()
   if (/^unsubscribe/i.test(label)) return true
+  // Check "subscribed" (the already-subscribed label) before the plain "subscribe"
+  // test below - "Subscribed to X" starts with "Subscribe" too, and the negative
+  // lookahead there only excludes "Subscribe to X", not "Subscribed", so testing
+  // in the other order misclassified an already-subscribed button as not subscribed.
+  if (/^subscribed\b/i.test(label)) return true
   if (/^subscribe(?! to)/i.test(label)) return false
   return /^subscribed$/i.test((btn.textContent ?? '').trim())
 }
 
 function setSubUi(btn: HTMLButtonElement, subscribed: boolean) {
   btn.classList.toggle('df-sub-btn--on', subscribed)
-  btn.textContent = subscribed ? 'Subscribed' : 'Subscribe'
+  btn.textContent = subscribed ? 'Unsubscribe' : 'Subscribe'
 }
 
 function syncSubState(btn: HTMLButtonElement) {
@@ -229,6 +234,32 @@ function watchSubState(btn: HTMLButtonElement) {
   wait.observe(document.body, { childList: true, subtree: true })
 }
 
+// Clicking the native "Subscribed" pill does NOT open a confirm dialog - it opens a
+// notification-preference dropdown menu (All / Personalized / None / Unsubscribe).
+// Dumbify's root UI overlays the whole page at the max z-index (see main.css), so
+// that dropdown renders behind our overlay - invisible and unclickable to the user.
+// Same fix as the Watch Later "Save to playlist" dialog above: find the real
+// "Unsubscribe" menu item ourselves and click it rather than leaving it for the user.
+function findUnsubscribeMenuItem(): HTMLElement | null {
+  const candidates = document.querySelectorAll<HTMLElement>('*')
+  for (const el of candidates) {
+    if (el.closest('#dumbify-root')) continue
+    const ownText = [...el.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent?.trim())
+      .filter(Boolean)
+      .join(' ')
+    if (ownText && /^unsubscribe$/i.test(ownText)) {
+      return (
+        el.closest<HTMLElement>(
+          'tp-yt-paper-item, ytd-menu-service-item-renderer, yt-list-item-view-model, [role="menuitemradio"], [role="menuitem"], li'
+        ) ?? el.parentElement ?? el
+      )
+    }
+  }
+  return null
+}
+
 function clickNativeSubscribe(btn: HTMLButtonElement) {
   const el = nativeSubscribeEl()
   if (!el) {
@@ -237,9 +268,29 @@ function clickNativeSubscribe(btn: HTMLButtonElement) {
   }
   const target = el.tagName === 'BUTTON' ? el : (el.querySelector<HTMLElement>('button') ?? el)
   const wasSubscribed = nativeSubscribedState(el)
-  setSubUi(btn, !wasSubscribed)
   target.click()
   console.log('[dumbify] clicked subscribe target:', target)
+
+  if (wasSubscribed) {
+    let tries = 0
+    const poll = window.setInterval(() => {
+      tries++
+      const menuItem = findUnsubscribeMenuItem()
+      if (menuItem) {
+        window.clearInterval(poll)
+        menuItem.click()
+        setSubUi(btn, false)
+        window.setTimeout(() => syncSubState(btn), 600)
+      } else if (tries >= 15) {
+        window.clearInterval(poll)
+        console.warn('[dumbify] unsubscribe menu item not found')
+        syncSubState(btn)
+      }
+    }, 200)
+    return
+  }
+
+  setSubUi(btn, true)
   window.setTimeout(() => syncSubState(btn), 600)
 }
 
