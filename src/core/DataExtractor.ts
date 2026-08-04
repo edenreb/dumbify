@@ -585,7 +585,9 @@ function vidFromLockup(lockup: any): Video | null {
       const t = extractText(part?.text)
       if (!t) continue
       for (const bit of t.split('•').map((s) => s.trim()).filter(Boolean)) {
-        if (!views && /[\d.,]+\s*views?/i.test(bit)) views = bit
+        // View counts are usually abbreviated ("379K views", "3.1M views"), not just
+        // plain digits - the K/M/B suffix sits between the number and "views".
+        if (!views && /[\d.,]+\s*[kmb]?\+?\s*views?/i.test(bit)) views = bit
         else if (!published && /ago|premiered|streamed|yesterday|today|\d{1,2}, \d{4}/i.test(bit)) published = bit
       }
     }

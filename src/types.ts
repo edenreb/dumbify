@@ -11,7 +11,6 @@ export interface Video {
   live: boolean
   description?: string
   words?: string
-  meta?: string
   progress?: string
 }
 
