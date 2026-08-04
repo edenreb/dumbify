@@ -34,8 +34,6 @@ const NAV: { label: string; route: Route; path: string }[] = [
   { label: 'Watch Later', route: 'watch-later', path: '/playlist?list=WL' },
   { label: 'Liked', route: 'playlist', path: '/playlist?list=LL' },
   { label: 'Playlists', route: 'playlist', path: '/feed/playlists' },
-  { label: 'Your Videos', route: 'playlist', path: '/feed/videos' },
-  { label: 'Channel', route: 'channel', path: '/feed/channels' },
 ]
 
 let linkEls: HTMLElement[] = []
