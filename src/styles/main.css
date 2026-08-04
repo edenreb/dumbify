@@ -728,6 +728,32 @@ body {
   color: var(--border);
 }
 
+.df-item-channel-link {
+  cursor: pointer;
+  text-decoration: underline 1px transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms;
+}
+
+.df-item-channel-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.df-live-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  background-color: #e34242;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
 .df-item-tag {
   color: var(--accent);
   font-family: var(--font-mono);
@@ -961,12 +987,17 @@ body {
   text-decoration: none;
 }
 
-.df-watch-channel span {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 2px;
+.df-watch-channel--link {
+  cursor: pointer;
 }
 
-.df-watch-channel:hover span {
+.df-watch-channel--link span {
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+  transition: border-color 150ms;
+}
+
+.df-watch-channel--link:hover span {
   border-color: var(--foreground);
 }
 
