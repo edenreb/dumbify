@@ -23,7 +23,6 @@ let aspectBound = false
 let aspectTimer: number | null = null
 let boundVideo: HTMLVideoElement | null = null
 let likeObserver: MutationObserver | null = null
-let wlObserver: MutationObserver | null = null
 let commentsOpen = false
 let commentsSection: HTMLElement | null = null
 let commentsBtnEl: HTMLButtonElement | null = null
@@ -253,33 +252,79 @@ function clickNativeLike(btn: HTMLButtonElement) {
   }, 500)
 }
 
-const WL_SELECTORS = [
-  '.ytp-watch-later-button',
-  'ytd-watch-later-button-renderer ytd-toggle-button-renderer button#button',
-  'ytd-watch-later-button-renderer ytd-toggle-button-renderer',
-  'ytd-watch-later-button-renderer',
-  '#top-level-buttons-computed ytd-toggle-button-renderer[watch-later-button] button#button',
-  '#top-level-buttons-computed ytd-toggle-button-renderer[watch-later-button]',
-  '#top-level-buttons-computed button[aria-label*="atch later" i]',
-  '#top-level-buttons-computed button[title*="atch later" i]',
+// YouTube replaced the dedicated Watch-Later toggle button with a generic
+// "Save to playlist" action that opens a dialog listing every playlist
+// (Watch later included) as a checkbox row; there is no toggled/pressed
+// state on the button itself, only inside that dialog.
+const SAVE_BUTTON_SELECTORS = [
+  'button[aria-label="Save to playlist"]',
+  'button[aria-label^="Save" i]',
+  '#actions button[aria-label^="Save" i]',
+  'ytd-menu-renderer button[aria-label^="Save" i]',
 ]
 
-function nativeWlEl(): HTMLElement | null {
-  for (const sel of WL_SELECTORS) {
+const SAVE_DIALOG_SELECTORS = [
+  'ytd-add-to-playlist-renderer',
+  'yt-add-to-playlist-dialog-renderer',
+  'tp-yt-paper-dialog[aria-label*="playlist" i]',
+]
+
+function nativeSaveButtonEl(): HTMLElement | null {
+  for (const sel of SAVE_BUTTON_SELECTORS) {
     const el = document.querySelector<HTMLElement>(sel)
     if (el) return el
   }
   return null
 }
 
-function nativeWlState(): boolean {
-  const el = nativeWlEl()
-  if (!el) return false
-  const btn = el.querySelector<HTMLElement>('button[aria-pressed], button[aria-label]')
-  const target = btn ?? el
-  if (target.getAttribute('aria-pressed') === 'true') return true
-  const label = target.getAttribute('aria-label') ?? target.textContent ?? ''
-  return /(?:remove from|added to) watch later/i.test(label)
+function findSaveDialog(): HTMLElement | null {
+  for (const sel of SAVE_DIALOG_SELECTORS) {
+    const el = document.querySelector<HTMLElement>(sel)
+    if (el) return el
+  }
+  return null
+}
+
+function findWatchLaterRow(dialog: HTMLElement): HTMLElement | null {
+  const candidates = dialog.querySelectorAll<HTMLElement>('*')
+  for (const el of candidates) {
+    const ownText = [...el.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent?.trim())
+      .filter(Boolean)
+      .join(' ')
+    if (ownText && /^watch later$/i.test(ownText)) {
+      return (
+        el.closest<HTMLElement>(
+          'ytd-playlist-add-to-option-renderer, [role="menuitemcheckbox"], [role="checkbox"], tp-yt-paper-item, li'
+        ) ?? el.parentElement
+      )
+    }
+  }
+  return null
+}
+
+function watchLaterRowState(row: HTMLElement): { checked: boolean; target: HTMLElement } {
+  const control = row.querySelector<HTMLElement>(
+    '[role="checkbox"], tp-yt-paper-checkbox, yt-checkbox-shape, input[type="checkbox"]'
+  )
+  const target = control ?? row
+  const checked =
+    target.getAttribute('aria-checked') === 'true' ||
+    (target as HTMLInputElement).checked === true ||
+    target.classList.contains('iron-selected')
+  return { checked, target }
+}
+
+function closeSaveDialog() {
+  const closeBtn = document.querySelector<HTMLElement>(
+    [...SAVE_DIALOG_SELECTORS.map((s) => `${s} button[aria-label="Close"]`), 'button[aria-label="Close"]'].join(', ')
+  )
+  if (closeBtn) {
+    closeBtn.click()
+    return
+  }
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
 }
 
 function setWlUi(btn: HTMLButtonElement, saved: boolean) {
@@ -287,56 +332,31 @@ function setWlUi(btn: HTMLButtonElement, saved: boolean) {
   btn.textContent = saved ? 'Saved' : 'Watch later'
 }
 
-function syncWlState(btn: HTMLButtonElement) {
-  setWlUi(btn, nativeWlState())
-}
-
-function watchWlState(btn: HTMLButtonElement) {
-  wlObserver?.disconnect()
-  const target = nativeWlEl()
-  if (target) {
-    wlObserver = new MutationObserver(() => syncWlState(btn))
-    wlObserver.observe(target, {
-      attributes: true,
-      subtree: true,
-      attributeFilter: ['aria-pressed', 'aria-label', 'class'],
-    })
-    syncWlState(btn)
-    return
-  }
-  const wait = new MutationObserver(() => {
-    if (!nativeWlEl()) return
-    wait.disconnect()
-    watchWlState(btn)
-  })
-  wait.observe(document.body, { childList: true, subtree: true })
-}
-
-function clickWlTarget(btn: HTMLButtonElement, target: HTMLElement) {
-  const wasSaved = nativeWlState()
-  setWlUi(btn, !wasSaved)
-  target.click()
-  console.log('[dumbify] clicked watch later target:', target)
-  window.setTimeout(() => syncWlState(btn), 600)
-}
-
 function clickNativeWl(btn: HTMLButtonElement) {
-  const target = nativeWlEl()
-  if (target) {
-    clickWlTarget(btn, target)
+  const saveBtn = nativeSaveButtonEl()
+  if (!saveBtn) {
+    console.warn('[dumbify] native save/watch-later button not found; buttons:', topLevelButtonsJson())
     return
   }
-  console.warn('[dumbify] native watch later button not found; buttons:', topLevelButtonsJson())
+  saveBtn.click()
   let tries = 0
   const poll = window.setInterval(() => {
-    const t = nativeWlEl()
-    if (t) {
+    tries++
+    const dialog = findSaveDialog()
+    const row = dialog ? findWatchLaterRow(dialog) : null
+    if (row) {
       window.clearInterval(poll)
-      clickWlTarget(btn, t)
-    } else if (++tries >= 4) {
+      const { checked, target } = watchLaterRowState(row)
+      target.click()
+      setWlUi(btn, !checked)
+      console.log('[dumbify] toggled watch later:', !checked)
+      window.setTimeout(closeSaveDialog, 400)
+    } else if (tries >= 15) {
       window.clearInterval(poll)
+      console.warn('[dumbify] watch-later option not found in save dialog')
+      closeSaveDialog()
     }
-  }, 500)
+  }, 200)
 }
 
 let moveCheck: number | null = null
@@ -447,8 +467,6 @@ function restorePlayer() {
   }
   likeObserver?.disconnect()
   likeObserver = null
-  wlObserver?.disconnect()
-  wlObserver = null
   unbindAspectSync()
   if (onFullscreenChange) {
     document.removeEventListener('fullscreenchange', onFullscreenChange)
@@ -494,8 +512,8 @@ function logLikeDiagnostics() {
   for (const sel of LIKE_SELECTORS) {
     if (document.querySelector(sel)) console.log('[dumbify] like selector ok:', sel)
   }
-  for (const sel of WL_SELECTORS) {
-    if (document.querySelector(sel)) console.log('[dumbify] wl selector ok:', sel)
+  for (const sel of SAVE_BUTTON_SELECTORS) {
+    if (document.querySelector(sel)) console.log('[dumbify] save button selector ok:', sel)
   }
   console.log('[dumbify] top-level buttons:', topLevelButtonsJson())
 }
@@ -888,8 +906,6 @@ function buildWatchPage(nav: NavigationState) {
   wlBtn.textContent = 'Watch later'
   wlBtn.onclick = () => clickNativeWl(wlBtn)
   actions.appendChild(wlBtn)
-  syncWlState(wlBtn)
-  watchWlState(wlBtn)
 
   const commentsBtn = document.createElement('button')
   commentsBtn.className = 'df-watch-action'

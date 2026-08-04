@@ -165,7 +165,8 @@ async function callInnerTube(endpoint: string, body: any): Promise<any> {
       credentials: 'include',
     })
     if (!res.ok) {
-      log(`callInnerTube ${endpoint} HTTP ${res.status}`)
+      const text = await res.text().catch(() => '')
+      log(`callInnerTube ${endpoint} HTTP ${res.status}: ${text.slice(0, 300)}`)
       return null
     }
     return await res.json()
@@ -437,15 +438,21 @@ function vidFromLockup(lockup: any): Video | null {
   const title = extractText(lmv.title?.content)
   if (!title) return null
 
-  const rows = lmv.metadata?.contentMetadataViewModel?.metadataRows
+  const rows = lmv.metadata?.contentMetadataViewModel?.metadataRows ?? []
   let channel = '', views = '', published = ''
 
-  if (Array.isArray(rows)) {
-    if (rows[0]?.metadataParts?.[0]) channel = extractText(rows[0].metadataParts[0].text)
-    if (rows[1]?.metadataParts) {
-      const parts = rows[1].metadataParts
-      if (parts[0]) views = extractText(parts[0].text)
-      if (parts[1]) published = extractText(parts[1].text)
+  if (rows[0]?.metadataParts?.[0]) {
+    const t = extractText(rows[0].metadataParts[0].text)
+    if (t && !/views?|ago\b|premiered|streamed/i.test(t)) channel = t
+  }
+  for (const row of rows) {
+    for (const part of row?.metadataParts ?? []) {
+      const t = extractText(part?.text)
+      if (!t) continue
+      for (const bit of t.split('•').map((s) => s.trim()).filter(Boolean)) {
+        if (!views && /[\d.,]+\s*views?/i.test(bit)) views = bit
+        else if (!published && /ago|premiered|streamed|yesterday|today|\d{1,2}, \d{4}/i.test(bit)) published = bit
+      }
     }
   }
 
@@ -963,21 +970,50 @@ export async function fetchChannelPage(channelId: string): Promise<ChannelPageRe
   log(`=== fetchChannelPage: ${channelId} ===`)
   if (!channelId) return { channel: null, videos: [], continuation: null }
 
-  const data = await callInnerTube('browse', { browseId: channelId })
-  if (!data) return { channel: null, videos: [], continuation: null }
+  const url = `/channel/${channelId}/videos?df=${Date.now()}`
+  let channelFromAPI: Channel | null = null
+  let d: any = null
 
-  log(`browse header keys: ${Object.keys(data?.header ?? {}).join(', ')}`)
-  log(`browse metadata keys: ${Object.keys(data?.metadata ?? {}).join(', ')}`)
-  log(`channelMetadataRenderer keys: ${Object.keys(data?.metadata?.channelMetadataRenderer ?? {}).join(', ')}`)
+  try {
+    const res = await fetch(location.origin + url, {
+      credentials: 'include',
+      headers: { 'Accept': 'text/html' },
+    })
+    if (res.ok) d = parseInitialData(await res.text())
+  } catch {}
 
-  const channel = extractChannelHeader(data)
-  if (channel) {
-    channel.joinedAt = extractJoinedDate(data)
+  if (!d) {
+    const data = await callInnerTube('browse', { browseId: channelId })
+    if (!data) return { channel: null, videos: [], continuation: null }
+    d = data
+    channelFromAPI = extractChannelHeader(d)
+    if (channelFromAPI) channelFromAPI.joinedAt = extractJoinedDate(d)
   }
-  const videos = extractFromData(data)
-  const token = extractContinuationToken(data)
-  log(`fetchChannelPage: "${channel?.name ?? ''}" joined=${channel?.joinedAt ?? ''} ${videos.length} videos, token=${token ? 'yes' : 'no'}`)
-  return { channel, videos, continuation: token }
+
+  if (!channelFromAPI) {
+    channelFromAPI = extractChannelHeader(d)
+    if (channelFromAPI) channelFromAPI.joinedAt = extractJoinedDate(d)
+  }
+  if (!channelFromAPI) {
+    const md = d?.metadata?.channelMetadataRenderer
+    if (md) {
+      channelFromAPI = {
+        id: channelId,
+        name: md.title ?? '',
+        handle: md.vanityChannelUrl ?? '',
+        subscribers: '',
+        videoCount: md.externalId ? '' : '',
+        description: md.shortDescription ?? '',
+        verified: false,
+      }
+    }
+  }
+
+  log(`browse header keys: ${Object.keys(d?.header ?? {}).join(', ')}`)
+  const videos = extractFromData(d)
+  const token = extractContinuationToken(d)
+  log(`fetchChannelPage: "${channelFromAPI?.name ?? ''}" ${videos.length} videos, token=${token ? 'yes' : 'no'}`)
+  return { channel: channelFromAPI, videos, continuation: token }
 }
 
 export async function fetchChannelContinuation(token: string): Promise<{ videos: Video[]; token: string | null }> {

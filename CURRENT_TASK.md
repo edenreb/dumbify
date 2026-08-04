@@ -1,128 +1,168 @@
-# Current Active Tasks
+# Current Tasks
 
-Only work on tasks listed here.
+Five active tasks, listed in no particular priority order. Pick one, work it to completion,
+then move it into the Completed Tasks section of TODO.md per AGENTS.MD.
 
-Complete tasks from highest priority downward.
+## Rules for every task below
 
----
-
-# 🔴 Priority 1 - Search Function
-
-Status: In Progress
-
-Tasks:
-
-- Currently I can use ctrl + k in order to bring up a search menu but it does not look good.
-- Implement a search bar on the top for users to search relevant content and a search button so that they can actually search it
-- Change the page to the search results page and display the relevant content which they searched for. 
-
-Progress notes:
-
-- Added a search bar + search button to the top of the main content area (shell.ts), replacing the old Ctrl+K `prompt()`.
-- Ctrl+K now focuses/selects the search input instead of opening the prompt.
-- Submitting the search navigates to `/results?search_query=...`.
-- `fetchSearchResults(query)` added to DataExtractor.ts: fetches the results page HTML, parses `ytInitialData`, extracts videoRenderer/lockup videos, and pulls the continuation token.
-- Search route now loads real results in home-feed.ts (initial load via `fetchSearchResults`, scroll-pagination via `fetchContinuation` with `searchQuery`).
-- Search page head shows "Results for "..." " when a query is present.
-- **Channel results:** `fetchSearchResults` now also parses `channelRenderer` items; a featured channel banner (name, verified mark, subscribers, video count, description, "View channel" CTA) renders at the top of search results when a channel matches.
-- **Channel pages:** added `fetchChannelPage(channelId)` (via InnerTube browse API) + `fetchChannelContinuation`; the `channel` route now renders a zen-viewer-style channel page — head (name, description, Verified/Subscribed badge), 3-stat strip (Subscribers / Videos / Avg. length), and the channel's videos with scroll pagination. Navigate to `/channel/<channelId>`.
-- **Search item list (2nd iteration):** added `SearchItem` union (`video | channel`), `extractSearchItems` preserves the interleaved order of video + channel results from search, and `PageResult.items`. Search results now render inline channel cards throughout the list (compact card, skips the featured banner channel), so related channels appear alongside videos. Banner moved to the top of the page (inserted before the list). Continuation loads render `items` too.
-- **Channel page tabs:** the channel page now has Latest / Popular / About tabs. Latest shows videos in order, Popular re-sorts by view count, About shows description, handle link, and stats. About replaces the list (list hidden).
-- **Search ordering (3rd iteration):** all relevant channel cards now render grouped at the top of the results list (featured banner + remaining channel cards), with videos loading after them.
-- **Channel page (4th iteration, matching screenshot):** channel page renders: eyebrow "Channel · handle", big serif title (52px/64px via `.df-channel-page-title`), description note, "Subscribed"/"Verified" badge on right. Below: 3-column stats strip (Subscribers / Videos / Avg. Length) with border-top/bottom. Below that: toolbar with Videos (active)/Popular/Playlists/About tabs. Below that: video list. Popular tab re-sorts by views; About tab shows description and channel link.
-- **Channel navigation (4th iteration):** clicking a channel banner/card uses `window.location.href = '/channel/<id>'` (full URL navigation, same pattern as video cards). This properly routes to the channel page URL.
-- Status: code complete, typecheck + build pass. Manual Chrome testing still needed (load `dist` unpacked).
+- **Branch first.** Each task gets its own branch off the latest `main`
+  (`git fetch origin && git checkout main && git pull && git checkout -b <branch>`).
+  Never work on `main`, and never mix two of these tasks in one branch.
+- `npm run build` and `npx tsc --noEmit` must both pass before committing.
+- Explain what changed / where / why before committing (AGENTS.MD pre-commit rule).
+- Manual test in Chrome (`chrome://extensions` → Load unpacked → `dist`), no console errors,
+  no broken UI, existing features still work.
+- Push the branch, open a PR, merge only after the change is confirmed working.
 
 ---
 
-# 🔴 Priority 2 - Navigation System
+## 1. Comment interactions: like, view replies, reply
 
-Status: In Progress
+**Branch:** `feature/comment-interactions`
 
-Tasks:
+Comments currently render read-only. Implement the three missing interactions.
 
-- Fix page navigation state issues.
-- Ensure pages properly reload their own content.
-- Ensure video components unmount correctly.
+Where things stand:
+- `CommentItem` in [DataExtractor.ts:1277](src/core/DataExtractor.ts:1277) is only
+  `{ author, time, text, likes }` — it carries no comment id, no like/reply params,
+  and no reply continuation token.
+- Threads are found via `findCommentThreads` / `findCommentViewModels` /
+  `findCommentMutations` ([DataExtractor.ts:1284](src/core/DataExtractor.ts:1284) onward);
+  reply data lives on the thread's `replies.commentRepliesRenderer` continuation, and
+  like/reply endpoints live on the comment's toolbar / view-model surface keys.
+- Comment posting already works via `postCommentAPI` →
+  `comment/create_comment` with the SAPISID auth header, so the auth pattern to copy exists.
+- Rendering is in [watch-page.ts](src/features/watch-page.ts) (`.df-comment-list`,
+  `renderComments`, `postComment` / `postCommentViaApi`).
 
-Progress notes:
+Work to do:
+1. Extend `CommentItem` with the ids/params needed: comment id or key, like params,
+   reply-create params, reply count, and the replies continuation token.
+   Log the relevant subtree before writing the parser (CLAUDE.md gotcha).
+2. **Like a comment** — new `DataExtractor` call against `comment/perform_comment_action`
+   with the like params, using the same SAPISID auth as `postCommentAPI`.
+   Toggle state must reflect the real server response, not just optimistic UI.
+3. **View replies** — a "N replies" toggle under a comment that fetches the replies
+   continuation through `callInnerTube('next', { continuation })` (same mechanism as
+   `fetchMoreComments`) and renders them indented under the parent.
+4. **Reply to a comment** — inline reply box on each thread, posting via
+   `comment/create_comment` with the reply params, then appending the new reply locally.
 
-- **Navigation links (1st iteration):** `navigateTo(path)` in PageManager.ts no longer just fires feature callbacks with a fabricated state — it now performs a real full-page navigation via `window.location.href = href` (and no-ops if already on that URL). Sidebar buttons, the brand/logo, and the search submit all go through `navigateTo`, so clicking them now updates the browser URL and reloads the page to the correct link. This matches the existing full-page navigation pattern already used by video cards and channel cards/links. Active link highlighting still works because shell re-reads the route on the fresh page load.
-- Status: code complete, typecheck + build pass. Manual Chrome testing still needed (load `dist` unpacked).
-
----
-
-# 🔴 Priority 3 - Watch Later
-
-Status: Pending
-
-Tasks:
-
-- Make Watch Later button add videos correctly.
-- Save Watch Later data.
-- Allow removing saved videos.
-
----
-
-# 🟠 Priority 4 - History
-
-Status: Pending
-
-Tasks:
-
-- Fix History only showing Shorts.
-- Add normal videos to History.
-- Verify watched videos are recorded.
-
----
-
-# 🟠 Priority 5 - Comments
-
-Status: Pending
-
-Tasks:
-
-- Add toggleable comment section.
-- Allow users to write comments.
-- Display submitted comments.
+Acceptance:
+- Liking a comment updates the count and survives a page reload.
+- Threads with replies expand and show them; threads without replies show no toggle.
+- A posted reply appears under the correct parent and is visible on real YouTube after reload.
+- Signed-out state degrades gracefully (no crash, clear message).
 
 ---
 
-# 🟠 Priority 6 - Channel Pages
+## 2. Channel name on the watch page should link to the channel
 
-Status: Pending
+**Branch:** `fix/watch-page-channel-link`
 
-Tasks:
+In [watch-page.ts:858](src/features/watch-page.ts:858) the channel name renders as a plain
+`<span class="df-watch-channel">` with no navigation.
 
-- Create individual channel pages.
-- Display channel information.
-- Display videos uploaded by the channel.
+Work to do:
+- Render it as a link (or keep the span but attach a click handler) that navigates to the
+  channel page using `navigateTo` from `PageManager` — full page load, matching the
+  extension's navigation convention.
+- `Video.channelId` already exists in [types.ts](src/types.ts); verify it is actually
+  populated on the watch route. If the watch-page extraction doesn't fill `channelId`,
+  extract it (owner / `videoOwnerRenderer` / `videoSecondaryInfoRenderer`) so the link
+  targets `/channel/<UC…>`. Prefer the canonical `/channel/<id>` URL over a handle.
+- Style it so it reads as clickable (hover state in [main.css](src/styles/main.css)).
 
----
-
-# 🟠 Priority 7 - Video Information
-
-Tasks:
-
-- Fix video descriptions.
-- Implement Share functionality.
-
----
-
-# 🟢 Priority 8 - Extension Settings
-
-Tasks:
-
-- Review extension settings.
-- Remove unnecessary settings.
-- Verify remaining settings work.
+Acceptance:
+- Clicking the channel name on a watch page opens that channel's Dumbify channel page.
+- No dead link when `channelId` is missing — fall back to plain text rather than a broken href.
 
 ---
 
-# 🟢 Priority 9 - Custom Theme
+## 3. Remove the "Your Videos" and "Channel" sidebar tabs
 
-Tasks:
+**Branch:** `fix/remove-unused-sidebar-tabs`
 
-- Allow users to choose custom backgrounds.
-- Save theme preferences.
-- Apply themes consistently.
+Both entries in the `NAV` array at [shell.ts:37](src/features/shell.ts:37) point at pages the
+extension does not render (`/feed/videos`, `/feed/channels`), and both are mislabeled with
+`route: 'playlist'` / `route: 'channel'`, which also breaks active-link highlighting.
+
+Work to do:
+- Delete both `NAV` entries.
+- Remove anything left dangling by the deletion (unused route mapping, unused styles).
+- Confirm the remaining tabs still highlight correctly via `updateActiveLink`.
+
+Acceptance:
+- Sidebar shows only: Home, Subscriptions, History, Watch Later, Liked, Playlists.
+- No dead nav entries, no console errors, active-tab highlight still correct.
+
+---
+
+## 4. Home feed item layout: title, then channel / views / release date
+
+**Branch:** `fix/home-feed-meta-order`
+
+Target layout for every feed item:
+
+```
+VIDEO TITLE
+Channel Name / Views / Release Date
+```
+
+Current state in `renderVideo` ([home-feed.ts:303](src/features/home-feed.ts:303)):
+- Title renders first — correct.
+- The meta row appends the channel, then takes one of two paths:
+  - if `v.meta` is set (the lockup extraction path packs channel/views/date into one
+    pre-joined string), it prints that blob instead of the individual fields;
+  - otherwise it prints `views` then `published`, but a `dateFirst` flag reverses them.
+- Result: order is inconsistent across routes, and views are sometimes missing entirely.
+
+Work to do:
+- Make the order deterministic: channel → views → release date, separated by ` / `.
+- Stop relying on the pre-joined `v.meta` blob for the feed row. In the lockup path
+  ([DataExtractor.ts:531](src/core/DataExtractor.ts:531) onward), populate `views` and
+  `published` as separate fields so `renderVideo` can order them itself.
+- Remove or repurpose the `dateFirst` reversal so it can't flip the requested order.
+- Missing fields collapse cleanly — no leading, trailing, or doubled ` / ` separators.
+
+Acceptance:
+- Home, search results, subscriptions, history, and channel feeds all show
+  `Channel / Views / Release Date` in that order.
+- Views are present wherever YouTube supplies them (verify against the real page).
+
+---
+
+## 5. Fix the Liked tab and the Playlists tab
+
+**Branch:** `fix/liked-and-playlists-tabs`
+
+Both sidebar tabs are broken today:
+
+- **Liked** (`/playlist?list=LL`) resolves to route `playlist` in
+  [PageManager.ts:14](src/core/PageManager.ts:14), but the page renders with the generic
+  "Playlist" header and the liked videos do not come through reliably.
+- **Playlists** (`/feed/playlists`) matches nothing in `getRoute`
+  ([PageManager.ts:8](src/core/PageManager.ts:8)) and falls through to `'home'`, so it renders
+  the home feed under the "Today's reading list" header. There is also a stubbed
+  playlists tab on the channel page ([home-feed.ts:474](src/features/home-feed.ts:474)) that
+  hardcodes "No playlists to display".
+
+Work to do:
+- Add real route handling for `/feed/playlists` (and give Liked its own identity rather than
+  the generic playlist header). Update `Route` in [types.ts](src/types.ts), `getRoute`,
+  `getFeatureIdsForRoute` in [content.ts](src/content.ts), and the `NAV` route labels in
+  [shell.ts](src/features/shell.ts) so active-link highlighting matches.
+- Extract liked videos from the `LL` playlist page data
+  (`playlistVideoListRenderer` / `playlistVideoRenderer` are already handled in
+  `collectItemVideos`, [DataExtractor.ts:638](src/core/DataExtractor.ts:638)) — confirm
+  continuation/paging works there too.
+- Extract the user's playlist collection for `/feed/playlists` and render it as a list of
+  playlists that navigate to `/playlist?list=<id>`.
+- Replace the hardcoded empty state on the channel Playlists tab with the real data
+  (or drop that tab if the data isn't available).
+
+Acceptance:
+- Liked shows the signed-in user's liked videos, with a Liked-specific page header,
+  and paging works.
+- Playlists shows the user's playlists; clicking one opens that playlist's video list.
+- Neither tab silently renders the home feed.
