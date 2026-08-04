@@ -1,8 +1,8 @@
 import type { NavigationState, Video, Channel, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
-import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, diag } from '../core/DataExtractor'
-import type { SearchItem } from '../core/DataExtractor'
+import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, setChannelSubscription, diag } from '../core/DataExtractor'
+import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
 
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
   home: {
@@ -158,140 +158,100 @@ function renderChannelBanner(ch: Channel, before?: HTMLElement) {
   else content!.appendChild(banner)
 }
 
-// Dumbify overlays the real YouTube page rather than replacing it, so the
-// native Subscribe control is still live in the document underneath our UI.
-// Clicking it directly (like the watch page does for Like/Watch Later) is
-// far more reliable than reconstructing InnerTube subscribe params from
-// fetched channel JSON, which YouTube's button/endpoint shapes break often.
-// NOTE: '#subscribe-button' looks like an obvious selector but is a trap - YouTube
-// reuses that id on an unrelated empty placeholder <div> inside shelf renderers
-// (e.g. "featured channels" recommendation cards), so it matches before the real
-// button and silently no-ops on click. Confirmed live; do not add it back.
-const SUBSCRIBE_SELECTORS = [
-  'ytd-subscribe-button-renderer button',
-  'ytd-subscribe-button-renderer',
-  'yt-page-header-view-model yt-flexible-actions-view-model button[aria-label^="Subscribe" i]',
-  'yt-page-header-view-model yt-flexible-actions-view-model button[aria-label^="Unsubscribe" i]',
-  'yt-flexible-actions-view-model button[aria-label^="Subscribe" i]',
-  'yt-flexible-actions-view-model button[aria-label^="Unsubscribe" i]',
-  'button[aria-label^="Subscribe" i]',
-  'button[aria-label^="Unsubscribe" i]',
-]
-
-let subObserver: MutationObserver | null = null
-
-function nativeSubscribeEl(): HTMLElement | null {
-  for (const sel of SUBSCRIBE_SELECTORS) {
-    const el = document.querySelector<HTMLElement>(sel)
-    if (el) return el
-  }
-  return null
-}
-
-function nativeSubscribedState(el: HTMLElement): boolean {
-  const btn = el.querySelector<HTMLElement>('button[aria-label], button[aria-pressed]') ?? el
-  if (btn.getAttribute('aria-pressed') === 'true') return true
-  const label = (btn.getAttribute('aria-label') ?? '').trim()
-  if (/^unsubscribe/i.test(label)) return true
-  // Check "subscribed" (the already-subscribed label) before the plain "subscribe"
-  // test below - "Subscribed to X" starts with "Subscribe" too, and the negative
-  // lookahead there only excludes "Subscribe to X", not "Subscribed", so testing
-  // in the other order misclassified an already-subscribed button as not subscribed.
-  if (/^subscribed\b/i.test(label)) return true
-  if (/^subscribe(?! to)/i.test(label)) return false
-  return /^subscribed$/i.test((btn.textContent ?? '').trim())
-}
-
+// Clicking the real native subscribe control (directly, or via a fully-simulated
+// pointerdown/pointerup/click sequence) reliably opens YouTube's own UI but never
+// actually performs the subscribe/unsubscribe mutation - confirmed independently
+// against real youtube.com in a separate, un-extended browser. That combination (a
+// synthetic gesture can open menus, but not trigger the account mutation) points at
+// something no amount of event simulation can satisfy: the browser's native
+// user-activation state, which only real hardware input can set and which
+// dispatchEvent()/.click() never do. So instead of clicking anything, call the same
+// InnerTube endpoint the native button calls directly - the same authenticated-POST
+// technique already used elsewhere in this codebase for posting comments - using
+// subscribeEndpoint/unsubscribeEndpoint params extracted from the channel page's own
+// data (DataExtractor.extractSubscriptionInfo). This is how Dumbify's subscribe
+// feature originally worked before being replaced with DOM-clicking; that replacement
+// was because param extraction was unreliable, not because the API call failed, so the
+// path forward is fixing extraction (already done - see extractSubscriptionInfo's
+// comment) rather than continuing to chase click simulation.
 function setSubUi(btn: HTMLButtonElement, subscribed: boolean) {
   btn.classList.toggle('df-sub-btn--on', subscribed)
   btn.textContent = subscribed ? 'Unsubscribe' : 'Subscribe'
 }
 
-function syncSubState(btn: HTMLButtonElement) {
-  const el = nativeSubscribeEl()
-  if (el) setSubUi(btn, nativeSubscribedState(el))
+interface SubUiState {
+  subscribed: boolean
+  subParams: string
+  unsubParams: string
 }
 
-function watchSubState(btn: HTMLButtonElement) {
-  subObserver?.disconnect()
-  const target = nativeSubscribeEl()
-  if (target) {
-    subObserver = new MutationObserver(() => syncSubState(btn))
-    subObserver.observe(target.closest('yt-flexible-actions-view-model, ytd-subscribe-button-renderer') ?? target, {
-      attributes: true,
-      subtree: true,
-      childList: true,
-      attributeFilter: ['aria-label', 'aria-pressed', 'class'],
-    })
-    syncSubState(btn)
-    return
-  }
-  const wait = new MutationObserver(() => {
-    if (!nativeSubscribeEl()) return
-    wait.disconnect()
-    watchSubState(btn)
-  })
-  wait.observe(document.body, { childList: true, subtree: true })
-}
+// The channel JSON's subscribeState.subscribed flags aren't reliable live-state
+// signals (see DataExtractor.extractSubscriptionInfo's comment - confirmed live that
+// both button-content variants carry the same state key but disagree on the boolean,
+// meaning they're static per-variant template defaults). The one place that DOES
+// reflect real current state is the actual rendered header control: it wraps a
+// <yt-subscribe-button-view-model> only when subscribed (confirmed live), and a bare
+// button with aria-label "Subscribe" when not. This is read-only - never clicked - so
+// none of the user-activation concerns that sank the click-based approach apply here.
+const SUBSCRIBED_HEADER_SELECTOR = [
+  'yt-page-header-view-model yt-subscribe-button-view-model',
+  'ytd-c4-tabbed-header-renderer yt-subscribe-button-view-model',
+  '#channel-header yt-subscribe-button-view-model',
+].join(', ')
 
-// Clicking the native "Subscribed" pill does NOT open a confirm dialog - it opens a
-// notification-preference dropdown menu (All / Personalized / None / Unsubscribe).
-// Dumbify's root UI overlays the whole page at the max z-index (see main.css), so
-// that dropdown renders behind our overlay - invisible and unclickable to the user.
-// Same fix as the Watch Later "Save to playlist" dialog above: find the real
-// "Unsubscribe" menu item ourselves and click it rather than leaving it for the user.
-function findUnsubscribeMenuItem(): HTMLElement | null {
-  const candidates = document.querySelectorAll<HTMLElement>('*')
-  for (const el of candidates) {
-    if (el.closest('#dumbify-root')) continue
-    const ownText = [...el.childNodes]
-      .filter((n) => n.nodeType === Node.TEXT_NODE)
-      .map((n) => n.textContent?.trim())
-      .filter(Boolean)
-      .join(' ')
-    if (ownText && /^unsubscribe$/i.test(ownText)) {
-      return (
-        el.closest<HTMLElement>(
-          'tp-yt-paper-item, ytd-menu-service-item-renderer, yt-list-item-view-model, [role="menuitemradio"], [role="menuitem"], li'
-        ) ?? el.parentElement ?? el
-      )
-    }
-  }
+const UNSUBSCRIBED_HEADER_SELECTOR = [
+  'yt-page-header-view-model button[aria-label^="Subscribe" i]',
+  'ytd-c4-tabbed-header-renderer button[aria-label^="Subscribe" i]',
+  '#channel-header button[aria-label^="Subscribe" i]',
+].join(', ')
+
+function detectRealSubscribedState(): boolean | null {
+  if (document.querySelector(SUBSCRIBED_HEADER_SELECTOR)) return true
+  if (document.querySelector(UNSUBSCRIBED_HEADER_SELECTOR)) return false
   return null
 }
 
-function clickNativeSubscribe(btn: HTMLButtonElement) {
-  const el = nativeSubscribeEl()
-  if (!el) {
-    console.warn('[dumbify] native subscribe button not found')
+// Polls briefly for the real header to render (it's the underlying YouTube page,
+// which loads independently of Dumbify's own fetch), then applies whichever state it
+// finds. Never clicks anything - purely a one-time read to correct the initial label.
+function applyRealSubscribedState(btn: HTMLButtonElement, state: SubUiState) {
+  let tries = 0
+  const poll = window.setInterval(() => {
+    tries++
+    const real = detectRealSubscribedState()
+    if (real !== null) {
+      window.clearInterval(poll)
+      state.subscribed = real
+      setSubUi(btn, real)
+    } else if (tries >= 15) {
+      window.clearInterval(poll)
+      console.warn('[dumbify] could not detect real subscribed state from header; leaving initial guess')
+    }
+  }, 200)
+}
+
+async function handleSubscribeClick(btn: HTMLButtonElement, channelId: string, state: SubUiState) {
+  const wantSubscribe = !state.subscribed
+  const params = wantSubscribe ? state.subParams : state.unsubParams
+  if (!params) {
+    console.warn(
+      `[dumbify] no ${wantSubscribe ? 'subscribe' : 'unsubscribe'} params extracted for channel ${channelId}; cannot ${wantSubscribe ? 'subscribe' : 'unsubscribe'} (not signed in, or YouTube's data shape changed)`
+    )
+    const original = btn.textContent
+    btn.textContent = 'Sign in to subscribe'
+    window.setTimeout(() => { btn.textContent = original }, 1500)
     return
   }
-  const target = el.tagName === 'BUTTON' ? el : (el.querySelector<HTMLElement>('button') ?? el)
-  const wasSubscribed = nativeSubscribedState(el)
-  target.click()
-  console.log('[dumbify] clicked subscribe target:', target)
-
-  if (wasSubscribed) {
-    let tries = 0
-    const poll = window.setInterval(() => {
-      tries++
-      const menuItem = findUnsubscribeMenuItem()
-      if (menuItem) {
-        window.clearInterval(poll)
-        menuItem.click()
-        setSubUi(btn, false)
-        window.setTimeout(() => syncSubState(btn), 600)
-      } else if (tries >= 15) {
-        window.clearInterval(poll)
-        console.warn('[dumbify] unsubscribe menu item not found')
-        syncSubState(btn)
-      }
-    }, 200)
-    return
+  btn.disabled = true
+  setSubUi(btn, wantSubscribe)
+  const ok = await setChannelSubscription(channelId, wantSubscribe, params)
+  btn.disabled = false
+  if (ok) {
+    state.subscribed = wantSubscribe
+  } else {
+    console.warn(`[dumbify] ${wantSubscribe ? 'subscribe' : 'unsubscribe'} request failed for channel ${channelId}`)
+    setSubUi(btn, state.subscribed)
   }
-
-  setSubUi(btn, true)
-  window.setTimeout(() => syncSubState(btn), 600)
 }
 
 function renderChannelHead(ch: Channel, before?: HTMLElement) {
@@ -326,10 +286,15 @@ function renderChannelHead(ch: Channel, before?: HTMLElement) {
   if (ch.id) {
     const subBtn = document.createElement('button')
     subBtn.className = 'df-sub-btn'
-    subBtn.textContent = 'Subscribe'
-    subBtn.onclick = () => clickNativeSubscribe(subBtn)
+    const subState: SubUiState = {
+      subscribed: ch.subscribed === true,
+      subParams: ch.subParams ?? '',
+      unsubParams: ch.unsubParams ?? '',
+    }
+    setSubUi(subBtn, subState.subscribed)
+    subBtn.onclick = () => handleSubscribeClick(subBtn, ch.id, subState)
     aside.appendChild(subBtn)
-    watchSubState(subBtn)
+    applyRealSubscribedState(subBtn, subState)
   }
 
   head.appendChild(aside)
@@ -487,6 +452,38 @@ function renderVideo(v: Video): HTMLElement {
   return article
 }
 
+function renderPlaylistRow(p: PlaylistItem): HTMLElement {
+  const article = document.createElement('a')
+  article.className = 'df-item-row'
+  article.href = p.url
+  article.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.location.href = p.url }
+  article.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); window.location.href = p.url } }
+
+  const number = document.createElement('span')
+  number.className = 'df-item-number'
+  article.appendChild(number)
+
+  const body = document.createElement('span')
+  body.className = 'min-w-0'
+
+  const title = document.createElement('span')
+  title.className = 'df-item-title'
+  title.textContent = p.title
+  body.appendChild(title)
+
+  if (p.videoCount) {
+    const meta = document.createElement('div')
+    meta.className = 'df-item-meta'
+    const count = document.createElement('span')
+    count.textContent = p.videoCount
+    meta.appendChild(count)
+    body.appendChild(meta)
+  }
+
+  article.appendChild(body)
+  return article
+}
+
 function updateItemNumbers() {
   const items = content!.querySelectorAll('.df-item-row')
   items.forEach((item, i) => {
@@ -525,13 +522,20 @@ export const homeFeedFeature: Feature = {
     let initialLoadDone = false
     const videoIds = new Set<string>()
     const channelIds = new Set<string>()
+    // Separate from videoIds, which rerenderChannelList() clears on every tab switch -
+    // this one must stay stable so scroll-loaded videos aren't re-added to channelVideos twice.
+    const channelVideoIds = new Set<string>()
     let featuredChannelId: string | null = null
     let channelVideos: Video[] = []
     let aboutEl: HTMLElement | null = null
     let tabsEl: HTMLElement | null = null
+    let currentTab = 'videos'
+    let playlists: PlaylistItem[] | null = null
+    let playlistsLoading = false
 
     const onScroll = () => {
       if (loadingMore || !initialLoadDone) return
+      if (currentTab === 'about' || currentTab === 'playlists') return
       if (root!.scrollHeight - root!.scrollTop - root!.clientHeight < 600) {
         loadMore()
       }
@@ -542,6 +546,11 @@ export const homeFeedFeature: Feature = {
       if (list.querySelector('.df-loading, .df-empty')) list.innerHTML = ''
       const newVids = videos.filter((v) => !videoIds.has(v.id))
       newVids.forEach((v) => { videoIds.add(v.id); list.appendChild(renderVideo(v)) })
+      if (nav.route === 'channel') {
+        const newForChannel = videos.filter((v) => !channelVideoIds.has(v.id))
+        newForChannel.forEach((v) => channelVideoIds.add(v.id))
+        channelVideos = channelVideos.concat(newForChannel)
+      }
       updateItemNumbers()
     }
 
@@ -576,7 +585,45 @@ export const homeFeedFeature: Feature = {
       updateItemNumbers()
     }
 
+    function renderPlaylists(items: PlaylistItem[]) {
+      if (feedCancelled) return
+      list.innerHTML = ''
+      if (!items.length) {
+        const e = document.createElement('div')
+        e.className = 'df-empty'
+        e.textContent = 'No playlists to display'
+        list.appendChild(e)
+        return
+      }
+      items.forEach((p) => list.appendChild(renderPlaylistRow(p)))
+      updateItemNumbers()
+    }
+
+    function loadPlaylists() {
+      if (playlists) { renderPlaylists(playlists); return }
+      if (playlistsLoading) return
+      playlistsLoading = true
+      list.innerHTML = ''
+      const loadingEl = document.createElement('div')
+      loadingEl.className = 'df-loading'
+      loadingEl.textContent = 'Loading...'
+      list.appendChild(loadingEl)
+      fetchChannelPlaylists(nav.channelId ?? '')
+        .then((result) => {
+          playlistsLoading = false
+          if (feedCancelled || currentTab !== 'playlists') return
+          playlists = result
+          renderPlaylists(result)
+        })
+        .catch(() => {
+          playlistsLoading = false
+          if (feedCancelled || currentTab !== 'playlists') return
+          renderPlaylists([])
+        })
+    }
+
     function setTab(tab: string) {
+      currentTab = tab
       if (tabsEl) {
         const spans = tabsEl.querySelectorAll('.df-toolbar-item')
         spans.forEach((s, i) => s.classList.toggle('df-active', i === (tab === 'videos' ? 0 : tab === 'popular' ? 1 : tab === 'playlists' ? 2 : 3)))
@@ -585,7 +632,7 @@ export const homeFeedFeature: Feature = {
       if (list) list.style.display = tab === 'about' ? 'none' : ''
       if (tab === 'popular') rerenderChannelList([...channelVideos].sort((a, b) => parseViews(b.views) - parseViews(a.views)))
       if (tab === 'videos') rerenderChannelList(channelVideos)
-      if (tab === 'playlists') { list.innerHTML = ''; const e = document.createElement('div'); e.className = 'df-empty'; e.textContent = 'No playlists to display'; list.appendChild(e) }
+      if (tab === 'playlists') loadPlaylists()
     }
 
     function renderChannelTabs(before: HTMLElement) {
@@ -692,7 +739,6 @@ export const homeFeedFeature: Feature = {
         renderChannelStats(channel, result.videos, list)
         renderChannelTabs(list)
         renderChannelAbout(channel, list)
-        channelVideos = result.videos
         videos = result.videos
         continuationToken = result.continuation
       } else {
@@ -723,8 +769,6 @@ export const homeFeedFeature: Feature = {
     const h = (root as any).__dfScrollHandler
     if (h) root!.removeEventListener('scroll', h)
     delete (root as any).__dfScrollHandler
-    subObserver?.disconnect()
-    subObserver = null
     content!.innerHTML = ''
   },
 

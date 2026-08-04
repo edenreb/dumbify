@@ -275,6 +275,7 @@ function extractChannelHeader(data: any): Channel | null {
   // Try c4TabbedHeaderRenderer (legacy)
   const h = data?.header?.c4TabbedHeaderRenderer
   if (h?.channelId) {
+    const sub = extractSubscriptionInfo(data, h.channelId) ?? undefined
     return {
       id: h.channelId,
       name: extractText(h.title) || (meta?.title ?? ''),
@@ -283,6 +284,9 @@ function extractChannelHeader(data: any): Channel | null {
       videoCount: extractText(h.videosCountText),
       description: meta?.description ?? '',
       verified: !!h?.badges?.some((b: any) => b?.metadataBadgeRenderer?.tooltip === 'Verified'),
+      subscribed: sub?.subscribed,
+      subParams: sub?.subParams,
+      unsubParams: sub?.unsubParams,
     }
   }
 
@@ -290,7 +294,14 @@ function extractChannelHeader(data: any): Channel | null {
   const ph = data?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel
   if (ph) {
     const rows = ph?.metadata?.contentMetadataViewModel?.metadataRows ?? []
-    let channelId = meta?.channelId || ''
+    // channelMetadataRenderer's real UC-id field is `externalId`, not `channelId` (that
+    // field doesn't exist on it) - confirmed live: with meta?.channelId always undefined,
+    // this always fell through to the metadataRows scan below, which is order-dependent
+    // and can grab a "@handle" text part before it ever reaches the "UC..." part on the
+    // same row set, locking in the handle as the "channel id" used for the subscribe API
+    // call (which then fails, since InnerTube needs the real UC id, not a handle).
+    let channelId = meta?.externalId || ''
+    let handleFromRow = ''
     let subs = ''
     let vids = ''
     for (const row of rows) {
@@ -298,12 +309,16 @@ function extractChannelHeader(data: any): Channel | null {
         const t = part?.text?.content ?? ''
         if (!t) continue
         if (!channelId && t.startsWith('UC')) channelId = t
-        else if (!channelId && t.startsWith('@')) channelId = t
+        else if (!handleFromRow && t.startsWith('@')) handleFromRow = t
         else if (/subscriber/i.test(t)) subs = t
         else if (/video/i.test(t)) vids = t
       }
     }
+    // A real UC id always wins if found anywhere in the rows, even if scanned after the
+    // handle; the handle is only used as an absolute last resort, never a channel id.
+    if (!channelId) channelId = handleFromRow
     if (channelId) {
+      const sub = extractSubscriptionInfo(data, channelId) ?? undefined
       return {
         id: channelId,
         name: extractText(ph.title) || meta?.title || '',
@@ -312,24 +327,144 @@ function extractChannelHeader(data: any): Channel | null {
         videoCount: vids,
         description: meta?.description ?? '',
         verified: false,
+        subscribed: sub?.subscribed,
+        subParams: sub?.subParams,
+        unsubParams: sub?.unsubParams,
       }
     }
   }
 
   // Try metadata only
-  if (meta?.channelId) {
+  if (meta?.externalId) {
+    const sub = extractSubscriptionInfo(data, meta.externalId) ?? undefined
     return {
-      id: meta.channelId,
+      id: meta.externalId,
       name: meta.title ?? '',
       handle: meta.vanityChannelUrl ?? '',
       subscribers: meta.subscriberCountText ?? '',
       videoCount: meta.videosCountText ?? '',
       description: meta.description ?? '',
       verified: false,
+      subscribed: sub?.subscribed,
+      subParams: sub?.subParams,
+      unsubParams: sub?.unsubParams,
     }
   }
 
   return null
+}
+
+interface SubscriptionInfo {
+  subscribed: boolean
+  subParams: string
+  unsubParams: string
+  channelIds: string[]
+}
+
+// Confirmed live (2026-08-04) against a real, current channel header's ytInitialData:
+// the not-yet-subscribed state is a `buttonViewModel` with a single-level-nested
+// `onTap.innertubeCommand.subscribeEndpoint` (not double-nested) - matches the
+// buttonViewModel branch below. The subscribeButtonViewModel/subscribeButtonRenderer
+// branches (already-subscribed state, and the legacy renderer) were not independently
+// re-verified this round (no signed-in/subscribed test session available), but match
+// what was previously verified live before this code was extracted - see CLAUDE.md's
+// documented subscribeButtonContent.subscribeState.subscribed / onTapCommand shape.
+function extractSubscriptionInfo(data: any, channelId: string): SubscriptionInfo | null {
+  const found: SubscriptionInfo[] = []
+  const walk = (o: any, depth = 0): void => {
+    if (depth > 20 || typeof o !== 'object' || o === null) return
+    if (Array.isArray(o)) {
+      for (const item of o) walk(item, depth + 1)
+      return
+    }
+    let info: SubscriptionInfo | null = null
+    const btn = o.subscribeButtonRenderer
+    if (btn) {
+      const subEp = btn.onSubscribeEndpoints?.[0]?.subscribeEndpoint ?? btn.subscribeEndpoint
+      const unsubEp =
+        btn.onUnsubscribeEndpoints?.[0]?.signalServiceEndpoint?.actions?.[0]?.unsubscribeEndpoint ??
+        btn.onUnsubscribeEndpoints?.[0]?.unsubscribeEndpoint ??
+        btn.unsubscribeEndpoint
+      if (subEp?.params || unsubEp?.params) {
+        info = {
+          subscribed: btn.subscribed === true,
+          subParams: subEp?.params ?? '',
+          unsubParams: unsubEp?.params ?? '',
+          channelIds: subEp?.channelIds ?? unsubEp?.channelIds ?? [],
+        }
+      }
+    }
+    const vm = o.subscribeButtonViewModel
+    if (vm && !info) {
+      const subContent = vm.subscribeButtonContent
+      const unsubContent = vm.unsubscribeButtonContent
+      const subEp = subContent?.onTapCommand?.innertubeCommand?.subscribeEndpoint
+      // Confirmed live (2026-08-04) against a real, currently-subscribed channel:
+      // unsubscribing shows a confirm dialog, so unsubscribeEndpoint is NOT a direct
+      // sibling of unsubscribeButtonContent.onTapCommand.innertubeCommand (that path
+      // doesn't exist) - it's nested inside that command's signalServiceEndpoint's
+      // openPopupAction confirm dialog, on the dialog's own confirm button:
+      // unsubContent.onTapCommand.innertubeCommand.signalServiceEndpoint.actions[0]
+      //   .openPopupAction.popup.confirmDialogRenderer.confirmButton.buttonRenderer
+      //   .serviceEndpoint.unsubscribeEndpoint
+      const unsubEp =
+        unsubContent?.onTapCommand?.innertubeCommand?.unsubscribeEndpoint ??
+        unsubContent?.onTapCommand?.innertubeCommand?.signalServiceEndpoint?.actions?.[0]?.openPopupAction?.popup
+          ?.confirmDialogRenderer?.confirmButton?.buttonRenderer?.serviceEndpoint?.unsubscribeEndpoint
+      if (subEp || unsubEp) {
+        // subscribeButtonContent/unsubscribeButtonContent's subscribeState.subscribed
+        // booleans are NOT reliable live-state signals - confirmed live: both variants
+        // shared the identical subscribeState.key while disagreeing on the "subscribed"
+        // value (false vs true) for an account actually subscribed, meaning these are
+        // static per-variant template defaults, not the resolved current state. Leave
+        // `subscribed` false here; the caller falls back to reading the real DOM once
+        // to determine the actual current state instead.
+        info = {
+          subscribed: false,
+          subParams: subEp?.params ?? '',
+          unsubParams: unsubEp?.params ?? '',
+          channelIds: subEp?.channelIds ?? unsubEp?.channelIds ?? [],
+        }
+      }
+    }
+    const bv = o.buttonViewModel
+    if (bv && !info) {
+      const cmd = bv.onTap?.innertubeCommand
+      const subEp = cmd?.subscribeEndpoint
+      const unsubEp = cmd?.unsubscribeEndpoint
+      if (subEp?.params || unsubEp?.params) {
+        const title = extractText(bv.title)
+        info = {
+          subscribed: !!unsubEp || /subscribed/i.test(title),
+          subParams: subEp?.params ?? '',
+          unsubParams: unsubEp?.params ?? '',
+          channelIds: subEp?.channelIds ?? unsubEp?.channelIds ?? [],
+        }
+      }
+    }
+    if (info) found.push(info)
+    for (const key of Object.keys(o)) walk(o[key], depth + 1)
+  }
+  walk(data)
+  if (!found.length) return null
+  const own = found.filter((f) => f.channelIds.includes(channelId))
+  const pool = own.length ? own : found
+  return pool.find((f) => f.subParams && f.unsubParams) ?? pool.find((f) => f.subParams || f.unsubParams) ?? pool[0]
+}
+
+export async function setChannelSubscription(
+  channelId: string,
+  subscribe: boolean,
+  params: string
+): Promise<boolean> {
+  const endpoint = subscribe ? 'subscription/subscribe' : 'subscription/unsubscribe'
+  const data = await callInnerTube(endpoint, { channelIds: [channelId], params })
+  if (!data || data.error) {
+    log(`setChannelSubscription(${subscribe ? 'sub' : 'unsub'}) failed`,
+      JSON.stringify(data?.error ?? null).slice(0, 200))
+    return false
+  }
+  return true
 }
 
 function extractJoinedDate(data: any): string {
@@ -1020,6 +1155,92 @@ export async function fetchChannelContinuation(token: string): Promise<{ videos:
   const data = await callInnerTube('browse', { continuation: token })
   if (!data) return { videos: [], token: null }
   return extractContinuationVideos(data)
+}
+
+export interface PlaylistItem {
+  id: string
+  title: string
+  videoCount: string
+  url: string
+}
+
+function playlistFromLockup(lockup: any): PlaylistItem | null {
+  if (!lockup?.contentId) return null
+  if (lockup.contentType && lockup.contentType !== 'LOCKUP_CONTENT_TYPE_PLAYLIST') return null
+  const lmv = lockup.metadata?.lockupMetadataViewModel
+  const title = extractText(lmv?.title?.content)
+  if (!title) return null
+  const rows = lmv?.metadata?.contentMetadataViewModel?.metadataRows ?? []
+  let videoCount = ''
+  for (const row of rows) {
+    for (const part of row?.metadataParts ?? []) {
+      const t = extractText(part?.text)
+      if (t && /video/i.test(t)) { videoCount = t; break }
+    }
+    if (videoCount) break
+  }
+  return { id: lockup.contentId, title, videoCount, url: `/playlist?list=${lockup.contentId}` }
+}
+
+function playlistFromGridRenderer(r: any): PlaylistItem | null {
+  const id = r?.playlistId
+  if (!id) return null
+  const title = r.title?.simpleText ?? r.title?.runs?.map((x: any) => x.text).join('') ?? ''
+  if (!title) return null
+  const videoCount = r.videoCountText?.runs?.map((x: any) => x.text).join('') ?? r.videoCountShortText?.simpleText ?? ''
+  return { id, title, videoCount, url: `/playlist?list=${id}` }
+}
+
+function collectPlaylistItems(item: any, out: PlaylistItem[], seen: Set<string>) {
+  if (!item || typeof item !== 'object') return
+  if (item.continuationItemRenderer) return
+  if (item.itemSectionRenderer?.contents) {
+    for (const sub of item.itemSectionRenderer.contents) collectPlaylistItems(sub, out, seen)
+    return
+  }
+  if (item.gridRenderer?.items) {
+    for (const sub of item.gridRenderer.items) collectPlaylistItems(sub, out, seen)
+    return
+  }
+  if (item.richItemRenderer) {
+    const lockup = item.richItemRenderer.content?.lockupViewModel
+    const p = lockup ? playlistFromLockup(lockup) : null
+    if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p) }
+    return
+  }
+  if (item.gridPlaylistRenderer) {
+    const p = playlistFromGridRenderer(item.gridPlaylistRenderer)
+    if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p) }
+    return
+  }
+  if (item.lockupViewModel) {
+    const p = playlistFromLockup(item.lockupViewModel)
+    if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p) }
+  }
+}
+
+export function extractChannelPlaylists(data: any): PlaylistItem[] {
+  const content = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
+  const items = content?.sectionListRenderer?.contents ?? content?.richGridRenderer?.contents ?? []
+  const out: PlaylistItem[] = []
+  const seen = new Set<string>()
+  for (const item of items) collectPlaylistItems(item, out, seen)
+  return out
+}
+
+export async function fetchChannelPlaylists(channelId: string): Promise<PlaylistItem[]> {
+  if (!channelId) return []
+  try {
+    const res = await fetch(location.origin + `/channel/${channelId}/playlists?df=${Date.now()}`, {
+      credentials: 'include',
+      headers: { Accept: 'text/html' },
+    })
+    if (res.ok) {
+      const d = parseInitialData(await res.text())
+      if (d) return extractChannelPlaylists(d)
+    }
+  } catch {}
+  return []
 }
 
 export async function fetchContinuation(token: string, route = 'home', searchQuery = '', channelId = ''): Promise<{ videos: Video[]; token: string | null; items?: SearchItem[] }> {

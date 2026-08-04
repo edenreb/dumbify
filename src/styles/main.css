@@ -524,8 +524,8 @@ body {
 
 /* ---- Channel page tabs ---- */
 
-.df-channel-tabs {
-  padding-bottom: 20px;
+.df-channel-tabs.df-toolbar {
+  padding: 16px 0;
 }
 
 .df-channel-tabs .df-toolbar-item {
