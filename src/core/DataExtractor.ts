@@ -576,6 +576,16 @@ function vidFromLockup(lockup: any): Video | null {
   const rows = lmv.metadata?.contentMetadataViewModel?.metadataRows ?? []
   let channel = '', views = '', published = ''
 
+  // Real UC-id lives on the navigation endpoint behind the channel name run or the
+  // avatar image, not on any field literally called "channelId" - confirmed live via
+  // ytInitialData: lockupMetadataViewModel has no channelId field at all.
+  let channelId = rows[0]?.metadataParts?.[0]?.text?.commandRuns?.[0]?.onTap
+    ?.innertubeCommand?.browseEndpoint?.browseId ?? ''
+  if (!channelId) {
+    channelId = lmv.image?.decoratedAvatarViewModel?.rendererContext?.commandContext
+      ?.onTap?.innertubeCommand?.browseEndpoint?.browseId ?? ''
+  }
+
   if (rows[0]?.metadataParts?.[0]) {
     const t = extractText(rows[0].metadataParts[0].text)
     if (t && !/views?|ago\b|premiered|streamed/i.test(t)) channel = t
@@ -613,7 +623,7 @@ function vidFromLockup(lockup: any): Video | null {
     id: lockup.contentId,
     title,
     channel,
-    channelId: lmv.metadata?.contentMetadataViewModel?.ownerName ?? '',
+    channelId,
     url: `/watch?v=${lockup.contentId}`,
     views,
     published,

@@ -2,6 +2,7 @@ import type { NavigationState } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content } from '../core/UIEngine'
 import { extractWatchData, extractCommentsFromPage, fetchMoreComments, parseCountText, postCommentAPI, fetchCreateParams } from '../core/DataExtractor'
+import { navigateTo } from '../core/PageManager'
 
 const PLAYER_SELECTORS = [
   'ytd-player',
@@ -868,15 +869,30 @@ function buildWatchPage(nav: NavigationState) {
   const title = document.createElement('h1')
   title.className = 'df-watch-title'
   title.textContent = data.video.title || 'Untitled'
+  if (data.video.live) {
+    const liveBadge = document.createElement('span')
+    liveBadge.className = 'df-live-badge'
+    liveBadge.textContent = 'LIVE'
+    title.appendChild(liveBadge)
+  }
   content!.appendChild(title)
 
   const metaBar = document.createElement('div')
   metaBar.className = 'df-watch-meta-bar'
 
   if (data.video.channel) {
+    const channelId = data.video.channelId
     const channelSpan = document.createElement('span')
     channelSpan.className = 'df-watch-channel'
-    channelSpan.textContent = data.video.channel
+    if (channelId) {
+      channelSpan.classList.add('df-watch-channel--link')
+      const label = document.createElement('span')
+      label.textContent = data.video.channel
+      channelSpan.appendChild(label)
+      channelSpan.onclick = (e) => { e.stopPropagation(); navigateTo(`/channel/${channelId}`) }
+    } else {
+      channelSpan.textContent = data.video.channel
+    }
     metaBar.appendChild(channelSpan)
   }
 

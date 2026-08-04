@@ -3,6 +3,7 @@ import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
 import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, setChannelSubscription, diag } from '../core/DataExtractor'
 import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
+import { navigateTo } from '../core/PageManager'
 
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
   home: {
@@ -396,12 +397,19 @@ function renderVideo(v: Video): HTMLElement {
   const title = document.createElement('span')
   title.className = 'df-item-title'
   title.textContent = v.title
+  if (v.live) {
+    const liveBadge = document.createElement('span')
+    liveBadge.className = 'df-live-badge'
+    liveBadge.textContent = 'LIVE'
+    title.appendChild(liveBadge)
+  }
   body.appendChild(title)
 
   const meta = document.createElement('div')
   meta.className = 'df-item-meta'
 
-  // Deterministic order: channel / views / release date. Missing fields are
+
+    // Deterministic order: channel / views / release date. Missing fields are
   // simply omitted rather than leaving a gap or a stray separator.
   const metaParts: string[] = []
   if (v.channel) metaParts.push(v.channel)
@@ -410,6 +418,20 @@ function renderVideo(v: Video): HTMLElement {
 
   metaParts.forEach((text, i) => {
     if (i > 0) {
+      const sep = document.createElement('span')
+      sep.className = 'df-item-meta-sep'
+      sep.textContent = '/'
+      meta.appendChild(sep)
+    }
+    const el = document.createElement('span')
+    el.textContent = text
+    if (text === v.channel && v.channelId) {
+      el.className = 'df-item-channel-link'
+      el.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(`/channel/${v.channelId}`) }
+    }
+    meta.appendChild(el)
+  })
+  
       const sep = document.createElement('span')
       sep.className = 'df-item-meta-sep'
       sep.textContent = '/'
