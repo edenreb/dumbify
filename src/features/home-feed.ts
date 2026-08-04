@@ -3,6 +3,7 @@ import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
 import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, setChannelSubscription, diag } from '../core/DataExtractor'
 import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
+import { navigateTo } from '../core/PageManager'
 
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
   home: {
@@ -396,6 +397,12 @@ function renderVideo(v: Video): HTMLElement {
   const title = document.createElement('span')
   title.className = 'df-item-title'
   title.textContent = v.title
+  if (v.live) {
+    const liveBadge = document.createElement('span')
+    liveBadge.className = 'df-live-badge'
+    liveBadge.textContent = 'LIVE'
+    title.appendChild(liveBadge)
+  }
   body.appendChild(title)
 
   const meta = document.createElement('div')
@@ -403,6 +410,10 @@ function renderVideo(v: Video): HTMLElement {
 
   const ch = document.createElement('span')
   ch.textContent = v.channel
+  if (v.channelId) {
+    ch.className = 'df-item-channel-link'
+    ch.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(`/channel/${v.channelId}`) }
+  }
   meta.appendChild(ch)
 
   if (v.meta) {
