@@ -1,7 +1,19 @@
 import type { NavigationState } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content } from '../core/UIEngine'
-import { extractWatchData, extractCommentsFromPage, fetchMoreComments, parseCountText, postCommentAPI, fetchCreateParams } from '../core/DataExtractor'
+import {
+  extractWatchData,
+  extractCommentsFromPage,
+  fetchMoreComments,
+  parseCountText,
+  postCommentAPI,
+  postCommentReplyAPI,
+  fetchCreateParams,
+  fetchCommentReplies,
+  performCommentAction,
+  localComment,
+  type CommentItem,
+} from '../core/DataExtractor'
 
 const PLAYER_SELECTORS = [
   'ytd-player',
@@ -32,8 +44,11 @@ let dataCommentCount = ''
 let dataRefreshAttempted = false
 let dataRefreshPending = false
 let moreToken: string | null = null
-let dataComments: WatchComment[] = []
+let dataComments: CommentItem[] = []
 let createParams: string | null = null
+const commentReplies = new Map<string, CommentItem[]>()
+const commentRepliesNextToken = new Map<string, string | null>()
+const expandedReplies = new Set<string>()
 
 function findNativeComments(): HTMLElement | null {
   return (
@@ -51,7 +66,6 @@ async function refreshCommentsFromData() {
     return
   }
   if (dataRefreshAttempted || dataRefreshPending) return
-  if (extractComments().length > 0) return
   dataRefreshPending = true
   const { count, comments, token, createParams: params } = await extractCommentsFromPage()
   dataRefreshPending = false
@@ -518,27 +532,33 @@ function logLikeDiagnostics() {
   console.log('[dumbify] top-level buttons:', topLevelButtonsJson())
 }
 
-type WatchComment = {
-  author: string
-  time: string
-  text: string
-  likes: string
-}
-
-function extractComments(): WatchComment[] {
+function extractComments(): CommentItem[] {
   const nodes = document.querySelectorAll<HTMLElement>(
     'ytd-comment-thread-renderer ytd-comment-renderer'
   )
-  const list: WatchComment[] = []
+  const list: CommentItem[] = []
   nodes.forEach((t) => {
     const text = t.querySelector('#content-text')?.textContent?.trim() ?? ''
     if (!text) return
     const likes = t.querySelector('#vote-count-middle')?.textContent?.trim() ?? ''
+    const likeVal = likes && likes !== '0' ? likes : ''
     list.push({
       author: t.querySelector('#author-text')?.textContent?.trim() ?? 'Unknown',
       time: t.querySelector('#published-time-text')?.textContent?.trim() ?? '',
       text,
-      likes: likes && likes !== '0' ? likes : '',
+      likes: likeVal,
+      likesLiked: likeVal,
+      likesNotliked: likeVal,
+      commentId: null,
+      stateKey: null,
+      liked: false,
+      likeAction: null,
+      unlikeAction: null,
+      replyParams: null,
+      replyCount: 0,
+      repliesToken: null,
+      signedOut: false,
+      justPosted: false,
     })
   })
   return list
@@ -612,7 +632,7 @@ async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'fa
     }
   }
   if (ok) {
-    dataComments = [{ author: 'You', time: 'now', text: comment, likes: '' }, ...dataComments]
+    dataComments = [localComment('You', comment), ...dataComments]
     const next = parseInt(dataCommentCount.replace(/[^0-9]/g, ''), 10) || 0
     dataCommentCount = `${next + 1}`
     updateCommentsToggle()
@@ -627,7 +647,212 @@ async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'fa
   return ok ? 'ok' : 'failed'
 }
 
-function renderComments(list: HTMLElement, source: WatchComment[] | null = null) {
+function commentLikeLabel(c: CommentItem): string {
+  const count = c.liked ? c.likesLiked : c.likesNotliked
+  const word = c.liked ? 'Liked' : 'Like'
+  return count ? `${word} · ${count}` : word
+}
+
+function showCommentNotice(anchor: HTMLElement, message: string) {
+  const note = document.createElement('span')
+  note.className = 'df-comment-notice'
+  note.textContent = message
+  anchor.insertAdjacentElement('afterend', note)
+  window.setTimeout(() => note.remove(), 2500)
+}
+
+function rerenderCommentList() {
+  const list = commentsSection?.querySelector<HTMLElement>('.df-comment-list')
+  if (list && commentsSection?.isConnected) renderComments(list, dataComments)
+}
+
+async function handleCommentLike(c: CommentItem, btn: HTMLButtonElement) {
+  if (btn.disabled) return
+  const action = c.liked ? c.unlikeAction : c.likeAction
+  if (!action) {
+    const msg = c.justPosted
+      ? 'Reload to like this comment'
+      : c.signedOut
+        ? 'Sign in on YouTube to like comments'
+        : 'Liking isn’t available for this comment'
+    showCommentNotice(btn, msg)
+    return
+  }
+  btn.disabled = true
+  const result = await performCommentAction(action, c.stateKey)
+  btn.disabled = false
+  if (!result.ok) {
+    showCommentNotice(btn, 'Failed to update like')
+    return
+  }
+  c.liked = result.liked ?? !c.liked
+  btn.classList.toggle('df-liked', c.liked)
+  btn.textContent = commentLikeLabel(c)
+}
+
+function toggleReplyBox(c: CommentItem, host: HTMLElement) {
+  const existing = host.querySelector<HTMLElement>('.df-comment-reply-box')
+  if (existing) {
+    existing.remove()
+    return
+  }
+  const box = document.createElement('div')
+  box.className = 'df-comment-reply-box'
+  const input = document.createElement('textarea')
+  input.className = 'df-comment-input'
+  input.placeholder = `Reply to ${c.author}…`
+  input.rows = 1
+  const submit = document.createElement('button')
+  submit.className = 'df-comment-submit'
+  submit.textContent = 'Reply'
+  submit.onclick = async () => {
+    const text = input.value.trim()
+    if (!text || submit.disabled) return
+    if (!c.replyParams) {
+      const msg = c.justPosted
+        ? 'Reload to reply to this comment'
+        : c.signedOut
+          ? 'Sign in on YouTube to reply'
+          : 'Replies are disabled for this comment'
+      showCommentNotice(submit, msg)
+      return
+    }
+    submit.disabled = true
+    submit.textContent = 'Posting…'
+    const ok = await postCommentReplyAPI(text, c.replyParams)
+    if (ok) {
+      await addLocalReply(c, text)
+    } else {
+      submit.disabled = false
+      submit.textContent = 'Reply'
+      showCommentNotice(submit, 'Failed to post reply')
+    }
+  }
+  box.appendChild(input)
+  box.appendChild(submit)
+  host.appendChild(box)
+  input.focus()
+}
+
+async function addLocalReply(parent: CommentItem, text: string) {
+  if (!parent.commentId) return
+  let existing = commentReplies.get(parent.commentId)
+  if (!existing) {
+    if (parent.repliesToken) {
+      const { comments, nextToken } = await fetchCommentReplies(parent.repliesToken)
+      existing = comments
+      commentRepliesNextToken.set(parent.commentId, nextToken)
+    } else {
+      existing = []
+    }
+  }
+  commentReplies.set(parent.commentId, [localComment('You', text), ...existing])
+  expandedReplies.add(parent.commentId)
+  parent.replyCount += 1
+  rerenderCommentList()
+}
+
+async function toggleReplies(c: CommentItem) {
+  if (!c.commentId) return
+  if (expandedReplies.has(c.commentId)) {
+    expandedReplies.delete(c.commentId)
+    rerenderCommentList()
+    return
+  }
+  expandedReplies.add(c.commentId)
+  if (!commentReplies.has(c.commentId) && c.repliesToken) {
+    rerenderCommentList()
+    const { comments, nextToken } = await fetchCommentReplies(c.repliesToken)
+    commentReplies.set(c.commentId, comments)
+    commentRepliesNextToken.set(c.commentId, nextToken)
+  }
+  rerenderCommentList()
+}
+
+function renderRepliesInto(container: HTMLElement, c: CommentItem) {
+  container.innerHTML = ''
+  if (!c.commentId) return
+  const replies = commentReplies.get(c.commentId)
+  if (!replies) {
+    const loading = document.createElement('p')
+    loading.className = 'df-comment-empty'
+    loading.textContent = 'Loading replies…'
+    container.appendChild(loading)
+    return
+  }
+  replies.forEach((r) => container.appendChild(renderCommentItem(r, 1)))
+  const nextToken = commentRepliesNextToken.get(c.commentId)
+  if (nextToken) {
+    const more = document.createElement('button')
+    more.className = 'df-comment-more'
+    more.textContent = 'Load more replies'
+    more.onclick = async () => {
+      if (more.disabled || !c.commentId) return
+      more.disabled = true
+      const { comments, nextToken: next } = await fetchCommentReplies(nextToken)
+      commentReplies.set(c.commentId, [...(commentReplies.get(c.commentId) ?? []), ...comments])
+      commentRepliesNextToken.set(c.commentId, next)
+      renderRepliesInto(container, c)
+    }
+    container.appendChild(more)
+  }
+}
+
+function renderCommentItem(c: CommentItem, depth = 0): HTMLElement {
+  const item = document.createElement('article')
+  item.className = depth > 0 ? 'df-comment df-comment-reply' : 'df-comment'
+
+  const meta = document.createElement('p')
+  meta.className = 'df-comment-meta'
+  meta.textContent = [c.author, c.time].filter(Boolean).join(' · ')
+  item.appendChild(meta)
+
+  const text = document.createElement('p')
+  text.className = 'df-comment-text'
+  text.textContent = c.text
+  item.appendChild(text)
+
+  const actions = document.createElement('div')
+  actions.className = 'df-comment-actions'
+
+  const likeBtn = document.createElement('button')
+  likeBtn.className = 'df-comment-action'
+  likeBtn.classList.toggle('df-liked', c.liked)
+  likeBtn.textContent = commentLikeLabel(c)
+  likeBtn.onclick = () => handleCommentLike(c, likeBtn)
+  actions.appendChild(likeBtn)
+
+  const replyBoxHost = document.createElement('div')
+  replyBoxHost.className = 'df-comment-reply-box-host'
+
+  const replyBtn = document.createElement('button')
+  replyBtn.className = 'df-comment-action'
+  replyBtn.textContent = 'Reply'
+  replyBtn.onclick = () => toggleReplyBox(c, replyBoxHost)
+  actions.appendChild(replyBtn)
+
+  item.appendChild(actions)
+  item.appendChild(replyBoxHost)
+
+  const hasLocalReplies = !!c.commentId && commentReplies.has(c.commentId)
+  if (depth === 0 && c.commentId && (c.repliesToken || c.replyCount > 0 || hasLocalReplies)) {
+    const isOpen = expandedReplies.has(c.commentId)
+    const toggle = document.createElement('button')
+    toggle.className = 'df-comment-replies-toggle'
+    toggle.textContent = isOpen ? 'Hide replies' : `View ${c.replyCount > 0 ? c.replyCount + ' ' : ''}replies`
+    toggle.onclick = () => toggleReplies(c)
+    item.appendChild(toggle)
+
+    const repliesContainer = document.createElement('div')
+    repliesContainer.className = 'df-comment-replies'
+    item.appendChild(repliesContainer)
+    if (isOpen) renderRepliesInto(repliesContainer, c)
+  }
+
+  return item
+}
+
+function renderComments(list: HTMLElement, source: CommentItem[] | null = null) {
   const comments = source ?? extractComments()
   list.innerHTML = ''
   if (comments.length === 0) {
@@ -642,19 +867,7 @@ function renderComments(list: HTMLElement, source: WatchComment[] | null = null)
     list.appendChild(empty)
     return
   }
-  comments.forEach((c) => {
-    const item = document.createElement('article')
-    item.className = 'df-comment'
-    const meta = document.createElement('p')
-    meta.className = 'df-comment-meta'
-    meta.textContent = [c.author, c.time, c.likes ? `${c.likes} likes` : ''].filter(Boolean).join(' · ')
-    const text = document.createElement('p')
-    text.className = 'df-comment-text'
-    text.textContent = c.text
-    item.appendChild(meta)
-    item.appendChild(text)
-    list.appendChild(item)
-  })
+  comments.forEach((c) => list.appendChild(renderCommentItem(c)))
 }
 
 function buildCommentsSection(): HTMLElement {
@@ -791,6 +1004,9 @@ function resetComments() {
   moreToken = null
   dataComments = []
   createParams = null
+  commentReplies.clear()
+  commentRepliesNextToken.clear()
+  expandedReplies.clear()
 }
 
 function buildWatchPage(nav: NavigationState) {
