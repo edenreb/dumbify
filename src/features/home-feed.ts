@@ -408,44 +408,47 @@ function renderVideo(v: Video): HTMLElement {
   const meta = document.createElement('div')
   meta.className = 'df-item-meta'
 
-  const ch = document.createElement('span')
-  ch.textContent = v.channel
-  if (v.channelId) {
-    ch.className = 'df-item-channel-link'
-    ch.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(`/channel/${v.channelId}`) }
-  }
-  meta.appendChild(ch)
 
-  if (v.meta) {
-    const sep = document.createElement('span')
-    sep.className = 'df-item-meta-sep'
-    sep.textContent = '/'
-    meta.appendChild(sep)
-    const mt = document.createElement('span')
-    mt.textContent = v.meta
-    meta.appendChild(mt)
-  } else {
-    const fields: { text: string; cls?: string }[] = []
-    if (v.views) fields.push({ text: v.views })
-    if (v.published) fields.push({ text: v.published })
-    if (dateFirst) fields.reverse()
-    fields.forEach((f) => {
+    // Deterministic order: channel / views / release date. Missing fields are
+  // simply omitted rather than leaving a gap or a stray separator.
+  const metaParts: string[] = []
+  if (v.channel) metaParts.push(v.channel)
+  if (v.views) metaParts.push(v.views)
+  if (v.published) metaParts.push(v.published)
+
+  metaParts.forEach((text, i) => {
+    if (i > 0) {
       const sep = document.createElement('span')
       sep.className = 'df-item-meta-sep'
       sep.textContent = '/'
       meta.appendChild(sep)
-      const el = document.createElement('span')
-      if (f.cls) el.className = f.cls
-      el.textContent = f.text
-      meta.appendChild(el)
-    })
-  }
+    }
+    const el = document.createElement('span')
+    el.textContent = text
+    if (text === v.channel && v.channelId) {
+      el.className = 'df-item-channel-link'
+      el.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(`/channel/${v.channelId}`) }
+    }
+    meta.appendChild(el)
+  })
+  
+      const sep = document.createElement('span')
+      sep.className = 'df-item-meta-sep'
+      sep.textContent = '/'
+      meta.appendChild(sep)
+    }
+    const el = document.createElement('span')
+    el.textContent = text
+    meta.appendChild(el)
+  })
 
   if (v.words) {
-    const sep = document.createElement('span')
-    sep.className = 'df-item-meta-sep'
-    sep.textContent = '/'
-    meta.appendChild(sep)
+    if (metaParts.length > 0) {
+      const sep = document.createElement('span')
+      sep.className = 'df-item-meta-sep'
+      sep.textContent = '/'
+      meta.appendChild(sep)
+    }
     const tag = document.createElement('span')
     tag.className = 'df-item-tag'
     tag.textContent = v.words
@@ -504,14 +507,12 @@ function updateItemNumbers() {
 }
 
 let feedCancelled = false
-let dateFirst = false
 
 export const homeFeedFeature: Feature = {
   id: 'home-feed',
 
   mount(nav: NavigationState) {
     feedCancelled = false
-    dateFirst = nav.route === 'channel'
     content!.innerHTML = ''
 
     renderPageHead(nav)
