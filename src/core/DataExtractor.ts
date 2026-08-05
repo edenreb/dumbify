@@ -1413,6 +1413,30 @@ export interface CommentItem {
   time: string
   text: string
   likes: string
+  likesLiked: string
+  likesNotliked: string
+  commentId: string | null
+  stateKey: string | null
+  liked: boolean
+  likeAction: string | null
+  unlikeAction: string | null
+  replyParams: string | null
+  replyCount: number
+  repliesToken: string | null
+  signedOut: boolean
+  // True only for the optimistic placeholder inserted right after posting: YouTube's
+  // create_comment/create_comment_reply response doesn't hand back the new comment's real id
+  // or toolbar commands, so this comment has no like/reply capability until a reload replaces
+  // it with the real, server-fetched version.
+  justPosted: boolean
+}
+
+export function localComment(author: string, text: string): CommentItem {
+  return {
+    author, time: 'now', text, likes: '', likesLiked: '', likesNotliked: '',
+    commentId: null, stateKey: null, liked: false, likeAction: null, unlikeAction: null,
+    replyParams: null, replyCount: 0, repliesToken: null, signedOut: false, justPosted: true,
+  }
 }
 
 function findCommentThreads(obj: any, out: any[] = [], depth = 0): any[] {
@@ -1465,48 +1489,179 @@ function findCommentViewModels(obj: any, out: any[] = [], depth = 0): any[] {
   return out
 }
 
-function findCommentMutations(obj: any, out: any[] = [], depth = 0): any[] {
+function findAllMutations(obj: any, out: any[] = [], depth = 0): any[] {
   if (depth > 25 || typeof obj !== 'object' || obj === null) return out
   if (Array.isArray(obj)) {
-    for (const item of obj) findCommentMutations(item, out, depth + 1)
+    for (const item of obj) findAllMutations(item, out, depth + 1)
     return out
   }
-  if (obj.entityKey && obj.payload?.commentEntityPayload) {
+  if (obj.entityKey && obj.payload && typeof obj.payload === 'object') {
     out.push(obj)
     return out
   }
   for (const key of Object.keys(obj)) {
-    findCommentMutations(obj[key], out, depth + 1)
+    findAllMutations(obj[key], out, depth + 1)
   }
   return out
 }
 
-function commentKeyFromVm(vm: any): string | null {
-  if (!vm || typeof vm !== 'object') return null
-  let v = vm
-  while (v.commentViewModel && typeof v.commentViewModel === 'object') v = v.commentViewModel
-  return v.commentKey ?? null
-}
-
-function buildCommentEntityMap(mutations: any[]): Map<string, any> {
+function buildPayloadMap(mutations: any[], payloadKey: string): Map<string, any> {
   const map = new Map<string, any>()
   for (const m of mutations) {
-    const key = m.entityKey
-    const payload = m.payload?.commentEntityPayload
-    if (key && payload) map.set(key, payload)
+    const payload = m.payload?.[payloadKey]
+    if (m.entityKey && payload) map.set(m.entityKey, payload)
   }
   return map
 }
 
-function parseCommentEntity(p: any): CommentItem | null {
+type CommentEntityBase = Pick<CommentItem, 'author' | 'time' | 'text' | 'likes' | 'likesLiked' | 'likesNotliked'>
+
+function parseCommentEntity(p: any): CommentEntityBase | null {
   const text = p?.properties?.content?.content ?? ''
   if (!text) return null
-  const likes = p?.toolbar?.likeCountNotliked ?? p?.toolbar?.likeCountLiked ?? ''
+  const likesLiked = p?.toolbar?.likeCountLiked ?? ''
+  const likesNotliked = p?.toolbar?.likeCountNotliked ?? ''
   return {
     author: p?.author?.displayName ?? 'Unknown',
     time: p?.properties?.publishedTime ?? '',
     text,
-    likes: likes && likes !== '0' ? likes : '',
+    likes: likesNotliked && likesNotliked !== '0' ? likesNotliked : (likesLiked && likesLiked !== '0' ? likesLiked : ''),
+    likesLiked: likesLiked && likesLiked !== '0' ? likesLiked : '',
+    likesNotliked: likesNotliked && likesNotliked !== '0' ? likesNotliked : '',
+  }
+}
+
+function findByKeyDeep(obj: any, targetKey: string, maxDepth: number, depth = 0): any {
+  if (depth > maxDepth || !obj || typeof obj !== 'object') return null
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const r = findByKeyDeep(item, targetKey, maxDepth, depth + 1)
+      if (r !== null) return r
+    }
+    return null
+  }
+  if (obj[targetKey] !== undefined) return obj[targetKey]
+  for (const key of Object.keys(obj)) {
+    const r = findByKeyDeep(obj[key], targetKey, maxDepth, depth + 1)
+    if (r !== null) return r
+  }
+  return null
+}
+
+// Endpoint-command objects on the engagement toolbar surface entity are shaped
+// { innertubeCommand: { clickTrackingParams, commandMetadata, <someEndpoint>: { action, ... } } }.
+// The trailing key name varies (performCommentActionEndpoint / createCommentReplyDialogEndpoint / etc.),
+// and for perform_comment_action the whole opaque instruction is the `action` string itself
+// (confirmed against a real signed-in response — there is no separate `params` field), so we
+// search generically rather than assume one field name.
+function commandFromSurface(surface: any, name: string): string | null {
+  const cmd = surface?.[name]?.innertubeCommand
+  if (!cmd || typeof cmd !== 'object') return null
+
+  for (const key of Object.keys(cmd)) {
+    if (key === 'commandMetadata' || key === 'clickTrackingParams') continue
+    const ep = cmd[key]
+    if (ep && typeof ep === 'object') {
+      const value = ep.action ?? ep.params ?? ep.createReplyParams ?? ep.createCommentParams
+      if (typeof value === 'string' && value) return value
+    }
+  }
+
+  // The reply command (confirmed live) opens a dialog rather than exposing an endpoint
+  // directly: the real createCommentReplyEndpoint.createReplyParams is nested several
+  // levels down inside dialog/button renderers (which also embed an unrelated emoji picker
+  // full of its own "params" fields), so we search specifically for that unique key name
+  // rather than doing a generic deep scan that could pick up the wrong "params" value.
+  const replyEndpoint = findByKeyDeep(cmd, 'createCommentReplyEndpoint', 15)
+  if (typeof replyEndpoint?.createReplyParams === 'string' && replyEndpoint.createReplyParams) {
+    return replyEndpoint.createReplyParams
+  }
+
+  return null
+}
+
+function tokenFromContinuationItemRenderer(cir: any): string | null {
+  return (
+    cir?.continuationEndpoint?.continuationCommand?.token ??
+    cir?.button?.buttonRenderer?.command?.continuationCommand?.token ??
+    null
+  )
+}
+
+function findRepliesToken(repliesRenderer: any): string | null {
+  if (!repliesRenderer) return null
+  for (const arr of [repliesRenderer.subThreads, repliesRenderer.contents]) {
+    if (!Array.isArray(arr)) continue
+    for (const entry of arr) {
+      const token = tokenFromContinuationItemRenderer(entry?.continuationItemRenderer)
+      if (token) return token
+    }
+  }
+  return null
+}
+
+function commentItemFromThread(
+  t: any,
+  contentEntities: Map<string, any>,
+  stateEntities: Map<string, any>,
+  surfaceEntities: Map<string, any>
+): CommentItem | null {
+  const repliesToken = findRepliesToken(t?.replies?.commentRepliesRenderer)
+
+  const legacy = t?.comment?.commentRenderer
+  if (legacy) {
+    const base = parseCommentRenderer(legacy)
+    if (!base) return null
+    return {
+      ...base,
+      commentId: legacy.commentId ?? null,
+      stateKey: null,
+      liked: false,
+      likeAction: null,
+      unlikeAction: null,
+      replyParams: null,
+      replyCount: 0,
+      repliesToken,
+      signedOut: false,
+      justPosted: false,
+    }
+  }
+
+  let vm = t?.commentViewModel
+  while (vm?.commentViewModel && typeof vm.commentViewModel === 'object') vm = vm.commentViewModel
+  const key = vm?.commentKey
+  const payload = key ? contentEntities.get(key) : null
+  const base = payload ? parseCommentEntity(payload) : null
+  if (!base) return null
+
+  const commentId = payload?.properties?.commentId ?? vm?.commentId ?? null
+  const stateKey = vm?.toolbarStateKey ?? payload?.properties?.toolbarStateKey ?? null
+  const state = stateKey ? stateEntities.get(stateKey) : null
+  const liked = state?.likeState === 'TOOLBAR_LIKE_STATE_LIKED'
+
+  const surfaceKey = vm?.toolbarSurfaceKey ?? null
+  const surface = surfaceKey ? surfaceEntities.get(surfaceKey) : null
+  const likeAction = surface ? commandFromSurface(surface, 'likeCommand') : null
+  const unlikeAction = surface ? commandFromSurface(surface, 'unlikeCommand') : null
+  const replyParams = surface ? commandFromSurface(surface, 'replyCommand') : null
+  const signedOut = !!surface?.prepareAccountCommand
+
+  const replyCountRaw = payload?.toolbar?.replyCount ?? ''
+  const replyCount = parseInt(String(replyCountRaw).replace(/[^0-9]/g, ''), 10) || 0
+
+  return {
+    ...base,
+    likes: liked ? base.likesLiked : base.likesNotliked,
+    commentId,
+    stateKey,
+    liked,
+    likeAction,
+    unlikeAction,
+    replyParams,
+    replyCount,
+    repliesToken,
+    signedOut,
+    justPosted: false,
   }
 }
 
@@ -1533,18 +1688,21 @@ function logCommentStructure(data: any) {
   walk(data, 0)
 }
 
-function parseCommentRenderer(c: any): CommentItem | null {
+function parseCommentRenderer(c: any): CommentEntityBase | null {
   const text =
     c?.contentText?.runs?.map((r: any) => r.text).join('') ??
     c?.contentText?.simpleText ??
     ''
   if (!text) return null
   const likes = c?.voteCount?.simpleText ?? ''
+  const likeVal = likes && likes !== '0' ? likes : ''
   return {
     author: c?.authorText?.simpleText ?? 'Unknown',
     time: c?.publishedTimeText?.simpleText ?? '',
     text,
-    likes: likes && likes !== '0' ? likes : '',
+    likes: likeVal,
+    likesLiked: likeVal,
+    likesNotliked: likeVal,
   }
 }
 
@@ -1571,22 +1729,20 @@ function extractCommentsFromObject(data: any): { count: string; comments: Commen
     header?.countText?.runs?.map((r: any) => r.text).join('') ??
     ''
   const count = parseCountText(countText)
+
+  const mutations = findAllMutations(data)
+  const contentEntities = buildPayloadMap(mutations, 'commentEntityPayload')
+  const stateEntities = buildPayloadMap(mutations, 'engagementToolbarStateEntityPayload')
+  const surfaceEntities = buildPayloadMap(mutations, 'engagementToolbarSurfaceEntityPayload')
+
   for (const t of findCommentThreads(data)) {
-    const c = t.comment?.commentRenderer
-    if (c) {
-      const item = parseCommentRenderer(c)
-      if (item) comments.push(item)
-    }
+    const item = commentItemFromThread(t, contentEntities, stateEntities, surfaceEntities)
+    if (item) comments.push(item)
   }
   if (comments.length === 0) {
-    const entities = buildCommentEntityMap(findCommentMutations(data))
     for (const vm of findCommentViewModels(data)) {
-      const key = commentKeyFromVm(vm)
-      const p = key ? entities.get(key) : null
-      if (p) {
-        const item = parseCommentEntity(p)
-        if (item) comments.push(item)
-      }
+      const item = commentItemFromThread({ commentViewModel: vm }, contentEntities, stateEntities, surfaceEntities)
+      if (item) comments.push(item)
     }
   }
   return { count, comments }
@@ -1631,8 +1787,7 @@ function findNextCommentsToken(data: any): string | null {
       if (items.some((x: any) => x.commentThreadRenderer)) {
         const cont = items.find((x: any) => x.continuationItemRenderer)
         if (cont) {
-          const token = cont.continuationItemRenderer.continuationEndpoint
-            ?.continuationCommand?.token
+          const token = tokenFromContinuationItemRenderer(cont.continuationItemRenderer)
           if (token) return token
         }
       }
@@ -1774,6 +1929,60 @@ export async function postCommentAPI(
     return false
   }
   return true
+}
+
+// Replies use a distinct endpoint and field name from top-level comments (confirmed live via
+// the reply command's commandMetadata.webCommandMetadata.apiUrl == comment/create_comment_reply,
+// paired with createReplyParams rather than createCommentParams).
+export async function postCommentReplyAPI(
+  commentText: string,
+  createReplyParams: string
+): Promise<boolean> {
+  const data = await callInnerTube('comment/create_comment_reply', {
+    commentText,
+    createReplyParams,
+  })
+  if (!data || data.error) {
+    log('postCommentReplyAPI failed', JSON.stringify(data?.error ?? null).slice(0, 200))
+    return false
+  }
+  return true
+}
+
+export interface RepliesResult {
+  comments: CommentItem[]
+  nextToken: string | null
+}
+
+export async function fetchCommentReplies(token: string): Promise<RepliesResult> {
+  const data = await callInnerTube('next', { continuation: token })
+  if (!data) return { comments: [], nextToken: null }
+  const { comments } = extractCommentsFromObject(data)
+  return { comments, nextToken: findNextCommentsToken(data) }
+}
+
+export interface CommentActionResult {
+  ok: boolean
+  liked: boolean | null
+}
+
+export async function performCommentAction(
+  action: string,
+  stateKey?: string | null
+): Promise<CommentActionResult> {
+  const data = await callInnerTube('comment/perform_comment_action', { actions: [action] })
+  if (!data || data.error) {
+    log('performCommentAction failed', JSON.stringify(data?.error ?? null).slice(0, 200))
+    return { ok: false, liked: null }
+  }
+  let liked: boolean | null = null
+  if (stateKey) {
+    const mutations = findAllMutations(data)
+    const stateEntities = buildPayloadMap(mutations, 'engagementToolbarStateEntityPayload')
+    const state = stateEntities.get(stateKey)
+    if (typeof state?.likeState === 'string') liked = state.likeState === 'TOOLBAR_LIKE_STATE_LIKED'
+  }
+  return { ok: true, liked }
 }
 
 export async function fetchCreateParams(): Promise<string | null> {

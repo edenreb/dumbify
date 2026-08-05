@@ -1,6 +1,6 @@
 # Current Tasks
 
-Five active tasks, listed in no particular priority order. Pick one, work it to completion,
+Four active tasks, listed in no particular priority order. Pick one, work it to completion,
 then move it into the Completed Tasks section of TODO.md per AGENTS.MD.
 
 ## Rules for every task below
@@ -16,47 +16,7 @@ then move it into the Completed Tasks section of TODO.md per AGENTS.MD.
 
 ---
 
-## 1. Comment interactions: like, view replies, reply
-
-**Branch:** `feature/comment-interactions`
-
-Comments currently render read-only. Implement the three missing interactions.
-
-Where things stand:
-- `CommentItem` in [DataExtractor.ts:1277](src/core/DataExtractor.ts:1277) is only
-  `{ author, time, text, likes }` — it carries no comment id, no like/reply params,
-  and no reply continuation token.
-- Threads are found via `findCommentThreads` / `findCommentViewModels` /
-  `findCommentMutations` ([DataExtractor.ts:1284](src/core/DataExtractor.ts:1284) onward);
-  reply data lives on the thread's `replies.commentRepliesRenderer` continuation, and
-  like/reply endpoints live on the comment's toolbar / view-model surface keys.
-- Comment posting already works via `postCommentAPI` →
-  `comment/create_comment` with the SAPISID auth header, so the auth pattern to copy exists.
-- Rendering is in [watch-page.ts](src/features/watch-page.ts) (`.df-comment-list`,
-  `renderComments`, `postComment` / `postCommentViaApi`).
-
-Work to do:
-1. Extend `CommentItem` with the ids/params needed: comment id or key, like params,
-   reply-create params, reply count, and the replies continuation token.
-   Log the relevant subtree before writing the parser (CLAUDE.md gotcha).
-2. **Like a comment** — new `DataExtractor` call against `comment/perform_comment_action`
-   with the like params, using the same SAPISID auth as `postCommentAPI`.
-   Toggle state must reflect the real server response, not just optimistic UI.
-3. **View replies** — a "N replies" toggle under a comment that fetches the replies
-   continuation through `callInnerTube('next', { continuation })` (same mechanism as
-   `fetchMoreComments`) and renders them indented under the parent.
-4. **Reply to a comment** — inline reply box on each thread, posting via
-   `comment/create_comment` with the reply params, then appending the new reply locally.
-
-Acceptance:
-- Liking a comment updates the count and survives a page reload.
-- Threads with replies expand and show them; threads without replies show no toggle.
-- A posted reply appears under the correct parent and is visible on real YouTube after reload.
-- Signed-out state degrades gracefully (no crash, clear message).
-
----
-
-## 2. Channel name on the watch page should link to the channel
+## 1. Channel name on the watch page should link to the channel
 
 **Branch:** `fix/watch-page-channel-link`
 
@@ -79,7 +39,7 @@ Acceptance:
 
 ---
 
-## 3. Remove the "Your Videos" and "Channel" sidebar tabs
+## 2. Remove the "Your Videos" and "Channel" sidebar tabs
 
 **Branch:** `fix/remove-unused-sidebar-tabs`
 
@@ -98,7 +58,7 @@ Acceptance:
 
 ---
 
-## 4. Home feed item layout: title, then channel / views / release date
+## 3. Home feed item layout: title, then channel / views / release date
 
 **Branch:** `fix/home-feed-meta-order`
 
@@ -132,7 +92,7 @@ Acceptance:
 
 ---
 
-## 5. Fix the Liked tab and the Playlists tab
+## 4. Fix the Liked tab and the Playlists tab
 
 **Branch:** `fix/liked-and-playlists-tabs`
 
