@@ -431,16 +431,6 @@ function renderVideo(v: Video): HTMLElement {
     }
     meta.appendChild(el)
   })
-  
-      const sep = document.createElement('span')
-      sep.className = 'df-item-meta-sep'
-      sep.textContent = '/'
-      meta.appendChild(sep)
-    }
-    const el = document.createElement('span')
-    el.textContent = text
-    meta.appendChild(el)
-  })
 
   if (v.words) {
     if (metaParts.length > 0) {
