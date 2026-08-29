@@ -66,6 +66,8 @@ Almost everything navigates via full page loads (`window.location.href = ...`) r
 
 ## Conventions / Gotchas
 
+- Never add any Claude markings when pushing/committing using Git.
+- Never add any Claude references anywhere in code or via Git.
 - Always run `npm run build` after changes — the extension loads from `dist/`.
 - Manual testing: `chrome://extensions` → Developer Mode → Load unpacked → select `dist`. Verify no console errors (`[Dumbify]` prefixed logs are from this extension), no broken UI.
 - `log()` in DataExtractor pushes to `diag` array and console — used heavily for debugging extraction issues.
