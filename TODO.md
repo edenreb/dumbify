@@ -1,5 +1,43 @@
 # YouTube Extension Roadmap
 
+# Open Tasks
+
+Found while testing the extension against real YouTube.
+
+## Sidebar: link 'Your Videos' to YouTube Studio
+
+The sidebar's 'Your Videos' entry is not wired to anything. Point it at the
+creator studio (`studio.youtube.com`) so it opens the user's own video list.
+
+## Sidebar: rename 'Channel' to 'Your Channel' and link it
+
+Rename the 'Channel' sidebar entry to 'Your Channel' and link it to the signed-in
+user's own channel. Needs the user's own channel id resolved at runtime — it is not
+the same as whatever channel page happens to be open.
+
+## Playlists do not work
+
+Playlists (Liked videos, sounds, Watch Later) do not render at all in this version.
+Playlist routes need to actually fetch and show their contents.
+
+## Subscriptions: sort by creator, group by date
+
+On the subscriptions feed, add sorting by creator, and group videos into date
+buckets: Today, Yesterday, Past week, Past month, then by month.
+
+## Shorts: redirect to the normal watch page, and fit tall videos
+
+YouTube Shorts are broken. Redirect `/shorts/<id>` to `/watch?v=<id>` so shorts play
+through the normal watch page. The player also needs to handle tall aspect ratios —
+a 9:16 short must scale to fit the viewport rather than overflowing it. The existing
+player sizing assumes landscape, so this is a real sizing change, not just a route
+rewrite.
+
+## Watch page: duplicated date in the meta row
+
+The publish date appears twice in the watch page meta row (next to the Like and
+Comments buttons). Small display bug.
+
 
 # Completed Tasks
 
