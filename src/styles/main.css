@@ -808,14 +808,13 @@ html.df-failed #dumbify-root {
   aspect-ratio: auto;
 }
 
-.df-native-player {
-  width: 100%;
-  height: auto;
-}
-
+.df-native-player,
 .df-native-player .html5-video-player {
   width: 100%;
   height: auto;
+  /* Tall (9:16) videos would otherwise run off the bottom of the viewport.
+     !important so YouTube's own #movie_player rules can't outrank it. */
+  max-height: 85vh !important;
 }
 
 .df-native-player video {
@@ -824,6 +823,7 @@ html.df-failed #dumbify-root {
   object-fit: contain;
 }
 
+.df-native-player:fullscreen,
 .df-native-player .html5-video-player:fullscreen {
   width: 100vw !important;
   height: 100vh !important;
@@ -831,6 +831,7 @@ html.df-failed #dumbify-root {
   max-height: none !important;
 }
 
+.df-native-player:fullscreen video,
 .df-native-player .html5-video-player:fullscreen video {
   width: 100vw !important;
   height: 100vh !important;

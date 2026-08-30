@@ -14,14 +14,6 @@ Playlist routes need to actually fetch and show their contents.
 On the subscriptions feed, add sorting by creator, and group videos into date
 buckets: Today, Yesterday, Past week, Past month, then by month.
 
-## Shorts: redirect to the normal watch page, and fit tall videos
-
-YouTube Shorts are broken. Redirect `/shorts/<id>` to `/watch?v=<id>` so shorts play
-through the normal watch page. The player also needs to handle tall aspect ratios —
-a 9:16 short must scale to fit the viewport rather than overflowing it. The existing
-player sizing assumes landscape, so this is a real sizing change, not just a route
-rewrite.
-
 ## Watch page: duplicated date in the meta row
 
 The publish date appears twice in the watch page meta row (next to the Like and

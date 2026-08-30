@@ -180,6 +180,8 @@ function syncPlayerAspect() {
   if (video?.videoWidth && video.videoHeight) {
     ratio = video.videoHeight / video.videoWidth
   }
+  // Tall (9:16 shorts) videos are clamped by max-height in CSS, not here: any
+  // scroll-position-dependent cap feeds back through this element's own height.
   el.style.height = `${Math.round(width * ratio)}px`
 }
 

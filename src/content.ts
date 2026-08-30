@@ -1,6 +1,7 @@
 import { mountUI, unmountUI } from './core/UIEngine'
 import { startPageManager, onNavigate, getNavigationState } from './core/PageManager'
 import { registerFeature, activateFeatures } from './core/FeatureManager'
+import type { NavigationState } from './types'
 import { shellFeature } from './features/shell'
 import { homeFeedFeature } from './features/home-feed'
 import { watchPageFeature } from './features/watch-page'
@@ -24,34 +25,37 @@ function getFeatureIdsForRoute(route: string): string[] {
   }
 }
 
-function syncFeatures() {
-  const nav = getNavigationState()
-  const ids = getFeatureIdsForRoute(nav.route)
-  activateFeatures(ids, nav)
+// Shorts have no dedicated view: a single short plays through the normal watch
+// page, and the shorts feed itself has no equivalent here, so it falls back home.
+function redirectShorts(pathname: string): boolean {
+  if (!/^\/shorts(\/|$)/.test(pathname)) return false
+  const id = pathname.match(/^\/shorts\/([\w-]{11})/)?.[1]
+  location.replace(id ? `https://www.youtube.com/watch?v=${id}` : 'https://www.youtube.com/')
+  return true
+}
+
+function sync(nav: NavigationState) {
+  if (redirectShorts(nav.pathname)) return
+  activateFeatures(getFeatureIdsForRoute(nav.route), nav)
 }
 
 function init() {
-  try {
+ try {
     mountUI()
     startPageManager()
-    syncFeatures()
-
-    onNavigate((nav) => {
-      const ids = getFeatureIdsForRoute(nav.route)
-      activateFeatures(ids, nav)
-    })
+    sync(getNavigationState())
+    onNavigate(sync)
   } catch (err) {
-    // main.css hides <body> the moment it is injected, so a throw anywhere above
-    // would otherwise strand the user on a blank youtube.com. Hand the real page
-    // back instead of failing invisibly.
     console.error('[Dumbify] failed to start, falling back to YouTube:', err)
     document.documentElement.classList.add('df-failed')
     unmountUI()
   }
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init)
-} else {
-  init()
+if (!redirectShorts(location.pathname)) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init)
+  } else {
+    init()
+  }
 }

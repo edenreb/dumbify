@@ -9,7 +9,7 @@ export default defineManifest({
     {
       matches: ['https://www.youtube.com/*'],
       js: ['src/content.ts'],
-      run_at: 'document_end',
+      run_at: 'document_start',
     },
   ],
   background: {
