@@ -1,7 +1,7 @@
 import type { NavigationState, Video, Channel, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
-import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, setChannelSubscription, diag } from '../core/DataExtractor'
+import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, setChannelSubscription } from '../core/DataExtractor'
 import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
 import { navigateTo } from '../core/PageManager'
 
@@ -115,8 +115,8 @@ function renderToolbar(route: Route) {
 function renderChannelBanner(ch: Channel, before?: HTMLElement) {
   const banner = document.createElement('a')
   banner.className = 'df-channel-banner'
-  banner.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/channel/${ch.id}` }
-  banner.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); window.location.href = `/channel/${ch.id}` } }
+  banner.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(`/channel/${ch.id}`) }
+  banner.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(`/channel/${ch.id}`) } }
   banner.setAttribute('role', 'link')
   banner.tabIndex = 0
 
@@ -333,8 +333,8 @@ function renderChannelStats(ch: Channel, videos: Video[], before?: HTMLElement) 
 function renderChannelCard(ch: Channel): HTMLElement {
   const card = document.createElement('a')
   card.className = 'df-channel-card'
-  card.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/channel/${ch.id}` }
-  card.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); window.location.href = `/channel/${ch.id}` } }
+  card.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(`/channel/${ch.id}`) }
+  card.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(`/channel/${ch.id}`) } }
   card.setAttribute('role', 'link')
   card.tabIndex = 0
 
@@ -384,15 +384,14 @@ function renderVideo(v: Video): HTMLElement {
   const article = document.createElement('a')
   article.className = 'df-item-row'
   article.href = v.url
-  article.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.location.href = v.url }
-  article.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); window.location.href = v.url } }
+  article.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(v.url) }
+  article.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(v.url) } }
 
   const number = document.createElement('span')
   number.className = 'df-item-number'
   article.appendChild(number)
 
   const body = document.createElement('span')
-  body.className = 'min-w-0'
 
   const title = document.createElement('span')
   title.className = 'df-item-title'
@@ -432,19 +431,6 @@ function renderVideo(v: Video): HTMLElement {
     meta.appendChild(el)
   })
 
-  if (v.words) {
-    if (metaParts.length > 0) {
-      const sep = document.createElement('span')
-      sep.className = 'df-item-meta-sep'
-      sep.textContent = '/'
-      meta.appendChild(sep)
-    }
-    const tag = document.createElement('span')
-    tag.className = 'df-item-tag'
-    tag.textContent = v.words
-    meta.appendChild(tag)
-  }
-
   body.appendChild(meta)
   article.appendChild(body)
 
@@ -460,15 +446,14 @@ function renderPlaylistRow(p: PlaylistItem): HTMLElement {
   const article = document.createElement('a')
   article.className = 'df-item-row'
   article.href = p.url
-  article.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.location.href = p.url }
-  article.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); window.location.href = p.url } }
+  article.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(p.url) }
+  article.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(p.url) } }
 
   const number = document.createElement('span')
   number.className = 'df-item-number'
   article.appendChild(number)
 
   const body = document.createElement('span')
-  body.className = 'min-w-0'
 
   const title = document.createElement('span')
   title.className = 'df-item-title'
@@ -520,7 +505,7 @@ export const homeFeedFeature: Feature = {
 
     let continuationToken: string | null = null
     let loadingMore = false
-    let loadCount = 0
+    let feedExhausted = false
     let initialLoadDone = false
     const videoIds = new Set<string>()
     const channelIds = new Set<string>()
@@ -536,15 +521,17 @@ export const homeFeedFeature: Feature = {
     let playlistsLoading = false
 
     const onScroll = () => {
-      if (loadingMore || !initialLoadDone) return
+      if (loadingMore || feedExhausted || !initialLoadDone) return
       if (currentTab === 'about' || currentTab === 'playlists') return
       if (root!.scrollHeight - root!.scrollTop - root!.clientHeight < 600) {
         loadMore()
       }
     }
 
-    function appendVideos(videos: Video[]) {
-      if (feedCancelled) return
+    // Returns how many items were actually new, so loadMore can tell real progress
+    // from a page that only repeated what we already have.
+    function appendVideos(videos: Video[]): number {
+      if (feedCancelled) return 0
       if (list.querySelector('.df-loading, .df-empty')) list.innerHTML = ''
       const newVids = videos.filter((v) => !videoIds.has(v.id))
       newVids.forEach((v) => { videoIds.add(v.id); list.appendChild(renderVideo(v)) })
@@ -554,10 +541,11 @@ export const homeFeedFeature: Feature = {
         channelVideos = channelVideos.concat(newForChannel)
       }
       updateItemNumbers()
+      return newVids.length
     }
 
-    function appendSearchItems(items: SearchItem[]) {
-      if (feedCancelled) return
+    function appendSearchItems(items: SearchItem[]): number {
+      if (feedCancelled) return 0
       if (list.querySelector('.df-loading, .df-empty')) list.innerHTML = ''
       const channels: Channel[] = []
       const videos: Video[] = []
@@ -576,6 +564,7 @@ export const homeFeedFeature: Feature = {
       channels.forEach((c) => list.appendChild(renderChannelCard(c)))
       videos.forEach((v) => list.appendChild(renderVideo(v)))
       updateItemNumbers()
+      return channels.length + videos.length
     }
 
     function rerenderChannelList(sorted: Video[]) {
@@ -688,19 +677,22 @@ export const homeFeedFeature: Feature = {
     }
 
     async function loadMore() {
-      if (loadingMore || feedCancelled) return
+      if (loadingMore || feedCancelled || feedExhausted) return
       loadingMore = true
       try {
         const result = await fetchContinuation(continuationToken || '', nav.route, nav.searchQuery ?? '', nav.channelId ?? '')
         if (feedCancelled) return
         continuationToken = result.token
+        let added = 0
         if (nav.route === 'search' && result.items?.length) {
-          loadCount++
-          appendSearchItems(result.items)
+          added = appendSearchItems(result.items)
         } else if (result.videos.length) {
-          loadCount++
-          appendVideos(result.videos)
+          added = appendVideos(result.videos)
         }
+        // A fetch that yields nothing new means we are at the end of what this route
+        // can page through. Stop, rather than letting the unchanged page height keep
+        // the bottom-of-feed check true and refetch on every further scroll event.
+        if (added === 0 || !continuationToken) feedExhausted = true
       } finally {
         loadingMore = false
       }
@@ -775,6 +767,11 @@ export const homeFeedFeature: Feature = {
   },
 
   update(nav: NavigationState) {
+    // Tear down first. mount() registers a fresh scroll listener and overwrites the
+    // handler ref used to remove it, so re-mounting without this left every previous
+    // page's listener attached - each one still holding its own list/token state and
+    // still firing loadMore on scroll.
+    this.unmount()
     this.mount(nav)
   },
 }

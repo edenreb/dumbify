@@ -6,9 +6,9 @@ This file provides technical guidance for working in this repository. Read this 
 
 "Dumbify" is a Chrome MV3 extension (Manifest V3) that renders a simplified, text-first view on top of youtube.com. It does not replace the page — it reads the real YouTube DOM/ytcfg data and injects its own UI into the page.
 
-- Built with TypeScript + Vite via `@crxjs/vite-plugin`.
+- Built with TypeScript + Vite via `@crxjs/vite-plugin`. No runtime dependencies.
 - No runtime framework (no React/Vue) — plain DOM manipulation.
-- Styling via Tailwind CSS 4 (PostCSS) plus a custom stylesheet in `src/styles/main.css`.
+- Styling is a single hand-written stylesheet, `src/styles/main.css` (plain CSS, no preprocessor).
 
 ## Commands
 
@@ -25,10 +25,9 @@ Typecheck: `npx tsc --noEmit` (also run `npx tsc -p tsconfig.node.json --noEmit`
 Entry points (manifest defined in `src/manifest.ts`):
 
 - `src/content.ts` — content script entry. Registers features, maps routes to feature IDs, syncs features on navigation.
-- `src/background.ts` — service worker. Handles `GET_YT_YT_DATA` (reads globals from page via MAIN-world script injection) and `GET_YT_CFG` (returns ytcfg).
+- `src/background.ts` — service worker. Handles `GET_YT_DATA` (reads globals from page via MAIN-world script injection) and `GET_YT_CFG` (returns ytcfg).
 - `src/core/` — shared infrastructure:
   - `DataExtractor.ts` — the heart of the extension. Extracts data from YouTube's page HTML/ytcfg, and makes InnerTube API calls (`callInnerTube`). All extraction logic lives here.
-  - `DOMEngine.ts` — MutationObserver wrapper + cleanup helper.
   - `FeatureManager.ts` — feature registry: `registerFeature`, `activateFeatures` (mount/update/unmount).
   - `PageManager.ts` — navigation state; `navigateTo(path)` performs real full-page navigation via `window.location.href`.
   - `UIEngine.ts` — mounts the extension's root UI.
