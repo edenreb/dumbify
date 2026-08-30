@@ -25,14 +25,6 @@ Playlist routes need to actually fetch and show their contents.
 On the subscriptions feed, add sorting by creator, and group videos into date
 buckets: Today, Yesterday, Past week, Past month, then by month.
 
-## Shorts: redirect to the normal watch page, and fit tall videos
-
-YouTube Shorts are broken. Redirect `/shorts/<id>` to `/watch?v=<id>` so shorts play
-through the normal watch page. The player also needs to handle tall aspect ratios —
-a 9:16 short must scale to fit the viewport rather than overflowing it. The existing
-player sizing assumes landscape, so this is a real sizing change, not just a route
-rewrite.
-
 ## Watch page: duplicated date in the meta row
 
 The publish date appears twice in the watch page meta row (next to the Like and
@@ -52,6 +44,33 @@ Completed:
 - Changes:
 - Files modified:
 - Testing:
+
+
+## Shorts: redirect to the normal watch page, and fit tall videos
+
+Completed:
+- Date: 2026-08-31
+- Changes: Shorts now play through the normal watch page. `DataExtractor` emits
+  `/watch?v=<id>` for every video it extracts (reel items, shorts lockups, and the
+  DOM fallback), so in-app shorts links go straight to the watch page with no
+  intermediate load. A `redirectShorts` guard in `content.ts` covers the entry
+  points extraction can't reach — direct `/shorts/<id>` loads and YouTube's own
+  SPA navigations; bare `/shorts` (the shorts feed, which has no equivalent here)
+  falls back to `/`. The content script moved to `run_at: document_start` and the
+  guard runs at module top level, before DOMContentLoaded, so the redirect happens
+  before YouTube's own scripts boot the shorts player — at `document_end` the short
+  had already started playing. Tall videos are clamped with `max-height: 85vh` in
+  CSS rather than in `syncPlayerAspect`: a JS cap derived from the player's viewport
+  position feeds back through the element's own height and grows the page on every
+  scroll. The clamp sits on both `.df-native-player` and its `.html5-video-player`
+  descendant because `playerContainer()` returns whichever of the two exists, and
+  on a real watch page `#movie_player` is itself the `.html5-video-player`.
+- Files modified: src/core/DataExtractor.ts, src/content.ts, src/manifest.ts,
+  src/features/watch-page.ts, src/styles/main.css
+- Testing: `npx tsc --noEmit` and `npm run build` pass. Manually tested in Chrome on
+  real signed-in YouTube: a short from the home feed opens on the watch page and
+  plays, a pasted `/shorts/<id>` URL redirects before the native player starts, and
+  a 9:16 video fits the viewport instead of overflowing it.
 
 
 ## Comment interactions: like, view replies, reply

@@ -533,7 +533,7 @@ function vidFromReel(r: any): Video | null {
     title: r.headline?.simpleText ?? r.title?.runs?.[0]?.text ?? '',
     channel: r.channelName?.simpleText ?? r.channelTitleText?.runs?.[0]?.text ?? '',
     channelId: r.channelNavigationEndpoint?.browseEndpoint?.browseId ?? '',
-    url: `/shorts/${r.videoId}`,
+    url: `/watch?v=${r.videoId}`,
     views: r.viewCountText?.simpleText ?? '',
     published: '',
     duration,
@@ -557,7 +557,7 @@ function vidFromShortsLockup(sl: any): Video | null {
       '',
     channel: '',
     channelId: '',
-    url: `/shorts/${videoId}`,
+    url: `/watch?v=${videoId}`,
     views: sl?.overlayMetadata?.secondaryText?.content ?? '',
     published: '',
     duration: '',
@@ -648,10 +648,9 @@ function vidFromDOM(el: Element): Video | null {
   const spans = meta ? Array.from(meta.querySelectorAll('span')) : []
   const durEl = el.querySelector('ytd-thumbnail-overlay-time-status-renderer, yt-thumbnail-badge-view-model, yt-thumbnail-overlay-badge-view-model')
   const dur = durEl?.textContent?.trim() ?? ''
-  const isShort = /\/shorts\//.test(href)
   return {
     id, title, channel, channelId: '',
-    url: isShort ? `/shorts/${id}` : `/watch?v=${id}`,
+    url: `/watch?v=${id}`,
     views: spans[0]?.textContent?.trim() ?? '',
     published: spans[1]?.textContent?.trim() ?? '',
     duration: dur, verified: false, live: false,
