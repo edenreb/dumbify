@@ -1,4 +1,4 @@
-import { mountUI } from './core/UIEngine'
+import { mountUI, unmountUI } from './core/UIEngine'
 import { startPageManager, onNavigate, getNavigationState } from './core/PageManager'
 import { registerFeature, activateFeatures } from './core/FeatureManager'
 import type { NavigationState } from './types'
@@ -40,10 +40,16 @@ function sync(nav: NavigationState) {
 }
 
 function init() {
-  mountUI()
-  startPageManager()
-  sync(getNavigationState())
-  onNavigate(sync)
+ try {
+    mountUI()
+    startPageManager()
+    sync(getNavigationState())
+    onNavigate(sync)
+  } catch (err) {
+    console.error('[Dumbify] failed to start, falling back to YouTube:', err)
+    document.documentElement.classList.add('df-failed')
+    unmountUI()
+  }
 }
 
 if (!redirectShorts(location.pathname)) {

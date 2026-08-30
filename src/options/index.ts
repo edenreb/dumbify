@@ -1,33 +1,6 @@
 import { getSettings, setSettings, resetSettings } from '../core/storage'
 import type { DumbifySettings } from '../types'
 
-const SECTIONS: { title: string; items: { key: keyof DumbifySettings; label: string; desc: string }[] }[] = [
-  {
-    title: 'Appearance',
-    items: [
-      { key: 'hideThumbnails', label: 'Hide Thumbnails', desc: 'Display videos as text-only entries.' },
-      { key: 'centerLayout', label: 'Center Layout', desc: 'Center all content for a focused reading experience.' },
-      { key: 'compactMode', label: 'Compact Mode', desc: 'Reduce spacing between items.' },
-    ],
-  },
-  {
-    title: 'Content',
-    items: [
-      { key: 'hideShorts', label: 'Hide Shorts', desc: 'Remove Shorts sections from all pages.' },
-      { key: 'hideRecommendations', label: 'Hide Recommendations', desc: 'Remove recommended videos.' },
-      { key: 'hideComments', label: 'Hide Comments', desc: 'Remove comment sections from watch pages.' },
-      { key: 'hideNotifications', label: 'Hide Notifications', desc: 'Hide notification badges.' },
-    ],
-  },
-  {
-    title: 'Behavior',
-    items: [
-      { key: 'autoFocusMode', label: 'Auto Focus Mode', desc: 'Automatically enter focus mode on watch pages.' },
-      { key: 'readingModeDefault', label: 'Reading Mode Default', desc: 'Start in reading mode when opening a video.' },
-    ],
-  },
-]
-
 const FONT_SIZES = [14, 16, 18, 20, 22, 24, 28, 32]
 const FONT_FAMILIES = [
   { value: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', label: 'System (default)' },
@@ -40,81 +13,107 @@ const FONT_FAMILIES = [
   { value: '"Times New Roman", Times, serif', label: 'Times New Roman' },
 ]
 
+const THEMES: { value: DumbifySettings['theme']; label: string }[] = [
+  { value: 'light', label: 'Day' },
+  { value: 'dark', label: 'Night' },
+]
+
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className?: string,
+  text?: string
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag)
+  if (className) node.className = className
+  if (text !== undefined) node.textContent = text
+  return node
+}
+
+// Built with createElement rather than interpolated into an HTML string: six of the
+// eight font stacks contain double quotes (including the default), which terminate a
+// value="..." attribute early and silently persist a truncated stack.
+function selectRow<T extends string | number>(
+  label: string,
+  options: { value: T; label: string }[],
+  current: T,
+  onChange: (value: T) => void
+): HTMLElement {
+  const row = el('div', 'setting-row')
+  row.appendChild(el('div', 'setting-row-lbl', label))
+
+  const select = el('select', 'df-select')
+  options.forEach((o) => {
+    const opt = document.createElement('option')
+    opt.value = String(o.value)
+    opt.textContent = o.label
+    opt.selected = o.value === current
+    select.appendChild(opt)
+  })
+  select.addEventListener('change', () => {
+    const picked = options.find((o) => String(o.value) === select.value)
+    if (picked) onChange(picked.value)
+  })
+
+  row.appendChild(select)
+  return row
+}
+
+let statusEl: HTMLElement | null = null
+
+function showStatus(message: string) {
+  if (!statusEl) return
+  statusEl.textContent = message
+  setTimeout(() => {
+    if (statusEl) statusEl.textContent = 'Changes save automatically'
+  }, 2000)
+}
+
+async function save(partial: Partial<DumbifySettings>, message = 'Saved') {
+  await setSettings(partial)
+  showStatus(message)
+}
+
 function render() {
   const app = document.getElementById('app')!
   getSettings().then((s) => {
-    app.innerHTML = `
-      <h1>Dumbify Settings</h1>
-      <div class="sub">Customize your YouTube experience</div>
-      ${SECTIONS.map((sec) => `
-        <h2>${sec.title}</h2>
-        ${sec.items.map((item) => `
-          <div class="setting ${s[item.key] ? 'on' : ''}" data-key="${item.key}">
-            <div>
-              <div class="lbl ${s[item.key] ? 'lbl-on' : 'lbl-off'}">${item.label}</div>
-              <div class="desc">${item.desc}</div>
-            </div>
-            <div class="toggle ${s[item.key] ? 'on' : 'off'}">
-              <div class="toggle-knob"></div>
-            </div>
-          </div>
-        `).join('')}
-      `).join('')}
-      <h2>Font</h2>
-      <div class="setting-row">
-        <div class="setting-row-lbl">Font Size</div>
-        <select id="df-font-size" class="df-select">
-          ${FONT_SIZES.map((sz) => `<option value="${sz}" ${s.fontSize === sz ? 'selected' : ''}>${sz}px</option>`).join('')}
-        </select>
-      </div>
-      <div class="setting-row">
-        <div class="setting-row-lbl">Font Family</div>
-        <select id="df-font-family" class="df-select">
-          ${FONT_FAMILIES.map((f) => `<option value="${f.value}" ${s.fontFamily === f.value ? 'selected' : ''}>${f.label}</option>`).join('')}
-        </select>
-      </div>
-      <div class="footer">
-        <button id="reset">Reset All Settings</button>
-        <span class="status" id="status">Changes save automatically</span>
-      </div>
-    `
+    app.replaceChildren()
 
-    app.querySelectorAll('.setting').forEach((el) => {
-      el.addEventListener('click', async () => {
-        const key = (el as HTMLElement).dataset.key as keyof DumbifySettings
-        const current = await getSettings()
-        await setSettings({ [key]: !current[key] })
-        showSaved()
-        render()
-      })
-    })
+    app.appendChild(el('h1', undefined, 'Dumbify Settings'))
+    app.appendChild(el('div', 'sub', 'Typography and theme for the reading view'))
 
-    document.getElementById('df-font-size')?.addEventListener('change', async (e) => {
-      const val = parseInt((e.target as HTMLSelectElement).value)
-      await setSettings({ fontSize: val })
-      showSaved()
-    })
+    app.appendChild(el('h2', undefined, 'Appearance'))
+    app.appendChild(
+      selectRow('Theme', THEMES, s.theme, (v) => save({ theme: v }))
+    )
 
-    document.getElementById('df-font-family')?.addEventListener('change', async (e) => {
-      const val = (e.target as HTMLSelectElement).value
-      await setSettings({ fontFamily: val })
-      showSaved()
-    })
+    app.appendChild(el('h2', undefined, 'Font'))
+    app.appendChild(
+      selectRow(
+        'Font Size',
+        FONT_SIZES.map((sz) => ({ value: sz, label: `${sz}px` })),
+        s.fontSize,
+        (v) => save({ fontSize: v })
+      )
+    )
+    app.appendChild(
+      selectRow('Font Family', FONT_FAMILIES, s.fontFamily, (v) => save({ fontFamily: v }))
+    )
 
-    document.getElementById('reset')?.addEventListener('click', async () => {
+    const footer = el('div', 'footer')
+    const reset = el('button', undefined, 'Reset All Settings')
+    reset.id = 'reset'
+    reset.addEventListener('click', async () => {
       await resetSettings()
-      const status = document.getElementById('status')!
-      status.textContent = 'Reset to defaults'
-      setTimeout(() => { status.textContent = 'Changes save automatically' }, 2000)
       render()
+      showStatus('Reset to defaults')
     })
-  })
-}
+    footer.appendChild(reset)
 
-function showSaved() {
-  const status = document.getElementById('status')!
-  status.textContent = 'Saved'
-  setTimeout(() => { status.textContent = 'Changes save automatically' }, 2000)
+    statusEl = el('span', 'status', 'Changes save automatically')
+    statusEl.id = 'status'
+    footer.appendChild(statusEl)
+    app.appendChild(footer)
+  })
 }
 
 render()

@@ -10,8 +10,6 @@ export interface Video {
   verified: boolean
   live: boolean
   description?: string
-  words?: string
-  progress?: string
 }
 
 export interface Channel {
@@ -34,15 +32,6 @@ export interface WatchData {
 }
 
 export interface DumbifySettings {
-  hideThumbnails: boolean
-  hideComments: boolean
-  hideRecommendations: boolean
-  hideShorts: boolean
-  hideNotifications: boolean
-  centerLayout: boolean
-  compactMode: boolean
-  readingModeDefault: boolean
-  autoFocusMode: boolean
   fontSize: number
   fontFamily: string
   theme: 'light' | 'dark'
@@ -58,7 +47,6 @@ export type Route =
   | 'playlist'
   | 'channel'
   | 'shorts'
-  | 'unknown'
 
 export interface NavigationState {
   route: Route

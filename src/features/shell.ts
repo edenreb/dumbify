@@ -24,7 +24,6 @@ const ROUTE_NAMES: Record<Route, string> = {
   playlist: 'Playlist',
   channel: 'Channel',
   shorts: 'Shorts',
-  unknown: 'YouTube',
 }
 
 const NAV: { label: string; route: Route; path: string }[] = [

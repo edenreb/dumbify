@@ -1,57 +1,66 @@
 import { getSettings, setSettings, resetSettings } from '../core/storage'
-import type { DumbifySettings } from '../types'
-
-const SETTINGS: { key: keyof DumbifySettings; label: string; desc: string }[] = [
-  { key: 'hideThumbnails', label: 'Hide Thumbnails', desc: 'Text-only video entries' },
-  { key: 'hideComments', label: 'Hide Comments', desc: 'Remove comment sections' },
-  { key: 'hideRecommendations', label: 'Hide Recommendations', desc: 'Remove suggested videos' },
-  { key: 'hideShorts', label: 'Hide Shorts', desc: 'Remove Shorts everywhere' },
-  { key: 'hideNotifications', label: 'Hide Notifications', desc: 'Remove notification badges' },
-  { key: 'centerLayout', label: 'Center Layout', desc: 'Center everything on screen' },
-  { key: 'compactMode', label: 'Compact Mode', desc: 'Reduce spacing between items' },
-  { key: 'autoFocusMode', label: 'Auto Focus Mode', desc: 'Enter focus mode on watch page' },
-]
 
 function render() {
   const app = document.getElementById('app')!
   getSettings().then((s) => {
-    app.innerHTML = `
-      <h1>Dumbify</h1>
-      ${SETTINGS.map((item) => `
-        <div class="setting ${s[item.key] ? 'on' : ''}" data-key="${item.key}">
-          <div>
-            <div class="lbl ${s[item.key] ? 'lbl-on' : 'lbl-off'}">${item.label}</div>
-            <div class="desc">${item.desc}</div>
-          </div>
-          <div class="toggle ${s[item.key] ? 'on' : 'off'}">
-            <div class="toggle-knob"></div>
-          </div>
-        </div>
-      `).join('')}
-      <div class="actions">
-        <button id="reset">Reset</button>
-        <button id="options">Full Settings</button>
-      </div>
-      <div class="status">Changes save automatically</div>
-    `
+    app.replaceChildren()
 
-    app.querySelectorAll('.setting').forEach((el) => {
-      el.addEventListener('click', async () => {
-        const key = (el as HTMLElement).dataset.key as keyof DumbifySettings
-        const current = await getSettings()
-        await setSettings({ [key]: !current[key] })
-        render()
-      })
+    const h1 = document.createElement('h1')
+    h1.textContent = 'Dumbify'
+    app.appendChild(h1)
+
+    // Theme is the one setting worth a one-click toggle here; everything else lives
+    // on the options page.
+    const isDark = s.theme === 'dark'
+    const row = document.createElement('div')
+    row.className = `setting ${isDark ? 'on' : ''}`
+
+    const labels = document.createElement('div')
+    const lbl = document.createElement('div')
+    lbl.className = `lbl ${isDark ? 'lbl-on' : 'lbl-off'}`
+    lbl.textContent = 'Night Mode'
+    const desc = document.createElement('div')
+    desc.className = 'desc'
+    desc.textContent = isDark ? 'Dark paper, light ink' : 'Light paper, dark ink'
+    labels.appendChild(lbl)
+    labels.appendChild(desc)
+    row.appendChild(labels)
+
+    const toggle = document.createElement('div')
+    toggle.className = `toggle ${isDark ? 'on' : 'off'}`
+    const knob = document.createElement('div')
+    knob.className = 'toggle-knob'
+    toggle.appendChild(knob)
+    row.appendChild(toggle)
+
+    row.addEventListener('click', async () => {
+      await setSettings({ theme: isDark ? 'light' : 'dark' })
+      render()
     })
+    app.appendChild(row)
 
-    document.getElementById('reset')?.addEventListener('click', async () => {
+    const actions = document.createElement('div')
+    actions.className = 'actions'
+
+    const reset = document.createElement('button')
+    reset.textContent = 'Reset'
+    reset.addEventListener('click', async () => {
       await resetSettings()
       render()
     })
+    actions.appendChild(reset)
 
-    document.getElementById('options')?.addEventListener('click', () => {
-      chrome.runtime.openOptionsPage()
-    })
+    const options = document.createElement('button')
+    options.textContent = 'Full Settings'
+    options.addEventListener('click', () => chrome.runtime.openOptionsPage())
+    actions.appendChild(options)
+
+    app.appendChild(actions)
+
+    const status = document.createElement('div')
+    status.className = 'status'
+    status.textContent = 'Changes save automatically'
+    app.appendChild(status)
   })
 }
 

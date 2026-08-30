@@ -3,15 +3,6 @@ import type { DumbifySettings } from '../types'
 const SETTINGS_KEY = 'dumbify:settings'
 
 const DEFAULT_SETTINGS: DumbifySettings = {
-  hideThumbnails: true,
-  hideComments: false,
-  hideRecommendations: true,
-  hideShorts: true,
-  hideNotifications: true,
-  centerLayout: true,
-  compactMode: false,
-  readingModeDefault: false,
-  autoFocusMode: false,
   fontSize: 20,
   fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
   theme: 'light',
@@ -28,7 +19,11 @@ function set(key: string, value: unknown): Promise<void> {
 }
 
 export async function getSettings(): Promise<DumbifySettings> {
-  return (await get<DumbifySettings>(SETTINGS_KEY)) ?? DEFAULT_SETTINGS
+  // Merge over the defaults rather than returning the stored object as-is: a settings
+  // object written before a key existed would otherwise come back missing that key,
+  // and callers read it as a complete DumbifySettings.
+  const stored = await get<Partial<DumbifySettings>>(SETTINGS_KEY)
+  return { ...DEFAULT_SETTINGS, ...(stored ?? {}) }
 }
 
 export async function setSettings(partial: Partial<DumbifySettings>): Promise<void> {
