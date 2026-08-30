@@ -35,10 +35,3 @@ export function activateFeatures(ids: string[], nav: NavigationState) {
   activeIds.length = 0
   activeIds.push(...ids)
 }
-
-export function deactivateAll() {
-  for (const id of activeIds) {
-    registry.get(id)?.unmount()
-  }
-  activeIds.length = 0
-}

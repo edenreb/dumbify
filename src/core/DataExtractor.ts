@@ -1,9 +1,19 @@
 import type { Video, Channel, WatchData } from '../types'
 
+// Extraction tracing fires dozens of times per page load, so it stays off unless
+// explicitly asked for: run `localStorage['dumbify:debug'] = '1'` on youtube.com and
+// reload. `diag` keeps the last DIAG_LIMIT lines either way - it used to grow without
+// bound, since only a handful of entry points ever reset it.
+export const DEBUG = (() => {
+  try { return localStorage.getItem('dumbify:debug') === '1' } catch { return false }
+})()
+
+const DIAG_LIMIT = 200
 export const diag: string[] = []
 function log(...args: any[]) {
   diag.push(args.join(' '))
-  console.log('[Dumbify]', ...args)
+  if (diag.length > DIAG_LIMIT) diag.shift()
+  if (DEBUG) console.log('[Dumbify]', ...args)
 }
 
 function parseJSONBlock(text: string, start: number): any {
@@ -962,6 +972,7 @@ function extractSearchContinuationToken(data: any): string | null {
 
 function extractContinuationVideos(data: any): { videos: Video[]; token: string | null } {
   const videos: Video[] = []
+  const seen = new Set<string>()
   let token: string | null = null
   try {
     const eps = data?.onResponseReceivedEndpoints ?? data?.onResponseReceivedActions ?? []
@@ -999,10 +1010,12 @@ function extractContinuationVideos(data: any): { videos: Video[]; token: string 
             }
           }
         }
+        // Reuse the same collector the initial page load uses. The previous loop only
+        // understood richItemRenderer -> lockupViewModel, which is the home/channel
+        // grid shape; history and subscriptions continue as sectionList/videoRenderer
+        // and yielded nothing, silently ending pagination after page one.
         for (const item of items) {
-          const ri = item?.richItemRenderer ?? item?.richSectionRenderer?.content?.richItemRenderer
-          const lockup = ri?.content?.lockupViewModel
-          if (lockup) { const v = vidFromLockup(lockup); if (v) videos.push(v) }
+          collectItemVideos(item, videos, seen)
           if (item?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token) {
             token = item.continuationItemRenderer.continuationEndpoint.continuationCommand.token
           }
@@ -1022,12 +1035,13 @@ async function tryBrowseAPI(browseId: string): Promise<Video[]> {
   return extractFromData(data)
 }
 
+// Only routes listed here have a real feed URL. Anything else must fail loudly - see
+// fetchFreshData.
 const ROUTE_URLS: Record<string, string> = {
   home: '/',
   subscriptions: '/feed/subscriptions',
   history: '/feed/history',
   'watch-later': '/playlist?list=WL',
-  trending: '/feed/trending',
 }
 
 function parseInitialData(text: string): any | null {
@@ -1049,7 +1063,29 @@ function parseInitialData(text: string): any | null {
 }
 
 async function fetchFreshData(route = 'home'): Promise<{ videos: Video[]; token: string | null } | null> {
-  const url = (ROUTE_URLS[route] || '/') + '?df=' + Date.now()
+  // No `|| '/'` fallback. That silently served the *homepage* for any unmapped route,
+  // so /playlist?list=LL ("Liked") and /shorts/<id> rendered home-feed videos under a
+  // Playlist/blank header - wrong content, presented as if it were right. Returning
+  // null lets the caller show an honest empty state instead.
+  const path = ROUTE_URLS[route]
+  if (!path) { log(`fetchFreshData: no feed URL mapped for route "${route}"`); return null }
+
+  // If we are already on this route's page, its ytInitialData is right there in the
+  // document's own inline scripts. Re-fetching the page to parse the same JSON cost
+  // 3.3 MB on a real history feed. Home already read locally first via
+  // extractPageVideosWithContinuation; the other feeds never did.
+  if (location.pathname + location.search === path || location.pathname === path) {
+    const local = getYTDataSync('ytInitialData')
+    if (local) {
+      const videos = extractFromData(local)
+      if (videos.length) {
+        log(`fetchFreshData(${route}): served from this page's own ytInitialData, no fetch`)
+        return { videos, token: extractContinuationToken(local) }
+      }
+    }
+  }
+
+  const url = path + '?df=' + Date.now()
   try {
     const res = await fetch(location.origin + url, {
       credentials: 'include',
@@ -1162,7 +1198,10 @@ export async function fetchChannelPage(channelId: string): Promise<ChannelPageRe
   return { channel: channelFromAPI, videos, continuation: token }
 }
 
-export async function fetchChannelContinuation(token: string): Promise<{ videos: Video[]; token: string | null }> {
+// Paginates any browse feed - home, subscriptions, history, watch-later, channel -
+// since they all continue through the same `browse` endpoint with a continuation
+// token. Named for the channel feed originally, which was the only caller.
+export async function fetchBrowseContinuation(token: string): Promise<{ videos: Video[]; token: string | null }> {
   const data = await callInnerTube('browse', { continuation: token })
   if (!data) return { videos: [], token: null }
   return extractContinuationVideos(data)
@@ -1263,11 +1302,16 @@ export async function fetchContinuation(token: string, route = 'home', searchQue
     return { videos: result.videos, token: result.continuation, items: result.items }
   }
   if (route === 'channel') {
-    if (token) return fetchChannelContinuation(token)
+    if (token) return fetchBrowseContinuation(token)
     const result = await fetchChannelPage(channelId)
     if (!result) return { videos: [], token: null }
     return { videos: result.videos, token: result.continuation }
   }
+  // Every other browse feed paginates the same way the channel feed does. Without
+  // this, the fall-through below re-fetched page 1 on every scroll: its videos all
+  // deduped away in appendVideos, so the page never grew, so the bottom-of-feed
+  // check stayed true and fired another full-page fetch on the next scroll event.
+  if (token) return fetchBrowseContinuation(token)
   const result = await fetchFreshData(route)
   if (!result) return { videos: [], token: null }
   log(`fetchContinuation: got ${result.videos.length} videos for ${route}, token=${result.token ? 'yes' : 'no'}`)
@@ -1329,45 +1373,7 @@ export async function extractPageVideosWithContinuation(): Promise<PageResult> {
   return { videos: domVideos, channels: [], continuation: null }
 }
 
-export async function extractPageVideos(): Promise<Video[]> {
-  diag.length = 0
-  log('=== extractPageVideos ===')
 
-  const syncData = getYTDataSync('ytInitialData')
-  if (syncData) { const v = extractFromData(syncData); if (v.length) { log(`OK: ${v.length} videos`); return v } }
-
-  const apiVideos = await tryBrowseAPI('FEwhat_to_watch')
-  if (apiVideos.length) { log(`OK: ${apiVideos.length} videos from API`); return apiVideos }
-
-  const asyncData = await getYTDataAsync('ytInitialData')
-  if (asyncData) { const v = extractFromData(asyncData); if (v.length) { log(`OK: ${v.length} videos`); return v } }
-
-  const domVideos = extractFromDOM()
-  if (domVideos.length) { log(`OK: ${domVideos.length} videos from DOM`); return domVideos }
-
-  log('ALL methods FAILED')
-  return []
-}
-
-export async function extractHistoryVideos(): Promise<Video[]> {
-  diag.length = 0
-  log('=== extractHistoryVideos ===')
-
-  const syncData = getYTDataSync('ytInitialData')
-  if (syncData) { const v = extractFromData(syncData); if (v.length) { log(`OK: ${v.length} videos`); return v } }
-
-  const domVideos = extractFromDOM()
-  if (domVideos.length) { log(`OK: ${domVideos.length} videos from DOM`); return domVideos }
-
-  const apiVideos = await tryBrowseAPI('FEhistory')
-  if (apiVideos.length) { log(`OK: ${apiVideos.length} videos from API`); return apiVideos }
-
-  const asyncData = await getYTDataAsync('ytInitialData')
-  if (asyncData) { const v = extractFromData(asyncData); if (v.length) { log(`OK: ${v.length} videos`); return v } }
-
-  log('ALL methods FAILED')
-  return []
-}
 
 // YouTube serves a 200 for dead videos, playlists and channels and reports the
 // failure inside the page payload instead: playabilityStatus for /watch, an ERROR

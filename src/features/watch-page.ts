@@ -14,6 +14,7 @@ import {
   fetchCommentReplies,
   performCommentAction,
   localComment,
+  DEBUG,
   type CommentItem,
 } from '../core/DataExtractor'
 import { navigateTo } from '../core/PageManager'
@@ -39,6 +40,8 @@ let aspectBound = false
 let aspectTimer: number | null = null
 let boundVideo: HTMLVideoElement | null = null
 let likeObserver: MutationObserver | null = null
+let likeWaitObserver: MutationObserver | null = null
+let commentsWaitObserver: MutationObserver | null = null
 let commentsOpen = false
 let commentsSection: HTMLElement | null = null
 let commentsBtnEl: HTMLButtonElement | null = null
@@ -53,6 +56,27 @@ let createParams: string | null = null
 const commentReplies = new Map<string, CommentItem[]>()
 const commentRepliesNextToken = new Map<string, string | null>()
 const expandedReplies = new Set<string>()
+
+// Waits for a native YouTube element to appear, then hands off. Bounded on purpose:
+// an element that never shows up (signed out, comments disabled, markup changed)
+// otherwise leaves a MutationObserver running against all of document.body - one of
+// the busiest DOMs on the web - for the rest of the page's life.
+function waitForNative(found: () => boolean, onFound: () => void, timeout = 15000): MutationObserver {
+  const obs = new MutationObserver(() => {
+    if (!found()) return
+    obs.disconnect()
+    onFound()
+  })
+  obs.observe(document.body, { childList: true, subtree: true })
+  window.setTimeout(() => obs.disconnect(), timeout)
+  return obs
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el || typeof el.closest !== 'function') return false
+  return !!el.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')
+}
 
 function findNativeComments(): HTMLElement | null {
   return (
@@ -237,19 +261,15 @@ function watchLikeState(btn: HTMLButtonElement) {
     syncLikeState(btn)
     return
   }
-  const wait = new MutationObserver(() => {
-    if (!nativeLikeEl()) return
-    wait.disconnect()
-    watchLikeState(btn)
-  })
-  wait.observe(document.body, { childList: true, subtree: true })
+  likeWaitObserver?.disconnect()
+  likeWaitObserver = waitForNative(() => !!nativeLikeEl(), () => watchLikeState(btn))
 }
 
 function clickLikeTarget(btn: HTMLButtonElement, target: HTMLElement) {
   const wasLiked = nativeLikeState()
   setLikeUi(btn, !wasLiked)
   target.click()
-  console.log('[dumbify] clicked like target:', target)
+  if (DEBUG) console.log('[dumbify] clicked like target:', target)
   window.setTimeout(() => syncLikeState(btn), 600)
 }
 
@@ -369,7 +389,7 @@ function clickNativeWl(btn: HTMLButtonElement) {
       const { checked, target } = watchLaterRowState(row)
       target.click()
       setWlUi(btn, !checked)
-      console.log('[dumbify] toggled watch later:', !checked)
+      if (DEBUG) console.log('[dumbify] toggled watch later:', !checked)
       window.setTimeout(closeSaveDialog, 400)
     } else if (tries >= 15) {
       window.clearInterval(poll)
@@ -391,16 +411,19 @@ function checkPlaybackHealth() {
   window.setTimeout(() => {
     const video = movedPlayer?.querySelector('video')
     if (!video || !movedPlayer) return
-    console.log(
-      '[dumbify] video state:',
-      JSON.stringify({
-        src: video.currentSrc?.slice(0, 100),
-        readyState: video.readyState,
-        error: video.error ? `${video.error.code}: ${video.error.message}` : null,
-      })
-    )
+    // currentSrc is a signed googlevideo URL - only logged behind the debug flag.
+    if (DEBUG) {
+      console.log(
+        '[dumbify] video state:',
+        JSON.stringify({
+          src: video.currentSrc?.slice(0, 100),
+          readyState: video.readyState,
+          error: video.error ? `${video.error.code}: ${video.error.message}` : null,
+        })
+      )
+    }
     if (video.readyState === 0 && video.currentSrc && !video.error) {
-      console.log('[dumbify] nudging video.load()')
+      if (DEBUG) console.log('[dumbify] nudging video.load()')
       video.load()
     }
   }, 4000)
@@ -408,7 +431,7 @@ function checkPlaybackHealth() {
 
 function movePlayerNow(target: HTMLElement, el: HTMLElement) {
   if (movedPlayer) return
-  console.log('[dumbify] player found:', el.tagName, el.id || el.className)
+  if (DEBUG) console.log('[dumbify] player found:', el.tagName, el.id || el.className)
   originalParent = el.parentElement
   originalSibling = el.nextSibling
   el.classList.add('df-native-player')
@@ -487,6 +510,8 @@ function restorePlayer() {
   }
   likeObserver?.disconnect()
   likeObserver = null
+  likeWaitObserver?.disconnect()
+  likeWaitObserver = null
   unbindAspectSync()
   if (onFullscreenChange) {
     document.removeEventListener('fullscreenchange', onFullscreenChange)
@@ -570,55 +595,12 @@ function extractComments(): CommentItem[] {
   return list
 }
 
-function postComment(comment: string): Promise<'ok' | 'signin' | 'failed'> {
-  return new Promise((resolve) => {
-    const find = (sel: string): HTMLElement | null => document.querySelector<HTMLElement>(sel)
-    const findPlaceholder = () =>
-      find('ytd-comments ytd-comment-simplebox-renderer #placeholder-area, ytd-comment-simplebox-renderer #placeholder-area')
-
-    const postViaApi = () => postCommentViaApi(comment).then(resolve)
-
-    const submitNative = () => {
-      const editable = find('ytd-comments #contenteditable-root, ytd-comment-simplebox-renderer #contenteditable-root, #contenteditable-root')
-      if (!editable) {
-        postViaApi()
-        return
-      }
-      editable.focus()
-      const inserted = document.execCommand('insertText', false, comment)
-      if (!inserted) {
-        editable.textContent = comment
-        editable.dispatchEvent(
-          new InputEvent('input', { bubbles: true, inputType: 'insertText', data: comment })
-        )
-      }
-      window.setTimeout(() => {
-        const submit = find('ytd-comments #submit-button button, ytd-comment-simplebox-renderer #submit-button button, #submit-button button')
-        if (submit) submit.click()
-        else postViaApi()
-      }, 200)
-      window.setTimeout(() => resolve('ok'), 400)
-    }
-
-    let attempts = 0
-    const tryNative = () => {
-      const placeholder = findPlaceholder()
-      if (placeholder) {
-        placeholder.click()
-        window.setTimeout(submitNative, 300)
-        return
-      }
-      attempts += 1
-      if (attempts >= 8) {
-        postViaApi()
-        return
-      }
-      window.setTimeout(tryNative, 250)
-    }
-    tryNative()
-  })
-}
-
+// Posting goes through the API only. The previous native path drove YouTube's own
+// composer via execCommand + a simulated submit click, then resolved 'ok' on a 400ms
+// timer regardless of what actually happened - so a comment that never posted still
+// reported "Posted", and when it fell back to the API the timer beat the request and
+// reported success while it was still in flight. postCommentViaApi returns the real
+// outcome, so the button can tell the truth.
 async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'failed'> {
   let params = createParams
   if (!params) {
@@ -862,11 +844,13 @@ function renderComments(list: HTMLElement, source: CommentItem[] | null = null) 
   const comments = source ?? extractComments()
   list.innerHTML = ''
   if (comments.length === 0) {
-    const threads = document.querySelectorAll('ytd-comment-thread-renderer').length
-    const withText = [...document.querySelectorAll('ytd-comment-thread-renderer')].filter(
-      (t) => t.querySelector('#content-text')?.textContent?.trim()
-    ).length
-    console.log('[dumbify] no comments rendered; threads:', threads, 'with text:', withText)
+    if (DEBUG) {
+      const threads = document.querySelectorAll('ytd-comment-thread-renderer').length
+      const withText = [...document.querySelectorAll('ytd-comment-thread-renderer')].filter(
+        (t) => t.querySelector('#content-text')?.textContent?.trim()
+      ).length
+      console.log('[dumbify] no comments rendered; threads:', threads, 'with text:', withText)
+    }
     const empty = document.createElement('p')
     empty.className = 'df-comment-empty'
     empty.textContent = 'No comments yet'
@@ -904,7 +888,7 @@ function buildCommentsSection(): HTMLElement {
     input.style.height = ''
     postBtn.disabled = true
     postBtn.textContent = 'Posting…'
-    const r = await postComment(text)
+    const r = await postCommentViaApi(text)
     postBtn.textContent = r === 'ok' ? 'Posted' : r === 'signin' ? 'Sign in to post' : 'Failed'
     window.setTimeout(() => {
       postBtn.disabled = false
@@ -986,12 +970,8 @@ function watchComments() {
     updateCommentsToggle()
     return
   }
-  const wait = new MutationObserver(() => {
-    if (!findNativeComments()) return
-    wait.disconnect()
-    watchComments()
-  })
-  wait.observe(document.body, { childList: true, subtree: true })
+  commentsWaitObserver?.disconnect()
+  commentsWaitObserver = waitForNative(() => !!findNativeComments(), () => watchComments())
 }
 
 function resetComments() {
@@ -1000,6 +980,8 @@ function resetComments() {
   commentsBtnEl = null
   commentsObserver?.disconnect()
   commentsObserver = null
+  commentsWaitObserver?.disconnect()
+  commentsWaitObserver = null
   if (renderTimer !== null) {
     window.clearTimeout(renderTimer)
     renderTimer = null
@@ -1080,11 +1062,13 @@ function buildWatchPage(nav: NavigationState) {
       toggleFullscreen()
     }
     onFullscreenKey = (e) => {
-      if (e.key === 'f' || e.key === 'F') {
-        e.preventDefault()
-        e.stopImmediatePropagation()
-        toggleFullscreen()
-      }
+      if (e.key !== 'f' && e.key !== 'F') return
+      // This page also mounts the comment composer and per-comment reply boxes. A
+      // bare document-level capture handler swallowed every "f" typed into them.
+      if (isTypingTarget(e.target)) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      toggleFullscreen()
     }
     document.addEventListener('fullscreenchange', onFullscreenChange)
     document.addEventListener('click', onFullscreenClick, true)
@@ -1173,7 +1157,7 @@ function buildWatchPage(nav: NavigationState) {
   description.appendChild(text)
   content!.appendChild(description)
 
-  logLikeDiagnostics()
+  if (DEBUG) logLikeDiagnostics()
 }
 
 export const watchPageFeature: Feature = {

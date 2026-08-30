@@ -75,16 +75,15 @@ export function startPageManager() {
   lastHref = location.href
 }
 
-export function stopPageManager() {
-  window.removeEventListener('popstate', fire)
-  window.removeEventListener('yt-navigate-finish', fire)
-}
-
 export function getNavigationState(): NavigationState {
   return buildState()
 }
 
 export function navigateTo(path: string) {
+  // Same-origin paths only. buildStateFromPath treats anything not starting with "/"
+  // as an absolute URL, which would make this an open-redirect sink the moment a
+  // caller passed through data from the page.
+  if (!path.startsWith('/')) return
   const state = buildStateFromPath(path)
   const href = state.href
   if (href === location.href) return

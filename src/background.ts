@@ -9,10 +9,6 @@ interface YTCfgMessage {
 
 type BGMessage = YTDataMessage | YTCfgMessage
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({ 'dumbify:installed': true })
-})
-
 chrome.runtime.onMessage.addListener((message: BGMessage, sender, sendResponse) => {
   if (message.type === 'GET_YT_DATA') {
     const tabId = sender.tab?.id

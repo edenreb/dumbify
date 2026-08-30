@@ -70,8 +70,16 @@ export function mountUI() {
   })
 }
 
+// Full teardown, used as the failure path in content.ts: mountUI locks scrolling and
+// repaints the page background, so removing the root alone would leave YouTube
+// unscrollable underneath.
 export function unmountUI() {
   root?.remove()
+  for (const node of [document.documentElement, document.body]) {
+    node.style.overflow = ''
+    node.style.overscrollBehavior = ''
+    node.style.backgroundColor = ''
+  }
 }
 
 export function renderNotFound(detail?: string) {

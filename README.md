@@ -23,8 +23,7 @@ YouTube's UI is built to maximize watch time, not help you find or finish a vide
 - **Distraction-free watch page** — title, description, and comments; no autoplay, no end-screen suggestions, no sidebar of "up next"
 - **Focus mode** — press `F` for a full-screen, chrome-free player
 - **Real interactions, not a read-only mirror** — subscribe/unsubscribe, like comments, reply to comments, view replies, all backed by YouTube's actual API using your signed-in session
-- **Granular hide toggles** — thumbnails, Shorts, recommendations, comments, notification badges
-- **Typography controls** — 8 font sizes, 8 font families (serif, sans, mono), center layout, compact mode
+- **Typography controls** — 8 font sizes, 8 font families (serif, sans, mono), light/dark theme
 - **Keyboard-driven** — `Cmd/Ctrl+K` to search, `F` for focus mode
 - **Infinite scroll** — loads more of the real feed as you go
 
@@ -49,14 +48,14 @@ npm run preview  # vite preview
 
 ```bash
 npx tsc --noEmit                        # typecheck
-npx tsc -p tsconfig.node.json --noEmit  # typecheck vite.config.ts, if changed
+npx tsc -p tsconfig.node.json --noEmit  # typecheck vite.config.ts + manifest.ts, if changed
 ```
 
 After any change: `npm run build`, then reload the extension from `chrome://extensions` and check the console for `[Dumbify]`-prefixed errors.
 
 ## Tech stack
 
-TypeScript + Vite (via [`@crxjs/vite-plugin`](https://crxjs.dev/vite-plugin)), Manifest V3, Tailwind CSS 4. No UI framework — plain DOM.
+TypeScript + Vite (via [`@crxjs/vite-plugin`](https://crxjs.dev/vite-plugin)), Manifest V3, hand-written CSS. No UI framework, no runtime dependencies — plain DOM.
 
 ## Project structure
 
@@ -64,7 +63,7 @@ TypeScript + Vite (via [`@crxjs/vite-plugin`](https://crxjs.dev/vite-plugin)), M
 src/
   content.ts        content script entry — routes pages to features
   background.ts     service worker — page-context data bridging
-  core/              DataExtractor, DOMEngine, FeatureManager, PageManager, UIEngine, storage
+  core/              DataExtractor, FeatureManager, PageManager, UIEngine, storage
   features/
     shell.ts         top bar, search, sidebar (always active)
     home-feed.ts      home / search / channel / history / subscriptions / watch later / playlists
