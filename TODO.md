@@ -4,17 +4,6 @@
 
 Found while testing the extension against real YouTube.
 
-## Sidebar: link 'Your Videos' to YouTube Studio
-
-The sidebar's 'Your Videos' entry is not wired to anything. Point it at the
-creator studio (`studio.youtube.com`) so it opens the user's own video list.
-
-## Sidebar: rename 'Channel' to 'Your Channel' and link it
-
-Rename the 'Channel' sidebar entry to 'Your Channel' and link it to the signed-in
-user's own channel. Needs the user's own channel id resolved at runtime — it is not
-the same as whatever channel page happens to be open.
-
 ## Playlists do not work
 
 Playlists (Liked videos, sounds, Watch Later) do not render at all in this version.
@@ -53,6 +42,57 @@ Completed:
 - Files modified:
 - Testing:
 
+
+## Codebase audit: phases 1-3 (correctness, trust, cleanup)
+
+Completed:
+- Date: 2026-08-30
+- Changes:
+  - **Pagination.** `fetchContinuation` ignored its continuation token for every route
+    except channel/search and re-fetched page 1 instead. Its videos all deduped away, so
+    the page never grew, so the bottom-of-feed check stayed true and fired another
+    full-page fetch on every further scroll event. Now routes through the browse
+    continuation endpoint; `extractContinuationVideos` reuses `collectItemVideos` so
+    sectionList feeds (history, subscriptions) page too, not just lockup grids. Added a
+    stop condition: a fetch yielding nothing new ends scroll-loading.
+  - **Feature lifecycle.** `home-feed.update()` called `mount()` without `unmount()`,
+    leaving every prior page's scroll listener attached and still calling loadMore.
+  - **Comment posting.** Dropped the native-composer path, which resolved 'ok' on a 400ms
+    timer regardless of outcome (and beat its own API fallback), so "Posted" could appear
+    for a comment that never posted. Posting now reports the real API result.
+  - **Fullscreen hotkey.** `f` was captured document-wide with no target check, making the
+    letter untypeable in the comment and reply composers on the same page.
+  - **Observers.** The two fallback MutationObservers watching all of document.body for a
+    native element were never disconnected when that element never appeared. Now bounded
+    and torn down.
+  - **Settings.** 9 of 12 settings had no consumer anywhere, and the font settings wrote
+    CSS variables no rule read - the popup and options page drove ~10 controls that did
+    nothing. Deleted the dead keys; wired `--df-font-family`/`--df-font-size` into
+    `#dumbify-root` so font settings work; rebuilt the popup around the theme toggle;
+    rebuilt the options page with `createElement` (six of eight font stacks contain
+    double quotes, which broke `value="..."` and persisted truncated stacks).
+    `getSettings` now merges over defaults instead of returning stored values as-is.
+  - **Blank-page failure.** `main.css` hides `<body>` on inject; nothing un-hid it if the
+    content script threw before mounting. `init()` now catches, sets `html.df-failed`, and
+    tears down - a failed start degrades to plain YouTube.
+  - **Unmapped routes** no longer fall back to the homepage (`ROUTE_URLS[route] || '/'`),
+    which is why Liked and /shorts rendered home-feed videos under the wrong header.
+  - **Cleanup.** Deleted `DOMEngine.ts` (unreachable), 5 dead exports, `Route.'unknown'`,
+    `Video.words`/`progress`, the orphaned `dumbify:installed` write, 33 orphaned CSS rules
+    (CSS bundle 25.3 -> 21.0 kB), and Tailwind + autoprefixer + `postcss.config.js`
+    (Tailwind emitted zero output - `main.css` never imported it). Fixed
+    `tsconfig.node.json`, which had never passed (TS6307 + a nonexistent
+    `tailwind.config.js`). Debug logging is now behind `localStorage['dumbify:debug']`.
+    All navigation goes through `navigateTo`, which now rejects non-same-origin paths.
+- Files modified: src/core/DataExtractor.ts, src/core/PageManager.ts, src/core/UIEngine.ts,
+  src/core/FeatureManager.ts, src/core/storage.ts, src/content.ts, src/background.ts,
+  src/types.ts, src/features/home-feed.ts, src/features/watch-page.ts, src/features/shell.ts,
+  src/options/index.ts, src/popup/index.ts, src/styles/main.css, package.json,
+  tsconfig.node.json, README.md, CLAUDE.md, CURRENT_TASK.md
+- Files deleted: src/core/DOMEngine.ts, postcss.config.js
+- Testing: `npx tsc --noEmit` and `npx tsc -p tsconfig.node.json --noEmit` both pass (the
+  second for the first time), `npm run build` passes. NOT yet manually verified in Chrome -
+  see the verification checklist in the audit report.
 
 ## Comment interactions: like, view replies, reply
 

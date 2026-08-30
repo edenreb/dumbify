@@ -1,4 +1,4 @@
-import { mountUI } from './core/UIEngine'
+import { mountUI, unmountUI } from './core/UIEngine'
 import { startPageManager, onNavigate, getNavigationState } from './core/PageManager'
 import { registerFeature, activateFeatures } from './core/FeatureManager'
 import { shellFeature } from './features/shell'
@@ -31,14 +31,23 @@ function syncFeatures() {
 }
 
 function init() {
-  mountUI()
-  startPageManager()
-  syncFeatures()
+  try {
+    mountUI()
+    startPageManager()
+    syncFeatures()
 
-  onNavigate((nav) => {
-    const ids = getFeatureIdsForRoute(nav.route)
-    activateFeatures(ids, nav)
-  })
+    onNavigate((nav) => {
+      const ids = getFeatureIdsForRoute(nav.route)
+      activateFeatures(ids, nav)
+    })
+  } catch (err) {
+    // main.css hides <body> the moment it is injected, so a throw anywhere above
+    // would otherwise strand the user on a blank youtube.com. Hand the real page
+    // back instead of failing invisibly.
+    console.error('[Dumbify] failed to start, falling back to YouTube:', err)
+    document.documentElement.classList.add('df-failed')
+    unmountUI()
+  }
 }
 
 if (document.readyState === 'loading') {
