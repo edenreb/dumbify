@@ -1,7 +1,7 @@
 import type { NavigationState, Video, Channel, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { content, root } from '../core/UIEngine'
-import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, setChannelSubscription } from '../core/DataExtractor'
+import { content, root, renderNotFound } from '../core/UIEngine'
+import { extractPageError, extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, setChannelSubscription, diag } from '../core/DataExtractor'
 import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
 import { navigateTo } from '../core/PageManager'
 
@@ -489,6 +489,18 @@ export const homeFeedFeature: Feature = {
   mount(nav: NavigationState) {
     feedCancelled = false
     content!.innerHTML = ''
+
+    // A page that genuinely doesn't exist gets the 404. A real YouTube page this
+    // extension simply has no view for (trending, gaming, account) goes home.
+    const pageError = extractPageError()
+    if (pageError) {
+      renderNotFound(pageError)
+      return
+    }
+    if (nav.route === 'unknown') {
+      location.replace('/')
+      return
+    }
 
     renderPageHead(nav)
     renderToolbar(nav.route)

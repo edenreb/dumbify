@@ -21,7 +21,7 @@ function getFeatureIdsForRoute(route: string): string[] {
     case 'playlist':     return [...base, 'home-feed']
     case 'channel':      return [...base, 'home-feed']
     case 'search':       return [...base, 'home-feed']
-    default:             return [...base, 'home-feed']
+    default:             return [...base, 'home-feed'] // includes 'unknown' (404)
   }
 }
 
