@@ -11,10 +11,12 @@ function getRoute(pathname: string, searchParams: URLSearchParams): Route {
   if (pathname === '/feed/subscriptions') return 'subscriptions'
   if (pathname === '/feed/history') return 'history'
   if (pathname === '/playlist' && searchParams.get('list') === 'WL') return 'watch-later'
-  if (pathname === '/playlist') return 'playlist'
-  if (pathname.startsWith('/channel/') || pathname.startsWith('/@')) return 'channel'
+  if (pathname === '/playlist' || pathname === '/feed/playlists') return 'playlist'
+  if (pathname.startsWith('/channel/') || pathname.startsWith('/@') ||
+      pathname.startsWith('/c/') || pathname.startsWith('/user/')) return 'channel'
   if (pathname.startsWith('/shorts/')) return 'shorts'
-  return 'home'
+  if (pathname === '/' || pathname === '') return 'home'
+  return 'unknown'
 }
 
 function buildState(): NavigationState {

@@ -1369,6 +1369,45 @@ export async function extractHistoryVideos(): Promise<Video[]> {
   return []
 }
 
+// YouTube serves a 200 for dead videos, playlists and channels and reports the
+// failure inside the page payload instead: playabilityStatus for /watch, an ERROR
+// alertRenderer for browse pages. Returns YouTube's own reason, or null if fine.
+export function extractPageError(): string | null {
+  // A genuinely missing playlist/channel is a real HTTP 404 whose body is just an
+  // iframe shell - no ytInitialData, so there is no alert to read, and the feed's
+  // own fallbacks would happily render the home feed under the wrong heading.
+  if (document.title === '404 Not Found' || document.querySelector('iframe[src*="/error?src=404"]')) {
+    return 'This page could not be found on YouTube.'
+  }
+  const ps = location.pathname === '/watch'
+    ? extractFromScripts('ytInitialPlayerResponse')?.playabilityStatus
+    : null
+  if (ps && (ps.status === 'ERROR' || ps.status === 'UNPLAYABLE' || ps.status === 'LOGIN_REQUIRED')) {
+    return nodeText(ps.reason) || nodeText(ps.messages?.[0]) || 'This video is unavailable.'
+  }
+  const data = extractFromScripts('ytInitialData')
+  for (const a of data?.alerts ?? []) {
+    const r = a?.alertRenderer ?? a?.alertWithButtonRenderer
+    // INFO alerts are ordinary (a real playlist page carries one) - only ERROR counts.
+    if (r?.type !== 'ERROR') continue
+    const t = nodeText(r.text)
+    if (t) return t
+  }
+  // Signed in, a dead playlist comes back as a normal-looking page with neither an
+  // alert nor a 404 shell - just an empty contents object. Verified against live
+  // YouTube: every working browse page has a renderer under contents, including a
+  // search with no results.
+  if (data && location.pathname !== '/watch' && !Object.keys(data.contents ?? {}).length) {
+    return 'This page could not be found on YouTube.'
+  }
+  return null
+}
+
+function nodeText(n: any): string {
+  if (typeof n === 'string') return n
+  return n?.simpleText ?? n?.runs?.map((x: any) => x.text).join('') ?? ''
+}
+
 export function extractWatchData(): WatchData {
   const pr = extractFromScripts('ytInitialPlayerResponse')
   if (pr?.videoDetails) {

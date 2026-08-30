@@ -46,6 +46,39 @@ Completed:
 - Testing:
 
 
+## Dead pages: show a 404 instead of an unrelated feed
+
+Completed:
+- Date: 2026-08-31
+- Changes: A page that doesn't exist used to render whatever the feed's fallback
+  chain could find - `browseId: FEwhat_to_watch`, the home feed, under whatever
+  heading the route asked for - so a dead playlist never even looked empty.
+  `extractPageError()` in `DataExtractor` detects the three shapes a dead YouTube
+  page takes, all confirmed against live YouTube because they vary by how the page
+  is loaded: a real HTTP 404 whose body is a bare iframe shell with no
+  `ytInitialData` at all (bad playlist id or @handle, fetched or signed out); a 200
+  carrying the failure in its payload, either `playabilityStatus` on `/watch` or an
+  ERROR `alertRenderer` on browse pages; and, signed in, a normal-looking page whose
+  `ytInitialData.contents` is an empty object with no alert at all. INFO alerts are
+  deliberately ignored - a working playlist page carries one. Both the watch page
+  and the feed check before loading rather than when the result comes back empty.
+  `renderNotFound()` lives in `UIEngine` since both features need it, and shows
+  YouTube's own reason as a subline. Unmatched paths resolve to the `unknown` route:
+  a real YouTube page this extension has no view for (trending, gaming, account)
+  redirects home rather than 404ing, and `/feed/playlists`, `/c/<name>` and
+  `/user/<name>` joined the route table since the sidebar and older channel links
+  point at them.
+- Files modified: src/core/DataExtractor.ts, src/core/PageManager.ts,
+  src/core/UIEngine.ts, src/features/home-feed.ts, src/features/watch-page.ts,
+  src/content.ts, src/styles/main.css
+- Testing: `npx tsc --noEmit` and `npm run build` pass. Verified in Chrome against
+  real signed-in YouTube. 404s correctly: a bad playlist id, a bad channel id
+  ("This channel does not exist."), a bad @handle, and a dead video id ("This video
+  is unavailable"). Does not 404: the home feed, subscriptions, `/playlist?list=LL`,
+  a search with no real matches, and a normal watch page (player mounts, 458px tall
+  in an 862px viewport). `/feed/trending` redirects home as intended.
+
+
 ## Shorts: redirect to the normal watch page, and fit tall videos
 
 Completed:

@@ -74,6 +74,32 @@ export function unmountUI() {
   root?.remove()
 }
 
+export function renderNotFound(detail?: string) {
+  if (!content) return
+  const wrap = document.createElement('div')
+  wrap.className = 'df-404'
+
+  const msg = document.createElement('p')
+  msg.className = 'df-404-msg'
+  msg.textContent = "404 Oops, the page you were looking for doesn't exist."
+  wrap.appendChild(msg)
+
+  if (detail) {
+    const note = document.createElement('p')
+    note.className = 'df-404-detail'
+    note.textContent = detail
+    wrap.appendChild(note)
+  }
+
+  const back = document.createElement('a')
+  back.className = 'df-404-back'
+  back.href = '/'
+  back.textContent = 'Back to home \u2192'
+  wrap.appendChild(back)
+
+  content.appendChild(wrap)
+}
+
 export function clearContent() {
   if (content) content.innerHTML = ''
 }
