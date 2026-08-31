@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS: DumbifySettings = {
   fontSize: 20,
   fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
   fontColor: '#1d1d1d',
+  fontColorDark: '#f3f0e8',
   theme: 'light',
 }
 

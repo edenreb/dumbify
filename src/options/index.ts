@@ -80,7 +80,7 @@ function updatePreview(s: DumbifySettings) {
   if (!text) return
   text.style.fontFamily = s.fontFamily
   text.style.fontSize = s.fontSize + 'px'
-  text.style.color = s.fontColor
+  text.style.color = s.theme === 'dark' ? s.fontColorDark : s.fontColor
 }
 
 function render() {
@@ -97,6 +97,10 @@ function render() {
       selectRow('Theme', THEMES, s.theme, (v) => {
         save({ theme: v })
         applyPageTheme(v)
+        const colorKey = v === 'dark' ? 'fontColorDark' : 'fontColor'
+        colorInput.value = s[colorKey]
+        hexLabel.textContent = s[colorKey]
+        updatePreview({ ...s, theme: v })
       })
     )
 
@@ -123,16 +127,19 @@ function render() {
     const colorWrap = el('div', 'color-input-wrap')
     const colorInput = document.createElement('input')
     colorInput.type = 'color'
-    colorInput.value = s.fontColor
+    const colorKey = s.theme === 'dark' ? 'fontColorDark' : 'fontColor'
+    colorInput.value = s[colorKey]
     colorInput.addEventListener('input', () => {
-      s.fontColor = colorInput.value
+      const key = s.theme === 'dark' ? 'fontColorDark' : 'fontColor'
+      s[key] = colorInput.value
       hexLabel.textContent = colorInput.value
       updatePreview(s)
     })
     colorInput.addEventListener('change', () => {
-      save({ fontColor: colorInput.value })
+      const key = s.theme === 'dark' ? 'fontColorDark' : 'fontColor'
+      save({ [key]: colorInput.value })
     })
-    const hexLabel = el('span', 'color-hex', s.fontColor)
+    const hexLabel = el('span', 'color-hex', s[colorKey])
     colorWrap.appendChild(colorInput)
     colorWrap.appendChild(hexLabel)
     colorRow.appendChild(colorWrap)
@@ -145,7 +152,7 @@ function render() {
     previewText.id = 'preview-text'
     previewText.style.fontFamily = s.fontFamily
     previewText.style.fontSize = s.fontSize + 'px'
-    previewText.style.color = s.fontColor
+    previewText.style.color = s.theme === 'dark' ? s.fontColorDark : s.fontColor
     previewBox.appendChild(previewText)
     app.appendChild(previewBox)
 
