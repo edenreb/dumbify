@@ -116,19 +116,32 @@ html.df-failed #dumbify-root {
   min-height: 100vh;
 }
 
-#dumbify-root.has-bg .df-layout {
-  border-radius: 16px;
-  margin-top: 16px;
-  margin-bottom: 16px;
-  min-height: calc(100vh - 32px);
-}
-
 @media (min-width: 1024px) {
   .df-layout {
     flex-direction: row;
-    gap: 64px;
-    padding: 0 40px;
+    gap: 24px;
+    padding: 0 24px;
   }
+}
+
+/* ---- Background image panels ---- */
+
+#dumbify-root.has-bg .df-layout {
+  background: transparent;
+}
+
+#dumbify-root.has-bg .df-sidebar {
+  border-radius: 16px;
+  margin-top: 24px;
+  padding: 24px 20px;
+}
+
+#dumbify-root.has-bg .df-main {
+  border-radius: 16px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  padding: 24px 32px;
+  min-height: calc(100vh - 48px);
 }
 
 /* ---- Sidebar ---- */

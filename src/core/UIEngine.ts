@@ -6,7 +6,6 @@ export let root: HTMLElement
 export let content: HTMLElement
 export let sidebar: HTMLElement | null = null
 export let main: HTMLElement | null = null
-let layout: HTMLElement | null = null
 
 const LIGHT_BG = '#f7f5ee'
 const DARK_BG = '#1d1d1d'
@@ -18,46 +17,36 @@ function applyFont(s: DumbifySettings) {
   root.style.setProperty('--df-font-color', s.theme === 'dark' ? s.fontColorDark : s.fontColor)
 }
 
+function panelBg(s: DumbifySettings, el: HTMLElement) {
+  if (!s.backgroundImage) {
+    el.style.removeProperty('background')
+    return
+  }
+  const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
+  const hex = bg.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+  el.style.setProperty('background', `rgba(${r},${g},${b},${s.bgOpacity})`, 'important')
+}
+
 function applyTheme(s: DumbifySettings) {
   if (!root) return
   root.classList.toggle('dark', s.theme === 'dark')
   root.classList.toggle('has-bg', !!s.backgroundImage)
   root.style.setProperty('--bg-opacity', String(s.bgOpacity))
   const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
-  const bgImage = s.backgroundImage
-    ? `url(${s.backgroundImage})`
-    : ''
-  const bgStyles = bgImage
-    ? `${bgImage} center/cover fixed`
-    : bg
+  const bgImage = s.backgroundImage ? `url(${s.backgroundImage})` : ''
   document.documentElement.style.backgroundColor = bg
   document.body.style.backgroundColor = bg
-  root.style.setProperty('background', bgStyles, 'important')
+  root.style.setProperty('background', bgImage ? `${bgImage} center/cover fixed` : bg, 'important')
   if (bgImage) {
     root.style.setProperty('background-color', bg, 'important')
   } else {
     root.style.removeProperty('background-color')
   }
-  if (layout) {
-    if (bgImage) {
-      const alpha = s.bgOpacity
-      const hex = bg.replace('#', '')
-      const r = parseInt(hex.substring(0, 2), 16)
-      const g = parseInt(hex.substring(2, 4), 16)
-      const b = parseInt(hex.substring(4, 6), 16)
-      layout.style.backgroundColor = `rgba(${r},${g},${b},${alpha})`
-      layout.style.borderRadius = '16px'
-      layout.style.marginTop = '16px'
-      layout.style.marginBottom = '16px'
-      layout.style.minHeight = 'calc(100vh - 32px)'
-    } else {
-      layout.style.backgroundColor = ''
-      layout.style.borderRadius = ''
-      layout.style.marginTop = ''
-      layout.style.marginBottom = ''
-      layout.style.minHeight = ''
-    }
-  }
+  if (sidebar) panelBg(s, sidebar)
+  if (main) panelBg(s, main)
 }
 
 export function mountUI() {
@@ -79,7 +68,7 @@ export function mountUI() {
 
   document.body.appendChild(root)
 
-  layout = document.createElement('div')
+  const layout = document.createElement('div')
   layout.className = 'df-layout'
   root.appendChild(layout)
 
