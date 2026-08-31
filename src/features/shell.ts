@@ -196,7 +196,9 @@ function buildSidebar() {
 
   const bottomTagline = document.createElement('p')
   bottomTagline.className = 'df-sidebar-tagline'
-  bottomTagline.textContent = 'no thumbnails · no autoplay'
+  // A plain textContent newline collapses in HTML - an explicit <br> is what actually
+  // breaks the line.
+  bottomTagline.append('NO THUMBNAILS', document.createElement('br'), 'NO DISTRACTIONS')
   footer.appendChild(bottomTagline)
 
   sidebarEl.appendChild(footer)
