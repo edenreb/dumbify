@@ -82,9 +82,13 @@ html.df-failed #dumbify-root {
   overscroll-behavior-y: none;
 
   /* --df-font-family / --df-font-size / --df-font-color are set by UIEngine.applyFont
-     from the user's saved settings. Falling back to the design-system defaults when unset. */
+     from the user's saved settings. Falling back to the design-system defaults when
+     unset. 20px matches DEFAULT_SETTINGS.fontSize in storage.ts: every font-size % in
+     this file was tuned against that value as its 100%, so this root size is what
+     "100%" actually means everywhere below - if this drifts from the real default,
+     every scaled rule drifts with it. */
   font-family: var(--df-font-family, var(--font-sans));
-  font-size: var(--df-font-size, 16px);
+  font-size: var(--df-font-size, 20px);
   line-height: 1.6;
   color: var(--df-font-color, var(--foreground));
   background: var(--background);
@@ -213,7 +217,7 @@ html.df-failed #dumbify-root {
   border: none;
   padding: 6px 0;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 70%;
   color: var(--muted-foreground);
   cursor: pointer;
   transition: color 150ms;
@@ -254,7 +258,7 @@ html.df-failed #dumbify-root {
 .df-sidebar-tagline {
   margin-top: 16px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -314,7 +318,7 @@ html.df-failed #dumbify-root {
 
 .df-theme-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -339,7 +343,7 @@ html.df-failed #dumbify-root {
 }
 
 .df-settings-icon {
-  font-size: 14px;
+  font-size: 70%;
   color: var(--ink-soft);
   transition: color 150ms;
 }
@@ -350,7 +354,7 @@ html.df-failed #dumbify-root {
 
 .df-settings-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -400,7 +404,7 @@ html.df-failed #dumbify-root {
   border-radius: 999px;
   padding: 8px 16px;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 70%;
   color: var(--foreground);
   outline: none;
   transition: border-color 150ms;
@@ -420,7 +424,7 @@ html.df-failed #dumbify-root {
   background: transparent;
   padding: 8px 18px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted-foreground);
@@ -453,7 +457,7 @@ html.df-failed #dumbify-root {
 
 .df-channel-banner-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -469,7 +473,7 @@ html.df-failed #dumbify-root {
 
 .df-channel-banner-name {
   font-family: var(--font-serif);
-  font-size: 24px;
+  font-size: 120%;
   line-height: 1.2;
   text-decoration: underline 1px transparent;
   text-underline-offset: 4px;
@@ -482,7 +486,7 @@ html.df-failed #dumbify-root {
 
 .df-channel-banner-meta {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -491,7 +495,7 @@ html.df-failed #dumbify-root {
 .df-channel-banner-desc {
   margin-top: 10px;
   max-width: 68ch;
-  font-size: 14px;
+  font-size: 70%;
   line-height: 1.6;
   color: var(--muted-foreground);
   display: -webkit-box;
@@ -504,7 +508,7 @@ html.df-failed #dumbify-root {
   display: inline-block;
   margin-top: 16px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--foreground);
@@ -532,7 +536,7 @@ html.df-failed #dumbify-root {
 
 .df-channel-card-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -542,7 +546,7 @@ html.df-failed #dumbify-root {
   display: block;
   margin-top: 6px;
   font-family: var(--font-serif);
-  font-size: 20px;
+  font-size: 100%;
   line-height: 1.2;
   text-decoration: underline 1px transparent;
   text-underline-offset: 4px;
@@ -557,7 +561,7 @@ html.df-failed #dumbify-root {
   display: block;
   margin-top: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -566,7 +570,7 @@ html.df-failed #dumbify-root {
 .df-channel-card-desc {
   margin-top: 10px;
   max-width: 68ch;
-  font-size: 14px;
+  font-size: 70%;
   line-height: 1.6;
   color: var(--muted-foreground);
   display: -webkit-box;
@@ -579,7 +583,7 @@ html.df-failed #dumbify-root {
   display: inline-block;
   margin-top: 14px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--foreground);
@@ -605,7 +609,7 @@ html.df-failed #dumbify-root {
 
 .df-channel-about-desc {
   max-width: 68ch;
-  font-size: 15px;
+  font-size: 75%;
   line-height: 1.7;
   color: var(--muted-foreground);
   white-space: pre-wrap;
@@ -621,7 +625,7 @@ html.df-failed #dumbify-root {
 
 .df-channel-about-links a {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 60%;
   color: var(--foreground);
   border-bottom: 1px solid var(--foreground);
   padding-bottom: 1px;
@@ -648,7 +652,7 @@ html.df-failed #dumbify-root {
 
 .df-page-eyebrow {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -657,30 +661,30 @@ html.df-failed #dumbify-root {
 .df-page-title {
   margin-top: 12px;
   font-family: var(--font-serif);
-  font-size: 36px;
+  font-size: 180%;
   line-height: 1.05;
   letter-spacing: -0.02em;
   color: var(--foreground);
 }
 
 .df-channel-page-title {
-  font-size: 52px;
+  font-size: 260%;
 }
 
 @media (min-width: 640px) {
   .df-page-title {
-    font-size: 48px;
+    font-size: 240%;
   }
 
   .df-channel-page-title {
-    font-size: 64px;
+    font-size: 320%;
   }
 }
 
 .df-page-note {
   margin-top: 12px;
   max-width: 68ch;
-  font-size: 14px;
+  font-size: 70%;
   line-height: 1.6;
   color: var(--muted-foreground);
 }
@@ -702,7 +706,7 @@ html.df-failed #dumbify-root {
 
 .df-toolbar-item {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -722,7 +726,7 @@ html.df-failed #dumbify-root {
 
 .df-creator-select {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.06em;
   color: var(--foreground);
   background: transparent;
@@ -744,7 +748,7 @@ html.df-failed #dumbify-root {
 .df-date-group-header {
   padding: 12px 0 4px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -795,7 +799,7 @@ html.df-failed #dumbify-root {
 
 .df-item-number {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -806,7 +810,7 @@ html.df-failed #dumbify-root {
 .df-item-title {
   display: block;
   font-family: var(--font-serif);
-  font-size: 20px;
+  font-size: 100%;
   line-height: 1.375;
   text-decoration: underline 1px transparent;
   text-underline-offset: 4px;
@@ -815,7 +819,7 @@ html.df-failed #dumbify-root {
 
 @media (min-width: 640px) {
   .df-item-title {
-    font-size: 22px;
+    font-size: 110%;
   }
 }
 
@@ -829,7 +833,7 @@ html.df-failed #dumbify-root {
   align-items: center;
   gap: 4px 8px;
   margin-top: 6px;
-  font-size: 14px;
+  font-size: 70%;
   color: var(--muted-foreground);
 }
 
@@ -855,7 +859,7 @@ html.df-failed #dumbify-root {
   background-color: #e34242;
   color: #fff;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 50%;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -865,7 +869,7 @@ html.df-failed #dumbify-root {
 
 .df-item-duration {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -878,7 +882,7 @@ html.df-failed #dumbify-root {
 
 .df-now-playing {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -933,7 +937,7 @@ html.df-failed #dumbify-root {
 
 .df-play-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -942,14 +946,14 @@ html.df-failed #dumbify-root {
   margin-top: 32px;
   max-width: 68ch;
   font-family: var(--font-serif);
-  font-size: 30px;
+  font-size: 150%;
   line-height: 1.25;
   letter-spacing: -0.02em;
 }
 
 @media (min-width: 640px) {
   .df-watch-title {
-    font-size: 40px;
+    font-size: 200%;
   }
 }
 
@@ -965,7 +969,7 @@ html.df-failed #dumbify-root {
 }
 
 .df-watch-channel {
-  font-size: 14px;
+  font-size: 70%;
   color: var(--foreground);
   text-decoration: none;
 }
@@ -986,7 +990,7 @@ html.df-failed #dumbify-root {
 
 .df-watch-meta-item {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1002,7 +1006,7 @@ html.df-failed #dumbify-root {
 
 .df-watch-action {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1041,7 +1045,7 @@ html.df-failed #dumbify-root {
 .df-save-picker-status {
   padding: 8px 10px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1054,7 +1058,7 @@ html.df-failed #dumbify-root {
   width: 100%;
   padding: 8px 10px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 60%;
   text-align: left;
   color: var(--ink-soft);
   background: none;
@@ -1117,7 +1121,7 @@ html.df-failed #dumbify-root {
   padding: 6px 0;
   outline: none;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 60%;
   color: var(--foreground);
 }
 
@@ -1135,7 +1139,7 @@ html.df-failed #dumbify-root {
   border-radius: var(--radius);
   padding: 6px 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1151,7 +1155,7 @@ html.df-failed #dumbify-root {
 .df-save-create-cancel {
   flex: 1;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1181,7 +1185,7 @@ html.df-failed #dumbify-root {
 
 .df-save-create-error {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   color: var(--mark);
 }
 
@@ -1192,7 +1196,7 @@ html.df-failed #dumbify-root {
 .df-watch-description summary {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1224,7 +1228,7 @@ html.df-failed #dumbify-root {
   margin-top: 12px;
   max-width: 68ch;
   font-family: var(--font-serif);
-  font-size: 18px;
+  font-size: 90%;
   line-height: 1.7;
   color: color-mix(in oklab, var(--foreground) 90%, transparent);
   white-space: pre-line;
@@ -1248,7 +1252,7 @@ html.df-failed #dumbify-root {
 .df-playlist-header {
   padding: 16px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 70%;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1276,7 +1280,7 @@ html.df-failed #dumbify-root {
 
 .df-playlist-item-num {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 60%;
   color: var(--ink-soft);
   min-width: 20px;
   text-align: right;
@@ -1288,7 +1292,7 @@ html.df-failed #dumbify-root {
 }
 
 .df-playlist-item-title {
-  font-size: 13px;
+  font-size: 65%;
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1297,7 +1301,7 @@ html.df-failed #dumbify-root {
 }
 
 .df-playlist-item-channel {
-  font-size: 12px;
+  font-size: 60%;
   color: var(--ink-soft);
   margin-top: 2px;
 }
@@ -1310,7 +1314,7 @@ html.df-failed #dumbify-root {
   background: transparent;
   color: var(--foreground);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 65%;
   cursor: pointer;
   text-align: center;
 }
@@ -1342,7 +1346,7 @@ html.df-failed #dumbify-root {
   padding: 8px 0;
   outline: none;
   font-family: var(--font-serif);
-  font-size: 16px;
+  font-size: 80%;
   line-height: 1.45;
   color: var(--foreground);
 }
@@ -1357,7 +1361,7 @@ html.df-failed #dumbify-root {
 
 .df-comment-submit {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1388,7 +1392,7 @@ html.df-failed #dumbify-root {
 .df-comment-more {
   align-self: flex-start;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1411,7 +1415,7 @@ html.df-failed #dumbify-root {
 
 .df-comment-meta {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1420,14 +1424,14 @@ html.df-failed #dumbify-root {
 .df-comment-text {
   margin-top: 6px;
   font-family: var(--font-serif);
-  font-size: 16px;
+  font-size: 80%;
   line-height: 1.45;
   color: var(--foreground);
 }
 
 .df-comment-empty {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1441,7 +1445,7 @@ html.df-failed #dumbify-root {
 
 .df-comment-action {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1463,7 +1467,7 @@ html.df-failed #dumbify-root {
 .df-comment-notice {
   margin-left: 10px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.1em;
   color: var(--ink-soft);
 }
@@ -1478,7 +1482,7 @@ html.df-failed #dumbify-root {
 .df-comment-replies-toggle {
   margin-top: 10px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--mark);
@@ -1511,7 +1515,7 @@ html.df-failed #dumbify-root {
 
 .df-stat-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1520,7 +1524,7 @@ html.df-failed #dumbify-root {
 .df-stat-value {
   margin-top: 6px;
   font-family: var(--font-serif);
-  font-size: 24px;
+  font-size: 120%;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1539,7 +1543,7 @@ html.df-failed #dumbify-root {
 
 .df-sub-badge {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--foreground);
@@ -1549,7 +1553,7 @@ html.df-failed #dumbify-root {
 
 .df-sub-btn {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--foreground);
@@ -1585,7 +1589,7 @@ html.df-failed #dumbify-root {
   text-align: center;
   padding: 80px 0;
   color: var(--muted-foreground);
-  font-size: 14px;
+  font-size: 70%;
 }
 
 .df-empty {
@@ -1593,7 +1597,7 @@ html.df-failed #dumbify-root {
   padding: 80px 0;
   color: var(--muted-foreground);
   font-family: var(--font-serif);
-  font-size: 18px;
+  font-size: 90%;
 }
 
 /* ---- Animations ---- */
@@ -1609,19 +1613,19 @@ html.df-failed #dumbify-root {
 }
 
 .df-404-msg {
-  font-size: 15px;
+  font-size: 75%;
   color: var(--ink);
 }
 
 .df-404-detail {
-  font-size: 13px;
+  font-size: 65%;
   color: var(--ink-soft);
   max-width: 42ch;
 }
 
 .df-404-back {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 55%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1646,7 +1650,7 @@ html.df-failed #dumbify-root {
 }
 
 .df-signin-msg {
-  font-size: 22px;
+  font-size: 110%;
   line-height: 1.4;
   color: var(--ink);
   max-width: 24ch;
@@ -1654,7 +1658,7 @@ html.df-failed #dumbify-root {
 
 .df-signin-btn {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 60%;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink);
