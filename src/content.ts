@@ -1,7 +1,8 @@
-import { mountUI, unmountUI } from './core/UIEngine'
+import { mountUI, unmountUI, renderSignedOut } from './core/UIEngine'
 import { startPageManager, onNavigate, getNavigationState } from './core/PageManager'
 import { registerFeature, activateFeatures } from './core/FeatureManager'
 import type { NavigationState } from './types'
+import { isSignedIn } from './core/DataExtractor'
 import { shellFeature } from './features/shell'
 import { homeFeedFeature } from './features/home-feed'
 import { watchPageFeature } from './features/watch-page'
@@ -44,6 +45,7 @@ function sync(nav: NavigationState) {
 function init() {
  try {
     mountUI()
+    if (!isSignedIn()) { renderSignedOut(); return }
     startPageManager()
     sync(getNavigationState())
     onNavigate(sync)

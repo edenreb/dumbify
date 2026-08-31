@@ -177,9 +177,9 @@ function updatePageHead(overrides: { eyebrow?: string; title?: string; note?: st
   if (note && overrides.note !== undefined) note.textContent = overrides.note
 }
 
-function renderToolbar(route: Route, onOption?: (option: string) => void) {
+function renderToolbar(route: Route, onOption?: (option: string) => void): HTMLElement | null {
   const options = TOOLBAR_OPTIONS[route]
-  if (!options) return
+  if (!options) return null
 
   const bar = document.createElement('div')
   bar.className = 'df-toolbar'
@@ -199,6 +199,7 @@ function renderToolbar(route: Route, onOption?: (option: string) => void) {
   })
 
   content!.appendChild(bar)
+  return bar
 }
 
 function renderChannelBanner(ch: Channel, before?: HTMLElement) {
@@ -592,8 +593,9 @@ export const homeFeedFeature: Feature = {
     }
 
     renderPageHead(nav)
-    renderToolbar(nav.route, nav.route === 'subscriptions' ? (option) => {
+    const toolbar = renderToolbar(nav.route, nav.route === 'subscriptions' ? (option) => {
       subscriptionsFilter = option
+      updateCreatorSelect()
       if (allSubscriptions.length) renderSubscriptionList()
     } : undefined)
 
@@ -625,6 +627,7 @@ export const homeFeedFeature: Feature = {
     let playlistsLoading = false
     let subscriptionsFilter: string = 'All'
     let allSubscriptions: Video[] = []
+    let creatorSelect: HTMLSelectElement | null = null
 
     const onScroll = () => {
       if (loadingMore || feedExhausted || !initialLoadDone) return
@@ -632,6 +635,44 @@ export const homeFeedFeature: Feature = {
       if (root!.scrollHeight - root!.scrollTop - root!.clientHeight < 600) {
         loadMore()
       }
+    }
+
+    // A subscription list of any size makes "By creator" a wall of headings to scroll
+    // through. The picker is the browser's own select - type-ahead and long-list
+    // handling for free - and picking a creator goes straight to their channel.
+    function updateCreatorSelect() {
+      if (subscriptionsFilter !== 'By creator') {
+        creatorSelect?.remove()
+        creatorSelect = null
+        return
+      }
+      if (!creatorSelect) {
+        creatorSelect = document.createElement('select')
+        creatorSelect.className = 'df-creator-select'
+        creatorSelect.setAttribute('aria-label', 'Go to creator')
+        creatorSelect.onchange = () => {
+          const id = creatorSelect!.value
+          // Leave the picker on its placeholder: navigation is a full page load, and
+          // if it never happens a stuck name would claim a filter that isn't applied.
+          creatorSelect!.value = ''
+          if (id) navigateTo(`/channel/${id}`)
+        }
+        toolbar?.appendChild(creatorSelect)
+      }
+      // Only creators we have a channel id for - the rest are nowhere to route to.
+      const byId = new Map<string, string>()
+      for (const v of allSubscriptions) {
+        if (v.channelId && v.channel) byId.set(v.channelId, v.channel)
+      }
+      const creators = [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+      creatorSelect.innerHTML = ''
+      for (const [id, name] of [['', 'Go to creator...'] as [string, string], ...creators]) {
+        const opt = document.createElement('option')
+        opt.value = id
+        opt.textContent = name
+        creatorSelect.appendChild(opt)
+      }
+      creatorSelect.value = ''
     }
 
     function renderSubscriptionGroup(list: HTMLElement, header: string, videos: Video[]) {
@@ -652,6 +693,7 @@ export const homeFeedFeature: Feature = {
       if (feedCancelled) return
       list.innerHTML = ''
       videoIds.clear()
+      updateCreatorSelect()
       if (subscriptionsFilter === 'By creator') {
         const byCreator = new Map<string, Video[]>()
         for (const v of allSubscriptions) {

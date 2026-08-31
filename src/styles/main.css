@@ -722,6 +722,23 @@ html.df-failed #dumbify-root {
   border-bottom: 1px solid var(--foreground);
 }
 
+.df-creator-select {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--foreground);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 3px 6px;
+  max-width: 240px;
+  cursor: pointer;
+}
+
+.df-creator-select:focus-visible {
+  outline: 1px solid var(--foreground);
+}
+
 .df-date-group {
   border-bottom: 1px solid var(--border);
 }
@@ -1745,4 +1762,40 @@ html.df-failed #dumbify-root {
 
 .df-404-back:hover {
   color: var(--ink);
+}
+
+.df-signin {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 24px;
+  padding: 24px;
+}
+
+.df-signin-msg {
+  font-size: 22px;
+  line-height: 1.4;
+  color: var(--ink);
+  max-width: 24ch;
+}
+
+.df-signin-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 10px 24px;
+}
+
+.df-signin-btn:hover {
+  background: var(--ink);
+  color: var(--paper);
 }
