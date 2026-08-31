@@ -722,6 +722,23 @@ html.df-failed #dumbify-root {
   border-bottom: 1px solid var(--foreground);
 }
 
+.df-creator-select {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--foreground);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 3px 6px;
+  max-width: 240px;
+  cursor: pointer;
+}
+
+.df-creator-select:focus-visible {
+  outline: 1px solid var(--foreground);
+}
+
 .df-date-group {
   border-bottom: 1px solid var(--border);
 }
