@@ -2210,3 +2210,15 @@ export async function fetchCreateParams(): Promise<string | null> {
   }
   return null
 }
+
+// Handle URLs (/@name, /c/x, /user/x) carry no UC id in the path, but the page they
+// serve does - in its own ytInitialData, and in the canonical/og:url meta tag.
+export function extractPageChannelId(): string | null {
+  const d = extractFromScripts('ytInitialData')
+  const fromData = d?.metadata?.channelMetadataRenderer?.externalId
+  if (typeof fromData === 'string' && /^UC[\w-]{22}$/.test(fromData)) return fromData
+  const href = document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href
+    ?? document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.content
+    ?? ''
+  return href.match(/\/channel\/(UC[\w-]{22})/)?.[1] ?? null
+}

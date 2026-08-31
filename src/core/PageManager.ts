@@ -1,4 +1,5 @@
 import type { Route, NavigationState } from '../types'
+import { extractPageChannelId } from './DataExtractor'
 
 type NavCallback = (state: NavigationState) => void
 
@@ -18,7 +19,27 @@ function getRoute(pathname: string, searchParams: URLSearchParams): Route {
       pathname.startsWith('/c/') || pathname.startsWith('/user/')) return 'channel'
   if (pathname.startsWith('/shorts/')) return 'shorts'
   if (pathname === '/' || pathname === '') return 'home'
+  // Legacy vanity URLs (/Couriway) look like nothing in particular from the path
+  // alone. The loaded page is what says whether it is a channel.
+  if (channelIdFor(pathname)) return 'channel'
   return 'unknown'
+}
+
+// Only /channel/<id> spells the channel id out. For handle URLs (/@name, /c/x,
+// /user/x) it lives in the page itself, so read it there - but only when the path
+// asked about is the one actually loaded, since that is the only page we can read.
+let pageChannelId: { href: string; id: string | null } | null = null
+
+function channelIdFor(pathname: string): string | null {
+  const fromPath = pathname.match(/\/channel\/(UC[\w-]{22})/)?.[1]
+  if (fromPath) return fromPath
+  if (pathname !== location.pathname) return null
+  // Parsing ytInitialData is not free and this runs on every state build, but the
+  // answer only changes when the document does.
+  if (pageChannelId?.href !== location.href) {
+    pageChannelId = { href: location.href, id: extractPageChannelId() }
+  }
+  return pageChannelId.id
 }
 
 function buildState(): NavigationState {
@@ -31,7 +52,7 @@ function buildState(): NavigationState {
     searchParams: s,
     videoId: s.get('v'),
     searchQuery: s.get('search_query'),
-    channelId: p.match(/\/channel\/(UC[\w-]{22})/)?.[1] ?? null,
+    channelId: channelIdFor(p),
     playlistId: s.get('list'),
   }
 }
@@ -47,7 +68,7 @@ function buildStateFromPath(path: string): NavigationState {
     searchParams: s,
     videoId: s.get('v'),
     searchQuery: s.get('search_query'),
-    channelId: p.match(/\/channel\/(UC[\w-]{22})/)?.[1] ?? null,
+    channelId: channelIdFor(p),
     playlistId: s.get('list'),
   }
 }
