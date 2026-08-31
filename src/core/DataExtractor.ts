@@ -713,8 +713,20 @@ function vidFromDOM(el: Element): Video | null {
   }
 }
 
+// Only the selected tab carries `content`; the rest are lazily loaded and have none.
+// Hardcoding tabs[0] worked on the home feed (one tab) but not on /channel/<id>/videos,
+// where tabs[0] is Home: the feed fell through to a fallback extractor and the
+// continuation token was never found, so channel pages loaded one page and could not
+// scroll-load. extractChannelPlaylists already worked around this on its own; this is
+// the same rule for every caller.
+function selectedTabContent(data: any): any {
+  const tabs = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? []
+  const tab = tabs.find((t: any) => t?.tabRenderer?.selected) ?? tabs[0]
+  return tab?.tabRenderer?.content ?? null
+}
+
 function extractLockupVideos(data: any): Video[] {
-  const c = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
+  const c = selectedTabContent(data)
   const items = c?.richGridRenderer?.contents ?? []
   const out: Video[] = []
   for (const item of items) {
@@ -777,8 +789,8 @@ function collectFeedVideos(data: any): { videos: Video[]; itemKeys: Record<strin
   const out: Video[] = []
   const seen = new Set<string>()
   const itemKeys: Record<string, number> = {}
-  const tab = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer
-  const content = tab?.content ?? data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
+  const content = selectedTabContent(data)
+    ?? data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
   const walk = (parent: any) => {
     if (!parent || typeof parent !== 'object') return
     const items = parent.sectionListRenderer?.contents ?? parent.richGridRenderer?.contents ?? []
@@ -968,7 +980,7 @@ async function getYTDataAsync(name: string): Promise<any> {
 
 function extractContinuationToken(data: any): string | null {
   try {
-    const c = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
+    const c = selectedTabContent(data)
     if (!c) { log('  extractContinuationToken: no content'); return null }
     const rich = c?.richGridRenderer?.contents ?? []
     const last = rich[rich.length - 1]
@@ -1297,9 +1309,7 @@ function collectPlaylistItems(item: any, out: PlaylistItem[], seen: Set<string>)
 }
 
 export function extractChannelPlaylists(data: any): PlaylistItem[] {
-  const tabs = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? []
-  const tab = tabs.find((t: any) => t.tabRenderer?.selected) ?? tabs[0]
-  const content = tab?.tabRenderer?.content
+  const content = selectedTabContent(data)
   const items = content?.sectionListRenderer?.contents ?? content?.richGridRenderer?.contents ?? []
   const out: PlaylistItem[] = []
   const seen = new Set<string>()
