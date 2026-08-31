@@ -171,9 +171,12 @@ function buildSidebar() {
 
   footer.appendChild(toggle)
 
-  const settingsBtn = document.createElement('button')
+  const settingsBtn = document.createElement('a')
   settingsBtn.className = 'df-settings-btn'
   settingsBtn.setAttribute('aria-label', 'Settings')
+  settingsBtn.href = chrome.runtime.getURL('src/options/index.html')
+  settingsBtn.target = '_blank'
+  settingsBtn.rel = 'noopener'
   const settingsIcon = document.createElement('span')
   settingsIcon.className = 'df-settings-icon'
   settingsIcon.textContent = '\u2699'
@@ -182,7 +185,6 @@ function buildSidebar() {
   settingsLabel.textContent = 'Settings'
   settingsBtn.appendChild(settingsIcon)
   settingsBtn.appendChild(settingsLabel)
-  settingsBtn.onclick = () => window.open(chrome.runtime.getURL('src/options/index.html'), '_blank')
   footer.appendChild(settingsBtn)
 
   const bottomTagline = document.createElement('p')
