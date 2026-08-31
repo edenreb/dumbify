@@ -952,6 +952,11 @@ function extractContinuationToken(data: any): string | null {
         if (t) token = t
       }
     }
+    if (!token) {
+      const playlistItems = c?.playlistVideoListRenderer?.contents ?? []
+      const lastPl = playlistItems[playlistItems.length - 1]
+      token = lastPl?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? null
+    }
     log(`  extractContinuationToken => ${token ? token.slice(0,30)+'...' : 'null'}`)
     return token
   } catch (e: any) { log(`  extractContinuationToken ERROR: ${e.message}`); return null }
@@ -1042,6 +1047,7 @@ const ROUTE_URLS: Record<string, string> = {
   subscriptions: '/feed/subscriptions',
   history: '/feed/history',
   'watch-later': '/playlist?list=WL',
+  liked: '/playlist?list=LL',
 }
 
 function parseInitialData(text: string): any | null {
@@ -1291,6 +1297,68 @@ export async function fetchChannelPlaylists(channelId: string): Promise<Playlist
     }
   } catch {}
   return []
+}
+
+export async function fetchUserPlaylists(): Promise<PlaylistItem[]> {
+  try {
+    const res = await fetch(location.origin + `/feed/playlists?df=${Date.now()}`, {
+      credentials: 'include',
+      headers: { Accept: 'text/html' },
+    })
+    if (res.ok) {
+      const d = parseInitialData(await res.text())
+      if (d) return extractChannelPlaylists(d)
+    }
+  } catch {}
+  return []
+}
+
+export async function fetchLikedPlaylist(): Promise<{ videos: Video[]; token: string | null }> {
+  try {
+    const res = await fetch(location.origin + `/playlist?list=LL&df=${Date.now()}`, {
+      credentials: 'include',
+      headers: { Accept: 'text/html' },
+    })
+    if (res.ok) {
+      const d = parseInitialData(await res.text())
+      if (d) {
+        const videos = extractFromData(d)
+        const token = extractContinuationToken(d)
+        return { videos, token }
+      }
+    }
+  } catch {}
+  return { videos: [], token: null }
+}
+
+export interface PlaylistPageResult {
+  title: string
+  videos: Video[]
+  token: string | null
+}
+
+export async function fetchPlaylistPage(playlistId: string): Promise<PlaylistPageResult> {
+  if (!playlistId) return { title: '', videos: [], token: null }
+  try {
+    const res = await fetch(location.origin + `/playlist?list=${playlistId}&df=${Date.now()}`, {
+      credentials: 'include',
+      headers: { Accept: 'text/html' },
+    })
+    if (res.ok) {
+      const d = parseInitialData(await res.text())
+      if (d) {
+        const title =
+          d?.header?.playlistHeaderRenderer?.title?.simpleText ??
+          d?.header?.playlistHeaderRenderer?.title?.runs?.map((r: any) => r.text).join('') ??
+          d?.metadata?.playlistMetadataRenderer?.title ??
+          ''
+        const videos = extractFromData(d)
+        const token = extractContinuationToken(d)
+        return { title, videos, token }
+      }
+    }
+  } catch {}
+  return { title: '', videos: [], token: null }
 }
 
 export async function fetchContinuation(token: string, route = 'home', searchQuery = '', channelId = ''): Promise<{ videos: Video[]; token: string | null; items?: SearchItem[] }> {

@@ -21,9 +21,12 @@ const ROUTE_NAMES: Record<Route, string> = {
   subscriptions: 'Subscriptions',
   history: 'History',
   'watch-later': 'Watch Later',
+  liked: 'Liked',
+  playlists: 'Playlists',
   playlist: 'Playlist',
   channel: 'Channel',
   shorts: 'Shorts',
+  unknown: 'Not Found',
 }
 
 const NAV: { label: string; route: Route; path: string }[] = [
@@ -31,8 +34,8 @@ const NAV: { label: string; route: Route; path: string }[] = [
   { label: 'Subscriptions', route: 'subscriptions', path: '/feed/subscriptions' },
   { label: 'History', route: 'history', path: '/feed/history' },
   { label: 'Watch Later', route: 'watch-later', path: '/playlist?list=WL' },
-  { label: 'Liked', route: 'playlist', path: '/playlist?list=LL' },
-  { label: 'Playlists', route: 'playlist', path: '/feed/playlists' },
+  { label: 'Liked', route: 'liked', path: '/playlist?list=LL' },
+  { label: 'Playlists', route: 'playlists', path: '/feed/playlists' },
 ]
 
 let linkEls: HTMLElement[] = []

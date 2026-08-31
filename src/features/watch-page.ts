@@ -14,9 +14,12 @@ import {
   fetchCommentReplies,
   performCommentAction,
   localComment,
+  fetchPlaylistPage,
+  fetchContinuation,
   DEBUG,
   type CommentItem,
 } from '../core/DataExtractor'
+import type { Video } from '../types'
 import { navigateTo } from '../core/PageManager'
 
 
@@ -56,6 +59,15 @@ let createParams: string | null = null
 const commentReplies = new Map<string, CommentItem[]>()
 const commentRepliesNextToken = new Map<string, string | null>()
 const expandedReplies = new Set<string>()
+
+let playlistPanel: HTMLElement | null = null
+let playlistVideos: Video[] = []
+let playlistTitle = ''
+let playlistToken: string | null = null
+let playlistCurrentId: string | null = null
+let playlistLoadObserver: MutationObserver | null = null
+let playlistUrlPoll: number | null = null
+let playlistLastVideoId: string | null = null
 
 // Waits for a native YouTube element to appear, then hands off. Bounded on purpose:
 // an element that never shows up (signed out, comments disabled, markup changed)
@@ -997,9 +1009,131 @@ function resetComments() {
   expandedReplies.clear()
 }
 
+function resetPlaylist() {
+  playlistPanel = null
+  playlistVideos = []
+  playlistTitle = ''
+  playlistToken = null
+  playlistCurrentId = null
+  playlistLoadObserver?.disconnect()
+  playlistLoadObserver = null
+  if (playlistUrlPoll !== null) {
+    window.clearInterval(playlistUrlPoll)
+    playlistUrlPoll = null
+  }
+  playlistLastVideoId = null
+}
+
+function renderPlaylistItem(video: Video, index: number, current: boolean): HTMLElement {
+  const item = document.createElement('div')
+  item.className = 'df-playlist-item' + (current ? ' df-playlist-item--current' : '')
+
+  const num = document.createElement('span')
+  num.className = 'df-playlist-item-num'
+  num.textContent = String(index + 1)
+  item.appendChild(num)
+
+  const info = document.createElement('div')
+  info.className = 'df-playlist-item-info'
+
+  const title = document.createElement('p')
+  title.className = 'df-playlist-item-title'
+  title.textContent = video.title || 'Untitled'
+  info.appendChild(title)
+
+  const channel = document.createElement('p')
+  channel.className = 'df-playlist-item-channel'
+  channel.textContent = video.channel || ''
+  info.appendChild(channel)
+
+  item.appendChild(info)
+
+  if (!current) {
+    item.onclick = () => {
+      const listParam = new URLSearchParams(location.search).get('list')
+      const url = listParam ? `/watch?v=${video.id}&list=${listParam}` : `/watch?v=${video.id}`
+      navigateTo(url)
+    }
+  }
+
+  return item
+}
+
+function renderPlaylistPanel() {
+  if (!playlistPanel) return
+  playlistPanel.innerHTML = ''
+
+  if (playlistTitle) {
+    const header = document.createElement('p')
+    header.className = 'df-playlist-header'
+    header.textContent = playlistTitle
+    playlistPanel.appendChild(header)
+  }
+
+  const currentVideoId = playlistCurrentId ?? new URLSearchParams(location.search).get('v')
+  playlistVideos.forEach((v, i) => {
+    playlistPanel!.appendChild(renderPlaylistItem(v, i, v.id === currentVideoId))
+  })
+
+  if (playlistToken) {
+    const loadMore = document.createElement('button')
+    loadMore.className = 'df-playlist-load-more'
+    loadMore.textContent = 'Load more'
+    loadMore.onclick = async () => {
+      if (!playlistToken) return
+      loadMore.disabled = true
+      loadMore.textContent = 'Loading…'
+      const result = await fetchContinuation(playlistToken, 'playlist')
+      if (result.videos.length > 0) {
+        playlistVideos = [...playlistVideos, ...result.videos]
+        playlistToken = result.token
+        renderPlaylistPanel()
+      }
+    }
+    playlistPanel.appendChild(loadMore)
+  }
+
+  // Scroll to current item
+  requestAnimationFrame(() => {
+    const current = playlistPanel?.querySelector('.df-playlist-item--current')
+    if (current) current.scrollIntoView({ block: 'nearest' })
+  })
+}
+
+async function loadPlaylistSidebar(playlistId: string, currentVideoId: string) {
+  playlistCurrentId = currentVideoId
+  const result = await fetchPlaylistPage(playlistId)
+  if (!playlistPanel?.isConnected) return
+  playlistVideos = result.videos
+  playlistTitle = result.title
+  playlistToken = result.token
+  renderPlaylistPanel()
+}
+
+function startPlaylistUrlWatch() {
+  if (playlistUrlPoll !== null) return
+  playlistLastVideoId = new URLSearchParams(location.search).get('v')
+  playlistUrlPoll = window.setInterval(() => {
+    const currentVid = new URLSearchParams(location.search).get('v')
+    if (currentVid && currentVid !== playlistLastVideoId) {
+      window.location.reload()
+    }
+  }, 500)
+}
+
 function buildWatchPage(nav: NavigationState) {
   content!.innerHTML = ''
   resetComments()
+  resetPlaylist()
+
+  const hasPlaylist = !!nav.playlistId
+
+  // Two-column layout when in a playlist
+  const layout = document.createElement('div')
+  layout.className = hasPlaylist ? 'df-watch-layout' : ''
+
+  const mainCol = document.createElement('div')
+  mainCol.className = hasPlaylist ? 'df-watch-main' : ''
 
   const pageError = extractPageError()
   if (pageError) {
@@ -1010,11 +1144,11 @@ function buildWatchPage(nav: NavigationState) {
   const nowPlaying = document.createElement('p')
   nowPlaying.className = 'df-now-playing'
   nowPlaying.textContent = 'Now playing'
-  content!.appendChild(nowPlaying)
+  mainCol.appendChild(nowPlaying)
 
   const player = document.createElement('div')
   player.className = 'df-player'
-  content!.appendChild(player)
+  mainCol.appendChild(player)
 
   const screen = document.createElement('div')
   screen.className = 'df-player-screen df-player-screen--native'
@@ -1063,8 +1197,6 @@ function buildWatchPage(nav: NavigationState) {
     }
     onFullscreenKey = (e) => {
       if (e.key !== 'f' && e.key !== 'F') return
-      // This page also mounts the comment composer and per-comment reply boxes. A
-      // bare document-level capture handler swallowed every "f" typed into them.
       if (isTypingTarget(e.target)) return
       e.preventDefault()
       e.stopImmediatePropagation()
@@ -1086,7 +1218,7 @@ function buildWatchPage(nav: NavigationState) {
     liveBadge.textContent = 'LIVE'
     title.appendChild(liveBadge)
   }
-  content!.appendChild(title)
+  mainCol.appendChild(title)
 
   const metaBar = document.createElement('div')
   metaBar.className = 'df-watch-meta-bar'
@@ -1111,8 +1243,18 @@ function buildWatchPage(nav: NavigationState) {
     const metaItem = document.createElement('span')
     metaItem.className = 'df-watch-meta-item'
     const parts: string[] = []
-    if (data.video.views) parts.push(data.video.views)
-    if (data.video.published) parts.push(data.video.published)
+    if (data.video.views) {
+      const num = parseInt(data.video.views.replace(/[^0-9]/g, ''), 10)
+      parts.push(isNaN(num) ? data.video.views : `${num.toLocaleString()} views`)
+    }
+    if (data.video.published) {
+      const d = new Date(data.video.published)
+      if (!isNaN(d.getTime())) {
+        parts.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))
+      } else {
+        parts.push(data.video.published)
+      }
+    }
     metaItem.textContent = parts.join(' · ')
     metaBar.appendChild(metaItem)
   }
@@ -1144,7 +1286,7 @@ function buildWatchPage(nav: NavigationState) {
 
   metaBar.appendChild(actions)
 
-  content!.appendChild(metaBar)
+  mainCol.appendChild(metaBar)
 
   const description = document.createElement('details')
   description.className = 'df-watch-description'
@@ -1155,7 +1297,22 @@ function buildWatchPage(nav: NavigationState) {
   text.className = 'df-watch-description-text'
   text.textContent = (data.video.description ?? '').trim() || 'No description'
   description.appendChild(text)
-  content!.appendChild(description)
+  mainCol.appendChild(description)
+
+  // Playlist sidebar (below main content, full width)
+  if (hasPlaylist) {
+    const sideCol = document.createElement('div')
+    sideCol.className = 'df-playlist-panel'
+    playlistPanel = sideCol
+    mainCol.appendChild(sideCol)
+    renderPlaylistPanel()
+    loadPlaylistSidebar(nav.playlistId!, data.video.id)
+    startPlaylistUrlWatch()
+  }
+
+  layout.appendChild(mainCol)
+
+  content!.appendChild(layout)
 
   if (DEBUG) logLikeDiagnostics()
 }
@@ -1173,6 +1330,7 @@ export const watchPageFeature: Feature = {
 
   unmount() {
     resetComments()
+    resetPlaylist()
     restorePlayer()
     content!.innerHTML = ''
   },

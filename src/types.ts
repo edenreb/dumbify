@@ -44,9 +44,12 @@ export type Route =
   | 'subscriptions'
   | 'history'
   | 'watch-later'
+  | 'liked'
+  | 'playlists'
   | 'playlist'
   | 'channel'
   | 'shorts'
+  | 'unknown'
 
 export interface NavigationState {
   route: Route
