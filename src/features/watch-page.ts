@@ -1,6 +1,6 @@
 import type { NavigationState } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { content, renderNotFound } from '../core/UIEngine'
+import { content, renderNotFound, makeClickable } from '../core/UIEngine'
 
 import {
   extractPageError,
@@ -145,7 +145,10 @@ function renderMoreButton(list: HTMLElement) {
     }
     if (commentsSection?.isConnected) {
       dataComments = [...dataComments, ...comments]
-      renderComments(list, dataComments)
+      // Append only the new page. Re-rendering the full list was O(n) per page and threw
+      // away every already-built item to produce the identical DOM.
+      btn.remove()
+      for (const c of comments) list.appendChild(renderCommentItem(c))
       renderMoreButton(list)
     }
   }
@@ -285,7 +288,7 @@ function clickLikeTarget(btn: HTMLButtonElement, target: HTMLElement) {
   const wasLiked = nativeLikeState()
   setLikeUi(btn, !wasLiked)
   target.click()
-  if (DEBUG) console.log('[dumbify] clicked like target:', target)
+  if (DEBUG) console.log('[Dumbify] clicked like target:', target)
   window.setTimeout(() => syncLikeState(btn), 600)
 }
 
@@ -295,7 +298,7 @@ function clickNativeLike(btn: HTMLButtonElement) {
     clickLikeTarget(btn, target)
     return
   }
-  console.warn('[dumbify] native like button not found')
+  console.warn('[Dumbify] native like button not found')
   let tries = 0
   const poll = window.setInterval(() => {
     const t = nativeLikeEl()
@@ -528,7 +531,7 @@ function checkPlaybackHealth() {
     // currentSrc is a signed googlevideo URL - only logged behind the debug flag.
     if (DEBUG) {
       console.log(
-        '[dumbify] video state:',
+        '[Dumbify] video state:',
         JSON.stringify({
           src: video.currentSrc?.slice(0, 100),
           readyState: video.readyState,
@@ -537,7 +540,7 @@ function checkPlaybackHealth() {
       )
     }
     if (video.readyState === 0 && video.currentSrc && !video.error) {
-      if (DEBUG) console.log('[dumbify] nudging video.load()')
+      if (DEBUG) console.log('[Dumbify] nudging video.load()')
       video.load()
     }
   }, 4000)
@@ -545,7 +548,7 @@ function checkPlaybackHealth() {
 
 function movePlayerNow(target: HTMLElement, el: HTMLElement) {
   if (movedPlayer) return
-  if (DEBUG) console.log('[dumbify] player found:', el.tagName, el.id || el.className)
+  if (DEBUG) console.log('[Dumbify] player found:', el.tagName, el.id || el.className)
   originalParent = el.parentElement
   originalSibling = el.nextSibling
   el.classList.add('df-native-player')
@@ -669,9 +672,9 @@ function topLevelButtonsJson(): string {
 
 function logLikeDiagnostics() {
   for (const sel of LIKE_SELECTORS) {
-    if (document.querySelector(sel)) console.log('[dumbify] like selector ok:', sel)
+    if (document.querySelector(sel)) console.log('[Dumbify] like selector ok:', sel)
   }
-  console.log('[dumbify] top-level buttons:', topLevelButtonsJson())
+  console.log('[Dumbify] top-level buttons:', topLevelButtonsJson())
 }
 
 function extractComments(): CommentItem[] {
@@ -719,7 +722,7 @@ async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'fa
     if (params) createParams = params
   }
   if (!params) {
-    console.warn('[dumbify] cannot post: not signed in to YouTube (no createCommentParams)')
+    console.warn('[Dumbify] cannot post: not signed in to YouTube (no createCommentParams)')
     return 'signin'
   }
   let ok = await postCommentAPI(comment, params)
@@ -732,8 +735,10 @@ async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'fa
   }
   if (ok) {
     dataComments = [localComment('You', comment), ...dataComments]
-    const next = parseInt(dataCommentCount.replace(/[^0-9]/g, ''), 10) || 0
-    dataCommentCount = `${next + 1}`
+    // dataCommentCount is the abbreviated form ("1.2K"), so stripping non-digits and
+    // incrementing turned 1.2K into 13. Only a plain integer can be counted up; anything
+    // abbreviated stays as it is until the next real count arrives.
+    if (/^\d+$/.test(dataCommentCount)) dataCommentCount = String(Number(dataCommentCount) + 1)
     updateCommentsToggle()
     const list = commentsSection?.querySelector<HTMLElement>('.df-comment-list')
     if (list && commentsSection?.isConnected) {
@@ -741,7 +746,7 @@ async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'fa
       renderMoreButton(list)
     }
   } else {
-    console.warn('[dumbify] comment post failed (not signed in?)')
+    console.warn('[Dumbify] comment post failed (not signed in?)')
   }
   return ok ? 'ok' : 'failed'
 }
@@ -960,7 +965,7 @@ function renderComments(list: HTMLElement, source: CommentItem[] | null = null) 
       const withText = [...document.querySelectorAll('ytd-comment-thread-renderer')].filter(
         (t) => t.querySelector('#content-text')?.textContent?.trim()
       ).length
-      console.log('[dumbify] no comments rendered; threads:', threads, 'with text:', withText)
+      console.log('[Dumbify] no comments rendered; threads:', threads, 'with text:', withText)
     }
     const empty = document.createElement('p')
     empty.className = 'df-comment-empty'
@@ -1148,11 +1153,11 @@ function renderPlaylistItem(video: Video, index: number, current: boolean): HTML
   item.appendChild(info)
 
   if (!current) {
-    item.onclick = () => {
+    makeClickable(item, () => {
       const listParam = new URLSearchParams(location.search).get('list')
       const url = listParam ? `/watch?v=${video.id}&list=${listParam}` : `/watch?v=${video.id}`
       navigateTo(url)
-    }
+    })
   }
 
   return item
@@ -1179,15 +1184,19 @@ function renderPlaylistPanel() {
     loadMore.className = 'df-playlist-load-more'
     loadMore.textContent = 'Load more'
     loadMore.onclick = async () => {
-      if (!playlistToken) return
+      if (!playlistToken || loadMore.disabled) return
       loadMore.disabled = true
       loadMore.textContent = 'Loading…'
       const result = await fetchContinuation(playlistToken, 'playlist')
-      if (result.videos.length > 0) {
-        playlistVideos = [...playlistVideos, ...result.videos]
-        playlistToken = result.token
-        renderPlaylistPanel()
+      if (!result.videos.length) {
+        // Nothing more to page through - say so rather than sitting on "Loading…".
+        playlistToken = null
+        loadMore.remove()
+        return
       }
+      playlistVideos = [...playlistVideos, ...result.videos]
+      playlistToken = result.token
+      renderPlaylistPanel()
     }
     playlistPanel.appendChild(loadMore)
   }
@@ -1268,7 +1277,7 @@ function buildWatchPage(nav: NavigationState) {
       playerWatcher?.disconnect()
       playerWatcher = null
       if (!movedPlayer) {
-        console.warn('[dumbify] player not found after 10s; selectors:', PLAYER_SELECTORS.join(', '))
+        console.warn('[Dumbify] player not found after 10s; selectors:', PLAYER_SELECTORS.join(', '))
         const msg = document.createElement('p')
         msg.className = 'df-play-label'
         msg.textContent = 'Video not available'

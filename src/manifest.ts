@@ -25,7 +25,7 @@ export default defineManifest({
   host_permissions: ['https://www.youtube.com/*'],
   web_accessible_resources: [
     {
-      resources: ['icons/logo.png'],
+      resources: ['icons/logo.png', 'fonts/*.woff2'],
       matches: ['https://www.youtube.com/*'],
     },
   ],

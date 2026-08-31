@@ -11,21 +11,10 @@ registerFeature(shellFeature)
 registerFeature(homeFeedFeature)
 registerFeature(watchPageFeature)
 
+// The shell is always on. Only /watch gets its own feature; every other route - including
+// 'unknown', which home-feed turns into a 404 or a redirect - is the feed.
 function getFeatureIdsForRoute(route: string): string[] {
-  const base = ['shell']
-  switch (route) {
-    case 'home':         return [...base, 'home-feed']
-    case 'watch':        return [...base, 'watch-page']
-    case 'history':      return [...base, 'home-feed']
-    case 'subscriptions': return [...base, 'home-feed']
-    case 'watch-later':  return [...base, 'home-feed']
-    case 'liked':        return [...base, 'home-feed']
-    case 'playlists':    return [...base, 'home-feed']
-    case 'playlist':     return [...base, 'home-feed']
-    case 'channel':      return [...base, 'home-feed']
-    case 'search':       return [...base, 'home-feed']
-    default:             return [...base, 'home-feed'] // includes 'unknown' (404)
-  }
+  return route === 'watch' ? ['shell', 'watch-page'] : ['shell', 'home-feed']
 }
 
 // Shorts have no dedicated view: a single short plays through the normal watch
@@ -42,18 +31,36 @@ function sync(nav: NavigationState) {
   activateFeatures(getFeatureIdsForRoute(nav.route), nav)
 }
 
+// main.css hides <body> so the real page never flashes, which means any throw that gets
+// past us leaves a permanently blank youtube.com. This is the way back.
+function bailToYouTube(err: unknown) {
+  console.error('[Dumbify] failed, falling back to YouTube:', err)
+  document.documentElement.classList.add('df-failed')
+  unmountUI()
+}
+
+// Every sync needs this, not just the first: sync also runs from onNavigate, which was
+// outside init()'s try/catch - so a throw on any later navigation (an invalidated
+// extension context after a reload is the realistic one) had no escape hatch.
+function safeSync(nav: NavigationState) {
+  try {
+    sync(nav)
+  } catch (err) {
+    bailToYouTube(err)
+  }
+}
+
 function init() {
- try {
+  try {
     mountUI()
     if (!isSignedIn()) { renderSignedOut(); return }
     startPageManager()
-    sync(getNavigationState())
-    onNavigate(sync)
+    onNavigate(safeSync)
   } catch (err) {
-    console.error('[Dumbify] failed to start, falling back to YouTube:', err)
-    document.documentElement.classList.add('df-failed')
-    unmountUI()
+    bailToYouTube(err)
+    return
   }
+  safeSync(getNavigationState())
 }
 
 if (!redirectShorts(location.pathname)) {

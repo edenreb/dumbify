@@ -1,3 +1,4 @@
+import fontFaces from '../styles/fonts.css?raw'
 import type { NavigationState, Route } from '../types'
 import type { DumbifySettings } from '../types'
 import type { Feature } from '../core/FeatureManager'
@@ -5,13 +6,15 @@ import { sidebar, main } from '../core/UIEngine'
 import { onNavigate, navigateTo } from '../core/PageManager'
 import { getSettings, setSettings } from '../core/storage'
 
+// The @font-face rules live in styles/fonts.css; only the src URLs have to be built
+// here, because chrome.runtime.getURL is the sole way to get a path that resolves
+// against the extension rather than youtube.com.
 function injectFonts() {
   if (document.getElementById('df-fonts')) return
-  const link = document.createElement('link')
-  link.id = 'df-fonts'
-  link.rel = 'stylesheet'
-  link.href = 'https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Inter+Tight:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap'
-  document.head.appendChild(link)
+  const style = document.createElement('style')
+  style.id = 'df-fonts'
+  style.textContent = fontFaces.replace(/url\("\/fonts\//g, `url("${chrome.runtime.getURL('fonts/')}`)
+  document.head.appendChild(style)
 }
 
 const ROUTE_NAMES: Record<Route, string> = {
@@ -154,19 +157,25 @@ function buildSidebar() {
   track.appendChild(knob)
   toggle.appendChild(label)
 
-  getSettings().then((s) => {
-    const isDark = s.theme === 'dark'
-    knob.className = `df-theme-knob ${isDark ? 'dark' : 'light'}`
-    label.textContent = isDark ? 'Night' : 'Day'
-  })
+  const paintTheme = (theme: DumbifySettings['theme']) => {
+    knob.className = `df-theme-knob ${theme === 'dark' ? 'dark' : 'light'}`
+    label.textContent = theme === 'dark' ? 'Night' : 'Day'
+  }
 
-  toggle.onclick = () => {
-    getSettings().then((s) => {
-      const next = s.theme === 'dark' ? 'light' : 'dark'
-      setSettings({ theme: next })
-      knob.className = `df-theme-knob ${next === 'dark' ? 'dark' : 'light'}`
-      label.textContent = next === 'dark' ? 'Night' : 'Day'
-    })
+  getSettings().then((s) => paintTheme(s.theme))
+
+  // Paints optimistically, then puts the label back if the write actually failed -
+  // setSettings now rejects rather than resolving regardless.
+  toggle.onclick = async () => {
+    const s = await getSettings()
+    const next = s.theme === 'dark' ? 'light' : 'dark'
+    paintTheme(next)
+    try {
+      await setSettings({ theme: next })
+    } catch (err) {
+      console.warn('[Dumbify] could not save theme:', err)
+      paintTheme(s.theme)
+    }
   }
 
   footer.appendChild(toggle)

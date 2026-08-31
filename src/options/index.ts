@@ -1,4 +1,4 @@
-import { getSettings, setSettings, resetSettings } from '../core/storage'
+import { getSettings, setSettings, resetSettings, LIGHT_BG, DARK_BG } from '../core/storage'
 import type { DumbifySettings } from '../types'
 
 const FONT_SIZES = [14, 16, 18, 20, 22, 24, 28, 32]
@@ -65,14 +65,21 @@ function showStatus(message: string) {
   }, 2000)
 }
 
-async function save(s: DumbifySettings, partial: Partial<DumbifySettings>, message = 'Saved') {
-  Object.assign(s, partial)
-  await setSettings(partial)
-  showStatus(message)
+// Applies the change to the in-memory copy only once the write actually landed -
+// setSettings now rejects rather than resolving regardless, and this used to announce
+// "Saved" for a background image that had blown the storage quota. Returns whether it
+// stuck, so callers that paint something afterwards can skip it.
+async function save(s: DumbifySettings, partial: Partial<DumbifySettings>, message = 'Saved'): Promise<boolean> {
+  try {
+    await setSettings(partial)
+    Object.assign(s, partial)
+    showStatus(message)
+    return true
+  } catch (err) {
+    showStatus(err instanceof Error ? err.message : 'Could not save')
+    return false
+  }
 }
-
-const LIGHT_BG = '#f7f5ee'
-const DARK_BG = '#1d1d1d'
 
 function applyPageTheme(s: DumbifySettings) {
   document.body.classList.toggle('light', s.theme === 'light')
@@ -81,10 +88,40 @@ function applyPageTheme(s: DumbifySettings) {
   document.documentElement.style.setProperty('--bg-opacity', String(s.bgOpacity))
   const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
   if (s.backgroundImage) {
-    document.body.style.background = `url(${s.backgroundImage}) center/cover fixed, ${bg}`
+    document.body.style.background = `url("${s.backgroundImage}") center/cover fixed, ${bg}`
   } else {
     document.body.style.background = ''
   }
+}
+
+// chrome.storage.local caps at 10 MB, base64 inflates by a third, and whatever is stored
+// here is read into every YouTube tab on load - so a phone photo straight from the picker
+// both failed to save and, when it fit, made every page load drag it along. Downscale to
+// something a full-screen background actually needs.
+const MAX_BG_EDGE = 2560
+const MAX_BG_FILE = 25 * 1024 * 1024
+
+function toStoredImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Could not read that file'))
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error("That file isn't an image"))
+      img.onload = () => {
+        const scale = Math.min(1, MAX_BG_EDGE / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(img.width * scale))
+        canvas.height = Math.max(1, Math.round(img.height * scale))
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { reject(new Error('Could not process that image')); return }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.85))
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  })
 }
 
 function updatePreview(s: DumbifySettings) {
@@ -195,8 +232,8 @@ function render() {
       previewImg.className = 'bg-preview'
       previewImg.src = dataUrl
       removeBtn = el('button', 'bg-remove', 'Remove')
-      removeBtn.addEventListener('click', () => {
-        save(s, { backgroundImage: '' })
+      removeBtn.addEventListener('click', async () => {
+        if (!(await save(s, { backgroundImage: '' }, 'Removed'))) return
         applyPageTheme(s)
         if (previewImg) { previewImg.remove(); previewImg = null }
         if (removeBtn) { removeBtn.remove(); removeBtn = null }
@@ -207,17 +244,25 @@ function render() {
 
     if (s.backgroundImage) showBgPreview(s.backgroundImage)
 
-    fileInput.addEventListener('change', () => {
+    fileInput.addEventListener('change', async () => {
       const file = fileInput.files?.[0]
+      fileInput.value = ''
       if (!file) return
-      const reader = new FileReader()
-      reader.onload = () => {
-        const dataUrl = reader.result as string
-        save(s, { backgroundImage: dataUrl })
-        applyPageTheme(s)
-        showBgPreview(dataUrl)
+      if (file.size > MAX_BG_FILE) {
+        showStatus('That image is too large to read')
+        return
       }
-      reader.readAsDataURL(file)
+      showStatus('Processing image…')
+      let dataUrl: string
+      try {
+        dataUrl = await toStoredImage(file)
+      } catch (err) {
+        showStatus(err instanceof Error ? err.message : 'Could not use that image')
+        return
+      }
+      if (!(await save(s, { backgroundImage: dataUrl }))) return
+      applyPageTheme(s)
+      showBgPreview(dataUrl)
     })
 
     bgSection.appendChild(previewWrap)
@@ -252,7 +297,12 @@ function render() {
     const reset = el('button', undefined, 'Reset All Settings')
     reset.id = 'reset'
     reset.addEventListener('click', async () => {
-      await resetSettings()
+      try {
+        await resetSettings()
+      } catch (err) {
+        showStatus(err instanceof Error ? err.message : 'Could not reset')
+        return
+      }
       render()
       showStatus('Reset to defaults')
     })

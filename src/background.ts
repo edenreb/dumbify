@@ -13,10 +13,15 @@ interface OpenOptionsMessage {
 
 type BGMessage = YTDataMessage | YTCfgMessage | OpenOptionsMessage
 
+// GET_YT_DATA evaluates window[name] in the page's MAIN world. Only this extension can
+// reach onMessage (there is no externally_connectable), but there is no reason for the
+// name to be open-ended - these are the only two globals anything asks for.
+const READABLE_GLOBALS = new Set(['ytInitialData', 'ytInitialPlayerResponse'])
+
 chrome.runtime.onMessage.addListener((message: BGMessage, sender, sendResponse) => {
   if (message.type === 'GET_YT_DATA') {
     const tabId = sender.tab?.id
-    if (!tabId) { sendResponse(null); return }
+    if (!tabId || !READABLE_GLOBALS.has(message.name)) { sendResponse(null); return }
 
     chrome.scripting.executeScript({
       target: { tabId },
