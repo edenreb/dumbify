@@ -826,8 +826,7 @@ html.df-failed #dumbify-root {
 .df-native-player .html5-video-player {
   width: 100%;
   height: auto;
-  /* Tall (9:16) videos would otherwise run off the bottom of the viewport.
-     !important so YouTube's own #movie_player rules can't outrank it. */
+  /* Tall (9:16) videos would otherwise run off the bottom of the viewport. */
   max-height: 85vh !important;
 }
 
@@ -1482,4 +1481,43 @@ html.df-failed #dumbify-root {
 @keyframes dfFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+.df-fade-in {
+  animation: dfFadeIn 150ms ease-out;
+}
+
+.df-404 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  min-height: 60vh;
+}
+
+.df-404-msg {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.df-404-detail {
+  font-size: 13px;
+  color: var(--ink-soft);
+  max-width: 42ch;
+}
+
+.df-404-back {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.df-404-back:hover {
+  color: var(--ink);
 }

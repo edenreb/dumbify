@@ -1,8 +1,9 @@
 import type { NavigationState } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { content } from '../core/UIEngine'
+import { content, renderNotFound } from '../core/UIEngine'
 
 import {
+  extractPageError,
   extractWatchData,
   extractCommentsFromPage,
   fetchMoreComments,
@@ -1133,6 +1134,12 @@ function buildWatchPage(nav: NavigationState) {
 
   const mainCol = document.createElement('div')
   mainCol.className = hasPlaylist ? 'df-watch-main' : ''
+
+  const pageError = extractPageError()
+  if (pageError) {
+    renderNotFound(pageError)
+    return
+  }
 
   const nowPlaying = document.createElement('p')
   nowPlaying.className = 'df-now-playing'

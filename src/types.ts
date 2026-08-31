@@ -49,6 +49,7 @@ export type Route =
   | 'playlist'
   | 'channel'
   | 'shorts'
+  | 'unknown'
 
 export interface NavigationState {
   route: Route

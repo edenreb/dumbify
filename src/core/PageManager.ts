@@ -14,9 +14,11 @@ function getRoute(pathname: string, searchParams: URLSearchParams): Route {
   if (pathname === '/playlist' && searchParams.get('list') === 'LL') return 'liked'
   if (pathname === '/feed/playlists') return 'playlists'
   if (pathname === '/playlist') return 'playlist'
-  if (pathname.startsWith('/channel/') || pathname.startsWith('/@')) return 'channel'
+  if (pathname.startsWith('/channel/') || pathname.startsWith('/@') ||
+      pathname.startsWith('/c/') || pathname.startsWith('/user/')) return 'channel'
   if (pathname.startsWith('/shorts/')) return 'shorts'
-  return 'home'
+  if (pathname === '/' || pathname === '') return 'home'
+  return 'unknown'
 }
 
 function buildState(): NavigationState {
