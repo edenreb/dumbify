@@ -5,6 +5,66 @@ import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResult
 import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
 import { navigateTo } from '../core/PageManager'
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+function parseRelativeDate(text: string): number {
+  if (!text) return 0
+  const lower = text.toLowerCase()
+  const numMatch = lower.match(/(\d+)\s*(?:second|minute|hour|day|week|month|year)/)
+  const num = numMatch ? parseInt(numMatch[1], 10) : 0
+  if (/second|minute/.test(lower)) return 0
+  if (/hour/.test(lower)) return 0
+  if (/day/.test(lower)) return num <= 1 ? 1 : num
+  if (/week/.test(lower)) return num * 7
+  if (/month/.test(lower)) return num * 30
+  if (/year/.test(lower)) return num * 365
+  // Absolute date like "Jan 1, 2026"
+  const parsed = new Date(text)
+  if (!isNaN(parsed.getTime())) {
+    const diff = (Date.now() - parsed.getTime()) / 86400000
+    return Math.max(0, Math.round(diff))
+  }
+  return 0
+}
+
+function dateBucket(published: string): string {
+  if (!published) return 'Unknown'
+  const days = parseRelativeDate(published)
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days <= 7) return 'Past week'
+  if (days <= 30) return 'Past month'
+  // Try to extract a month name from the published string
+  for (const m of MONTH_NAMES) {
+    if (published.toLowerCase().includes(m.toLowerCase())) return m
+  }
+  // Fallback: more than 30 days ago
+  const match = published.match(/(\w+)\s+\d{1,2},\s*\d{4}/)
+  if (match) return match[1]
+  return 'Older'
+}
+
+function groupVideosByDate(videos: Video[]): Map<string, Video[]> {
+  const groups = new Map<string, Video[]>()
+  const order = ['Today', 'Yesterday', 'Past week', 'Past month']
+  for (const v of videos) {
+    const bucket = dateBucket(v.published)
+    if (!groups.has(bucket)) groups.set(bucket, [])
+    groups.get(bucket)!.push(v)
+  }
+  // Sort groups: named buckets first in order, then month names alphabetically, then Unknown/Older
+  const sorted = new Map<string, Video[]>()
+  for (const key of order) {
+    if (groups.has(key)) sorted.set(key, groups.get(key)!)
+  }
+  const remaining = [...groups.keys()]
+    .filter((k) => !order.includes(k) && k !== 'Unknown')
+    .sort()
+  for (const key of remaining) sorted.set(key, groups.get(key)!)
+  if (groups.has('Unknown')) sorted.set('Unknown', groups.get('Unknown')!)
+  return sorted
+}
+
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
   home: {
     eyebrow: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
@@ -59,6 +119,7 @@ const TOOLBAR_OPTIONS: Partial<Record<Route, string[]>> = {
   home: ['Recommended', 'Newest', 'Shortest first'],
   history: ['All time', 'This week', 'Unfinished only'],
   'watch-later': ['Added order', 'Shortest first', 'Longest first'],
+  subscriptions: ['All', 'Today', 'Yesterday', 'Past week', 'Past month', 'By creator'],
 }
 
 function renderPageHead(nav: NavigationState) {
@@ -117,7 +178,7 @@ function updatePageHead(overrides: { eyebrow?: string; title?: string; note?: st
   if (note && overrides.note !== undefined) note.textContent = overrides.note
 }
 
-function renderToolbar(route: Route) {
+function renderToolbar(route: Route, onOption?: (option: string) => void) {
   const options = TOOLBAR_OPTIONS[route]
   if (!options) return
 
@@ -128,6 +189,13 @@ function renderToolbar(route: Route) {
     const span = document.createElement('span')
     span.className = i === 0 ? 'df-toolbar-item df-active' : 'df-toolbar-item'
     span.textContent = o
+    if (onOption) {
+      span.onclick = () => {
+        bar.querySelectorAll('.df-toolbar-item').forEach((el) => el.classList.remove('df-active'))
+        span.classList.add('df-active')
+        onOption(o)
+      }
+    }
     bar.appendChild(span)
   })
 
@@ -513,7 +581,10 @@ export const homeFeedFeature: Feature = {
     content!.innerHTML = ''
 
     renderPageHead(nav)
-    renderToolbar(nav.route)
+    renderToolbar(nav.route, nav.route === 'subscriptions' ? (option) => {
+      subscriptionsFilter = option
+      if (allSubscriptions.length) renderSubscriptionList()
+    } : undefined)
 
     const list = document.createElement('div')
     list.id = 'df-feed'
@@ -541,6 +612,8 @@ export const homeFeedFeature: Feature = {
     let currentTab = 'videos'
     let playlists: PlaylistItem[] | null = null
     let playlistsLoading = false
+    let subscriptionsFilter: string = 'All'
+    let allSubscriptions: Video[] = []
 
     const onScroll = () => {
       if (loadingMore || feedExhausted || !initialLoadDone) return
@@ -548,6 +621,54 @@ export const homeFeedFeature: Feature = {
       if (root!.scrollHeight - root!.scrollTop - root!.clientHeight < 600) {
         loadMore()
       }
+    }
+
+    function renderSubscriptionGroup(list: HTMLElement, header: string, videos: Video[]) {
+      const group = document.createElement('div')
+      group.className = 'df-date-group'
+      const h = document.createElement('p')
+      h.className = 'df-date-group-header'
+      h.textContent = header
+      group.appendChild(h)
+      videos.forEach((v) => {
+        videoIds.add(v.id)
+        group.appendChild(renderVideo(v))
+      })
+      list.appendChild(group)
+    }
+
+    function renderSubscriptionList() {
+      if (feedCancelled) return
+      list.innerHTML = ''
+      videoIds.clear()
+      if (subscriptionsFilter === 'By creator') {
+        const byCreator = new Map<string, Video[]>()
+        for (const v of allSubscriptions) {
+          const key = v.channel || 'Unknown'
+          if (!byCreator.has(key)) byCreator.set(key, [])
+          byCreator.get(key)!.push(v)
+        }
+        const sorted = [...byCreator.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+        for (const [channel, videos] of sorted) {
+          renderSubscriptionGroup(list, channel, videos)
+        }
+      } else if (subscriptionsFilter === 'All') {
+        const groups = groupVideosByDate(allSubscriptions)
+        for (const [bucket, videos] of groups) {
+          renderSubscriptionGroup(list, bucket, videos)
+        }
+      } else {
+        const filtered = allSubscriptions.filter((v) => dateBucket(v.published) === subscriptionsFilter)
+        if (filtered.length) {
+          renderSubscriptionGroup(list, subscriptionsFilter, filtered)
+        } else {
+          const e = document.createElement('div')
+          e.className = 'df-empty'
+          e.textContent = `No videos from ${subscriptionsFilter}`
+          list.appendChild(e)
+        }
+      }
+      updateItemNumbers()
     }
 
     // Returns how many items were actually new, so loadMore can tell real progress
@@ -558,13 +679,18 @@ export const homeFeedFeature: Feature = {
       const playlistContext = (nav.route === 'playlist' || nav.route === 'liked' || nav.route === 'watch-later')
         ? nav.searchParams.get('list') : null
       const newVids = videos.filter((v) => !videoIds.has(v.id))
-      newVids.forEach((v) => {
-        videoIds.add(v.id)
-        if (playlistContext && !v.url.includes('list=')) {
-          v = { ...v, url: `${v.url}&list=${playlistContext}` }
-        }
-        list.appendChild(renderVideo(v))
-      })
+      if (nav.route === 'subscriptions') {
+        allSubscriptions = allSubscriptions.concat(newVids)
+        renderSubscriptionList()
+      } else {
+        newVids.forEach((v) => {
+          videoIds.add(v.id)
+          if (playlistContext && !v.url.includes('list=')) {
+            v = { ...v, url: `${v.url}&list=${playlistContext}` }
+          }
+          list.appendChild(renderVideo(v))
+        })
+      }
       if (nav.route === 'channel') {
         const newForChannel = videos.filter((v) => !channelVideoIds.has(v.id))
         newForChannel.forEach((v) => channelVideoIds.add(v.id))
