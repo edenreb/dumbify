@@ -6,6 +6,7 @@ export let root: HTMLElement
 export let content: HTMLElement
 export let sidebar: HTMLElement | null = null
 export let main: HTMLElement | null = null
+let layout: HTMLElement | null = null
 
 const LIGHT_BG = '#f7f5ee'
 const DARK_BG = '#1d1d1d'
@@ -20,6 +21,8 @@ function applyFont(s: DumbifySettings) {
 function applyTheme(s: DumbifySettings) {
   if (!root) return
   root.classList.toggle('dark', s.theme === 'dark')
+  root.classList.toggle('has-bg', !!s.backgroundImage)
+  root.style.setProperty('--bg-opacity', String(s.bgOpacity))
   const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
   const bgImage = s.backgroundImage
     ? `url(${s.backgroundImage})`
@@ -34,6 +37,26 @@ function applyTheme(s: DumbifySettings) {
     root.style.setProperty('background-color', bg, 'important')
   } else {
     root.style.removeProperty('background-color')
+  }
+  if (layout) {
+    if (bgImage) {
+      const alpha = s.bgOpacity
+      const hex = bg.replace('#', '')
+      const r = parseInt(hex.substring(0, 2), 16)
+      const g = parseInt(hex.substring(2, 4), 16)
+      const b = parseInt(hex.substring(4, 6), 16)
+      layout.style.backgroundColor = `rgba(${r},${g},${b},${alpha})`
+      layout.style.borderRadius = '16px'
+      layout.style.marginTop = '16px'
+      layout.style.marginBottom = '16px'
+      layout.style.minHeight = 'calc(100vh - 32px)'
+    } else {
+      layout.style.backgroundColor = ''
+      layout.style.borderRadius = ''
+      layout.style.marginTop = ''
+      layout.style.marginBottom = ''
+      layout.style.minHeight = ''
+    }
   }
 }
 
@@ -56,7 +79,7 @@ export function mountUI() {
 
   document.body.appendChild(root)
 
-  const layout = document.createElement('div')
+  layout = document.createElement('div')
   layout.className = 'df-layout'
   root.appendChild(layout)
 

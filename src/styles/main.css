@@ -116,6 +116,13 @@ html.df-failed #dumbify-root {
   min-height: 100vh;
 }
 
+#dumbify-root.has-bg .df-layout {
+  border-radius: 16px;
+  margin-top: 16px;
+  margin-bottom: 16px;
+  min-height: calc(100vh - 32px);
+}
+
 @media (min-width: 1024px) {
   .df-layout {
     flex-direction: row;
