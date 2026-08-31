@@ -1276,7 +1276,9 @@ function collectPlaylistItems(item: any, out: PlaylistItem[], seen: Set<string>)
 }
 
 export function extractChannelPlaylists(data: any): PlaylistItem[] {
-  const content = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
+  const tabs = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? []
+  const tab = tabs.find((t: any) => t.tabRenderer?.selected) ?? tabs[0]
+  const content = tab?.tabRenderer?.content
   const items = content?.sectionListRenderer?.contents ?? content?.richGridRenderer?.contents ?? []
   const out: PlaylistItem[] = []
   const seen = new Set<string>()
