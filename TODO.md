@@ -3,6 +3,11 @@
 # Open Tasks
 
 Found while testing the extension against real YouTube.
+- Remove "Newest" and "Shortest First" from the homepage.
+- Fix Playlists tab of each channel page. (Currently shows no tabs to display)
+- Add upload picture from files for custom background, expand to fill page. 
+- Add color picker for font color. 
+- Rename 'Watch Later' to 'Save' on a watch page, and fix the functionality to save to 'Watch Later', 'Sounds', or any otehr custom playlist that the user can save to.
 
 
 # Completed Tasks
