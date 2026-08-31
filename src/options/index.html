@@ -6,35 +6,62 @@
 <title>Dumbify Settings</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#202020;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.5}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.5;transition:background 200ms,color 200ms}
+body.light{background:#f7f5ee;color:#1d1d1d}
+body.dark{background:#202020;color:#fff}
 .wrap{max-width:640px;margin:0 auto;padding:48px 24px}
 h1{font-size:32px;font-weight:700;margin-bottom:4px;letter-spacing:-0.02em}
-.sub{color:rgba(255,255,255,0.45);margin-bottom:40px}
-h2{font-size:12px;font-weight:600;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;margin-top:32px}
-.setting{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:8px;cursor:pointer;transition:background 150ms}
-.setting:hover{background:rgba(255,255,255,0.03)}
-.setting.on{background:rgba(79,195,247,0.06);border:1px solid rgba(79,195,247,0.1)}
-.lbl{font-size:15px;font-weight:500;margin-bottom:2px}
-.lbl-on{color:#fff}
-.lbl-off{color:rgba(255,255,255,0.7)}
-.desc{font-size:12px;color:rgba(255,255,255,0.3)}
-.toggle{width:40px;height:22px;border-radius:11px;position:relative;transition:background 150ms;flex-shrink:0;margin-left:16px}
-.toggle.on{background:#4fc3f7}
-.toggle.off{background:rgba(255,255,255,0.15)}
-.toggle-knob{width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left 150ms}
-.toggle.on .toggle-knob{left:20px}
-.toggle.off .toggle-knob{left:2px}
-.footer{margin-top:40px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;align-items:center}
-.footer button{padding:10px 20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.6);font-size:13px;cursor:pointer}
-.footer button:hover{background:rgba(255,255,255,0.1)}
-.footer .status{font-size:12px;color:rgba(255,255,255,0.2)}
+.light h1{color:#1d1d1d}
+.dark h1{color:#fff}
+.sub{margin-bottom:40px}
+.light .sub{color:rgba(0,0,0,0.4)}
+.dark .sub{color:rgba(255,255,255,0.45)}
+h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;margin-top:32px}
+.light h2{color:rgba(0,0,0,0.35)}
+.dark h2{color:rgba(255,255,255,0.25)}
 .setting-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:8px}
-.setting-row-lbl{font-size:15px;font-weight:500;color:rgba(255,255,255,0.7)}
-.df-select{padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;cursor:pointer;max-width:220px}
-.df-select option{background:#333;color:#fff}
+.light .setting-row:hover{background:rgba(0,0,0,0.03)}
+.dark .setting-row:hover{background:rgba(255,255,255,0.03)}
+.setting-row-lbl{font-size:15px;font-weight:500}
+.light .setting-row-lbl{color:rgba(0,0,0,0.7)}
+.dark .setting-row-lbl{color:rgba(255,255,255,0.7)}
+.df-select{padding:6px 10px;border-radius:6px;border:1px solid rgba(128,128,128,0.25);font-size:13px;cursor:pointer;max-width:220px}
+.light .df-select{background:rgba(0,0,0,0.04);color:#1d1d1d;border-color:rgba(0,0,0,0.15)}
+.dark .df-select{background:rgba(255,255,255,0.06);color:#fff;border-color:rgba(255,255,255,0.15)}
+.light .df-select option{background:#f0f0f0;color:#1d1d1d}
+.dark .df-select option{background:#333;color:#fff}
+.color-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:8px}
+.light .color-row:hover{background:rgba(0,0,0,0.03)}
+.dark .color-row:hover{background:rgba(255,255,255,0.03)}
+.color-row-lbl{font-size:15px;font-weight:500}
+.light .color-row-lbl{color:rgba(0,0,0,0.7)}
+.dark .color-row-lbl{color:rgba(255,255,255,0.7)}
+.color-input-wrap{display:flex;align-items:center;gap:10px}
+.color-input-wrap input[type="color"]{width:36px;height:36px;border:2px solid rgba(128,128,128,0.3);border-radius:8px;cursor:pointer;padding:2px;background:transparent}
+.color-input-wrap input[type="color"]::-webkit-color-swatch-wrapper{padding:0}
+.color-input-wrap input[type="color"]::-webkit-color-swatch{border:none;border-radius:4px}
+.color-hex{font-size:13px;font-family:monospace}
+.light .color-hex{color:rgba(0,0,0,0.5)}
+.dark .color-hex{color:rgba(255,255,255,0.4)}
+.preview-box{margin-top:20px;padding:24px;border-radius:12px;transition:background 200ms,border-color 200ms}
+.light .preview-box{background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08)}
+.dark .preview-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08)}
+.preview-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px}
+.light .preview-label{color:rgba(0,0,0,0.3)}
+.dark .preview-label{color:rgba(255,255,255,0.25)}
+.preview-text{transition:font-family 150ms,font-size 150ms,color 150ms}
+.footer{margin-top:40px;padding-top:20px;border-top:1px solid rgba(128,128,128,0.15);display:flex;justify-content:space-between;align-items:center}
+.footer button{padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;border:1px solid transparent;transition:background 150ms}
+.light .footer button{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.1);color:rgba(0,0,0,0.6)}
+.light .footer button:hover{background:rgba(0,0,0,0.08)}
+.dark .footer button{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6)}
+.dark .footer button:hover{background:rgba(255,255,255,0.1)}
+.footer .status{font-size:12px}
+.light .footer .status{color:rgba(0,0,0,0.25)}
+.dark .footer .status{color:rgba(255,255,255,0.2)}
 </style>
 </head>
-<body>
+<body class="dark">
 <div class="wrap" id="app"></div>
 <script type="module" src="./index.ts"></script>
 </body>

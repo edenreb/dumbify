@@ -4,7 +4,6 @@
 
 Found while testing the extension against real YouTube.
 - Add upload picture from files for custom background, expand to fill page. 
-- Add color picker for font color. 
 - Rename 'Watch Later' to 'Save' on a watch page, and fix the functionality to save to 'Watch Later', 'Sounds', or any otehr custom playlist that the user can save to.
 
 
@@ -43,6 +42,23 @@ Completed:
 - Files modified: src/core/DataExtractor.ts
 - Testing: `npx tsc --noEmit` and `npm run build` pass. Manual Chrome testing needed to
   verify channel playlists tab shows real data.
+
+## Add font color picker and live preview to settings
+
+Completed:
+- Date: 2026-08-31
+- Changes:
+  - Added `fontColor` field to `DumbifySettings` (default `#1d1d1d`).
+  - Added color picker row to the options page with a hex label.
+  - Added a live preview box ("This is what it looks like") that updates in real time
+    as font size, font family, or font color are changed.
+  - Made the options page theme-aware: Day/Night toggle now restyles the settings page
+    itself (background, text, borders, hover states all transition).
+  - Applied `--df-font-color` CSS variable in `UIEngine.applyFont` so the chosen color
+    is used on the Dumbify reading view.
+- Files modified: src/types.ts, src/core/storage.ts, src/core/UIEngine.ts,
+  src/styles/main.css, src/options/index.html, src/options/index.ts
+- Testing: `npx tsc --noEmit` and `npm run build` pass.
 
 ## Watch page: date in the meta row (issue #21)
 
