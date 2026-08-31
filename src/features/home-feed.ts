@@ -316,7 +316,7 @@ function applyRealSubscribedState(btn: HTMLButtonElement, state: SubUiState) {
       setSubUi(btn, real)
     } else if (tries >= 15) {
       window.clearInterval(poll)
-      console.warn('[dumbify] could not detect real subscribed state from header; leaving initial guess')
+      console.warn('[Dumbify] could not detect real subscribed state from header; leaving initial guess')
     }
   }, 200)
 }
@@ -326,7 +326,7 @@ async function handleSubscribeClick(btn: HTMLButtonElement, channelId: string, s
   const params = wantSubscribe ? state.subParams : state.unsubParams
   if (!params) {
     console.warn(
-      `[dumbify] no ${wantSubscribe ? 'subscribe' : 'unsubscribe'} params extracted for channel ${channelId}; cannot ${wantSubscribe ? 'subscribe' : 'unsubscribe'} (not signed in, or YouTube's data shape changed)`
+      `[Dumbify] no ${wantSubscribe ? 'subscribe' : 'unsubscribe'} params extracted for channel ${channelId}; cannot ${wantSubscribe ? 'subscribe' : 'unsubscribe'} (not signed in, or YouTube's data shape changed)`
     )
     const original = btn.textContent
     btn.textContent = 'Sign in to subscribe'
@@ -340,7 +340,7 @@ async function handleSubscribeClick(btn: HTMLButtonElement, channelId: string, s
   if (ok) {
     state.subscribed = wantSubscribe
   } else {
-    console.warn(`[dumbify] ${wantSubscribe ? 'subscribe' : 'unsubscribe'} request failed for channel ${channelId}`)
+    console.warn(`[Dumbify] ${wantSubscribe ? 'subscribe' : 'unsubscribe'} request failed for channel ${channelId}`)
     setSubUi(btn, state.subscribed)
   }
 }

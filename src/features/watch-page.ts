@@ -288,7 +288,7 @@ function clickLikeTarget(btn: HTMLButtonElement, target: HTMLElement) {
   const wasLiked = nativeLikeState()
   setLikeUi(btn, !wasLiked)
   target.click()
-  if (DEBUG) console.log('[dumbify] clicked like target:', target)
+  if (DEBUG) console.log('[Dumbify] clicked like target:', target)
   window.setTimeout(() => syncLikeState(btn), 600)
 }
 
@@ -298,7 +298,7 @@ function clickNativeLike(btn: HTMLButtonElement) {
     clickLikeTarget(btn, target)
     return
   }
-  console.warn('[dumbify] native like button not found')
+  console.warn('[Dumbify] native like button not found')
   let tries = 0
   const poll = window.setInterval(() => {
     const t = nativeLikeEl()
@@ -531,7 +531,7 @@ function checkPlaybackHealth() {
     // currentSrc is a signed googlevideo URL - only logged behind the debug flag.
     if (DEBUG) {
       console.log(
-        '[dumbify] video state:',
+        '[Dumbify] video state:',
         JSON.stringify({
           src: video.currentSrc?.slice(0, 100),
           readyState: video.readyState,
@@ -540,7 +540,7 @@ function checkPlaybackHealth() {
       )
     }
     if (video.readyState === 0 && video.currentSrc && !video.error) {
-      if (DEBUG) console.log('[dumbify] nudging video.load()')
+      if (DEBUG) console.log('[Dumbify] nudging video.load()')
       video.load()
     }
   }, 4000)
@@ -548,7 +548,7 @@ function checkPlaybackHealth() {
 
 function movePlayerNow(target: HTMLElement, el: HTMLElement) {
   if (movedPlayer) return
-  if (DEBUG) console.log('[dumbify] player found:', el.tagName, el.id || el.className)
+  if (DEBUG) console.log('[Dumbify] player found:', el.tagName, el.id || el.className)
   originalParent = el.parentElement
   originalSibling = el.nextSibling
   el.classList.add('df-native-player')
@@ -672,9 +672,9 @@ function topLevelButtonsJson(): string {
 
 function logLikeDiagnostics() {
   for (const sel of LIKE_SELECTORS) {
-    if (document.querySelector(sel)) console.log('[dumbify] like selector ok:', sel)
+    if (document.querySelector(sel)) console.log('[Dumbify] like selector ok:', sel)
   }
-  console.log('[dumbify] top-level buttons:', topLevelButtonsJson())
+  console.log('[Dumbify] top-level buttons:', topLevelButtonsJson())
 }
 
 function extractComments(): CommentItem[] {
@@ -722,7 +722,7 @@ async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'fa
     if (params) createParams = params
   }
   if (!params) {
-    console.warn('[dumbify] cannot post: not signed in to YouTube (no createCommentParams)')
+    console.warn('[Dumbify] cannot post: not signed in to YouTube (no createCommentParams)')
     return 'signin'
   }
   let ok = await postCommentAPI(comment, params)
@@ -746,7 +746,7 @@ async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'fa
       renderMoreButton(list)
     }
   } else {
-    console.warn('[dumbify] comment post failed (not signed in?)')
+    console.warn('[Dumbify] comment post failed (not signed in?)')
   }
   return ok ? 'ok' : 'failed'
 }
@@ -965,7 +965,7 @@ function renderComments(list: HTMLElement, source: CommentItem[] | null = null) 
       const withText = [...document.querySelectorAll('ytd-comment-thread-renderer')].filter(
         (t) => t.querySelector('#content-text')?.textContent?.trim()
       ).length
-      console.log('[dumbify] no comments rendered; threads:', threads, 'with text:', withText)
+      console.log('[Dumbify] no comments rendered; threads:', threads, 'with text:', withText)
     }
     const empty = document.createElement('p')
     empty.className = 'df-comment-empty'
@@ -1277,7 +1277,7 @@ function buildWatchPage(nav: NavigationState) {
       playerWatcher?.disconnect()
       playerWatcher = null
       if (!movedPlayer) {
-        console.warn('[dumbify] player not found after 10s; selectors:', PLAYER_SELECTORS.join(', '))
+        console.warn('[Dumbify] player not found after 10s; selectors:', PLAYER_SELECTORS.join(', '))
         const msg = document.createElement('p')
         msg.className = 'df-play-label'
         msg.textContent = 'Video not available'
