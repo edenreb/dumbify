@@ -1248,7 +1248,11 @@ function buildWatchPage(nav: NavigationState) {
       parts.push(isNaN(num) ? data.video.views : `${num.toLocaleString()} views`)
     }
     if (data.video.published) {
-      const d = new Date(data.video.published)
+      // publishDate carries the uploader's own offset ("2009-10-24T23:57:33-07:00").
+      // new Date() + toLocaleDateString would re-render it in the viewer's timezone and
+      // shift the day, so take the calendar date straight from the string.
+      const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(data.video.published)
+      const d = ymd ? new Date(+ymd[1], +ymd[2] - 1, +ymd[3]) : new Date(data.video.published)
       if (!isNaN(d.getTime())) {
         parts.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))
       } else {

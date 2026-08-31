@@ -4,11 +4,6 @@
 
 Found while testing the extension against real YouTube.
 
-## Watch page: duplicated date in the meta row
-
-The publish date appears twice in the watch page meta row (next to the Like and
-Comments buttons). Small display bug.
-
 
 # Completed Tasks
 
@@ -24,6 +19,21 @@ Completed:
 - Files modified:
 - Testing:
 
+
+## Watch page: date in the meta row (issue #21)
+
+Completed:
+- Date: 2026-08-31
+- Changes: The publish date rendered a day off. `microformat.publishDate` carries the
+  uploader's offset ("2009-10-24T23:57:33-07:00"); `new Date(...).toLocaleDateString()`
+  re-rendered that instant in the viewer's timezone, shifting late-evening uploads to the
+  next day (Oct 24 showed as OCT 25 in UTC+4). Now the calendar date is taken from the
+  ISO string itself. The reported duplicate did not reproduce - PR #20 had already removed
+  the raw ISO string that read as a second date.
+- Files modified: src/features/watch-page.ts
+- Testing: `npx tsc --noEmit` and `npm run build` pass. Verified live in Chrome with the
+  extension loaded on three watch pages (old upload, same-day upload, Short): one correctly
+  formatted date, no duplicate.
 
 ## Subscriptions: sort by creator, group by date
 
