@@ -1313,6 +1313,93 @@ export async function fetchUserPlaylists(): Promise<PlaylistItem[]> {
   return []
 }
 
+export interface SavePlaylist {
+  id: string
+  title: string
+  saved: boolean
+}
+
+// Matches on shape (a playlistId next to a containsSelectedVideos state) rather than on
+// the wrapper key, so the renderer -> viewModel renames YouTube keeps doing don't break it.
+function collectAddToOptions(node: any, out: SavePlaylist[], seen: Set<string>, depth = 0) {
+  if (!node || typeof node !== 'object' || depth > 12) return
+  if (Array.isArray(node)) {
+    for (const n of node) collectAddToOptions(n, out, seen, depth + 1)
+    return
+  }
+  if (typeof node.playlistId === 'string' && node.containsSelectedVideos !== undefined) {
+    const title = extractText(node.title)
+    if (title && !seen.has(node.playlistId)) {
+      seen.add(node.playlistId)
+      // 'ALL' | 'SOME' | 'NONE' - one video is selected here, so only ALL means saved.
+      out.push({ id: node.playlistId, title, saved: node.containsSelectedVideos === 'ALL' })
+    }
+    return
+  }
+  for (const k of Object.keys(node)) collectAddToOptions(node[k], out, seen, depth + 1)
+}
+
+// Every playlist this video can be saved to - Watch later, Liked-style system lists and
+// the user's own - each with whether the video is already in it.
+export async function fetchSavePlaylists(videoId: string): Promise<SavePlaylist[]> {
+  const data = await callInnerTube('playlist/get_add_to_playlist', {
+    videoIds: [videoId],
+    excludeWatchLater: false,
+  })
+  const out: SavePlaylist[] = []
+  if (data) collectAddToOptions(data, out, new Set())
+  if (out.length) return out
+
+  log('fetchSavePlaylists: no add-to options in response, falling back to the playlists feed')
+  // ponytail: the feed carries no saved-state, so the fallback picker shows every row
+  // unchecked. Good enough to still save; drop it if get_add_to_playlist stays stable.
+  const feed = await fetchUserPlaylists()
+  if (!feed.length) return []
+  return [
+    { id: 'WL', title: 'Watch later', saved: false },
+    ...feed.map((p) => ({ id: p.id, title: p.title, saved: false })),
+  ]
+}
+
+// Creates the playlist with the video already in it - one call, same as the native
+// dialog's "Create" does.
+export async function createPlaylistWithVideo(
+  title: string,
+  videoId: string,
+  privacy: 'PRIVATE' | 'UNLISTED' | 'PUBLIC' = 'PRIVATE'
+): Promise<SavePlaylist | null> {
+  const name = title.trim()
+  if (!name) return null
+  const data = await callInnerTube('playlist/create', {
+    title: name,
+    privacyStatus: privacy,
+    videoIds: [videoId],
+  })
+  const id = data?.playlistId
+  if (!id) {
+    log('createPlaylistWithVideo failed', JSON.stringify(data?.status ?? data ?? null).slice(0, 200))
+    return null
+  }
+  return { id, title: name, saved: true }
+}
+
+export async function setVideoInPlaylist(
+  playlistId: string,
+  videoId: string,
+  add: boolean
+): Promise<boolean> {
+  const action = add
+    ? { action: 'ACTION_ADD_VIDEO', addedVideoId: videoId }
+    : { action: 'ACTION_REMOVE_VIDEO_BY_VIDEO_ID', removedVideoId: videoId }
+  const data = await callInnerTube('browse/edit_playlist', { playlistId, actions: [action] })
+  if (data?.status !== 'STATUS_SUCCEEDED') {
+    log(`setVideoInPlaylist(${playlistId}, ${add ? 'add' : 'remove'}) failed`,
+      JSON.stringify(data?.status ?? data ?? null).slice(0, 200))
+    return false
+  }
+  return true
+}
+
 export async function fetchLikedPlaylist(): Promise<{ videos: Video[]; token: string | null }> {
   try {
     const res = await fetch(location.origin + `/playlist?list=LL&df=${Date.now()}`, {

@@ -16,8 +16,12 @@ import {
   localComment,
   fetchPlaylistPage,
   fetchContinuation,
+  fetchSavePlaylists,
+  setVideoInPlaylist,
+  createPlaylistWithVideo,
   DEBUG,
   type CommentItem,
+  type SavePlaylist,
 } from '../core/DataExtractor'
 import type { Video } from '../types'
 import { navigateTo } from '../core/PageManager'
@@ -304,111 +308,209 @@ function clickNativeLike(btn: HTMLButtonElement) {
   }, 500)
 }
 
-// YouTube replaced the dedicated Watch-Later toggle button with a generic
-// "Save to playlist" action that opens a dialog listing every playlist
-// (Watch later included) as a checkbox row; there is no toggled/pressed
-// state on the button itself, only inside that dialog.
-const SAVE_BUTTON_SELECTORS = [
-  'button[aria-label="Save to playlist"]',
-  'button[aria-label^="Save" i]',
-  '#actions button[aria-label^="Save" i]',
-  'ytd-menu-renderer button[aria-label^="Save" i]',
-]
+// Saving goes straight through InnerTube (playlist/get_add_to_playlist +
+// browse/edit_playlist). The old path drove YouTube's own save dialog and scraped it
+// for a "Watch later" row, which only ever reached that one playlist and broke every
+// time the dialog's markup moved.
+let savePicker: HTMLElement | null = null
+let savePickerClose: (() => void) | null = null
 
-const SAVE_DIALOG_SELECTORS = [
-  'ytd-add-to-playlist-renderer',
-  'yt-add-to-playlist-dialog-renderer',
-  'tp-yt-paper-dialog[aria-label*="playlist" i]',
-]
-
-function nativeSaveButtonEl(): HTMLElement | null {
-  for (const sel of SAVE_BUTTON_SELECTORS) {
-    const el = document.querySelector<HTMLElement>(sel)
-    if (el) return el
-  }
-  return null
+function closeSavePicker() {
+  savePickerClose?.()
 }
 
-function findSaveDialog(): HTMLElement | null {
-  for (const sel of SAVE_DIALOG_SELECTORS) {
-    const el = document.querySelector<HTMLElement>(sel)
-    if (el) return el
-  }
-  return null
-}
-
-function findWatchLaterRow(dialog: HTMLElement): HTMLElement | null {
-  const candidates = dialog.querySelectorAll<HTMLElement>('*')
-  for (const el of candidates) {
-    const ownText = [...el.childNodes]
-      .filter((n) => n.nodeType === Node.TEXT_NODE)
-      .map((n) => n.textContent?.trim())
-      .filter(Boolean)
-      .join(' ')
-    if (ownText && /^watch later$/i.test(ownText)) {
-      return (
-        el.closest<HTMLElement>(
-          'ytd-playlist-add-to-option-renderer, [role="menuitemcheckbox"], [role="checkbox"], tp-yt-paper-item, li'
-        ) ?? el.parentElement
-      )
-    }
-  }
-  return null
-}
-
-function watchLaterRowState(row: HTMLElement): { checked: boolean; target: HTMLElement } {
-  const control = row.querySelector<HTMLElement>(
-    '[role="checkbox"], tp-yt-paper-checkbox, yt-checkbox-shape, input[type="checkbox"]'
-  )
-  const target = control ?? row
-  const checked =
-    target.getAttribute('aria-checked') === 'true' ||
-    (target as HTMLInputElement).checked === true ||
-    target.classList.contains('iron-selected')
-  return { checked, target }
-}
-
-function closeSaveDialog() {
-  const closeBtn = document.querySelector<HTMLElement>(
-    [...SAVE_DIALOG_SELECTORS.map((s) => `${s} button[aria-label="Close"]`), 'button[aria-label="Close"]'].join(', ')
-  )
-  if (closeBtn) {
-    closeBtn.click()
-    return
-  }
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-}
-
-function setWlUi(btn: HTMLButtonElement, saved: boolean) {
+function paintSaveButton(btn: HTMLButtonElement, playlists: SavePlaylist[]) {
+  const saved = playlists.some((p) => p.saved)
   btn.classList.toggle('df-saved', saved)
-  btn.textContent = saved ? 'Saved' : 'Watch later'
+  btn.textContent = saved ? 'Saved' : 'Save'
 }
 
-function clickNativeWl(btn: HTMLButtonElement) {
-  const saveBtn = nativeSaveButtonEl()
-  if (!saveBtn) {
-    console.warn('[dumbify] native save/watch-later button not found; buttons:', topLevelButtonsJson())
+function renderSaveRow(
+  p: SavePlaylist,
+  videoId: string,
+  btn: HTMLButtonElement,
+  all: SavePlaylist[]
+): HTMLElement {
+  const row = document.createElement('button')
+  row.className = 'df-save-row'
+
+  const box = document.createElement('span')
+  box.className = 'df-save-row-box'
+  const name = document.createElement('span')
+  name.className = 'df-save-row-name'
+  name.textContent = p.title
+  row.append(box, name)
+
+  const paint = () => {
+    box.textContent = p.saved ? '[x]' : '[ ]'
+    row.classList.toggle('df-save-row--on', p.saved)
+  }
+  paint()
+
+  row.onclick = async () => {
+    if (row.disabled) return
+    row.disabled = true
+    const next = !p.saved
+    p.saved = next
+    paint()
+    paintSaveButton(btn, all)
+
+    const ok = await setVideoInPlaylist(p.id, videoId, next)
+    if (!ok) {
+      p.saved = !next
+      paint()
+      paintSaveButton(btn, all)
+      row.classList.add('df-save-row--failed')
+      window.setTimeout(() => row.classList.remove('df-save-row--failed'), 1500)
+    }
+    row.disabled = false
+  }
+  return row
+}
+
+// The "+ New playlist" footer, which swaps in place for a name + visibility form the
+// way youtube.com's own save dialog does.
+function renderCreateFooter(
+  panel: HTMLElement,
+  videoId: string,
+  btn: HTMLButtonElement,
+  all: SavePlaylist[]
+): HTMLElement {
+  const footer = document.createElement('div')
+  footer.className = 'df-save-create'
+
+  const open = document.createElement('button')
+  open.className = 'df-save-row df-save-create-open'
+  open.textContent = '+ New playlist'
+  footer.appendChild(open)
+
+  open.onclick = () => {
+    footer.innerHTML = ''
+
+    const form = document.createElement('form')
+    form.className = 'df-save-create-form'
+
+    const name = document.createElement('input')
+    name.className = 'df-save-create-name'
+    name.type = 'text'
+    name.placeholder = 'Playlist name'
+    name.maxLength = 150
+    form.appendChild(name)
+
+    const privacy = document.createElement('select')
+    privacy.className = 'df-save-create-privacy'
+    for (const [value, label] of [['PRIVATE', 'Private'], ['UNLISTED', 'Unlisted'], ['PUBLIC', 'Public']]) {
+      const opt = document.createElement('option')
+      opt.value = value
+      opt.textContent = label
+      privacy.appendChild(opt)
+    }
+    form.appendChild(privacy)
+
+    const row = document.createElement('div')
+    row.className = 'df-save-create-actions'
+    const create = document.createElement('button')
+    create.className = 'df-save-create-submit'
+    create.type = 'submit'
+    create.textContent = 'Create'
+    create.disabled = true
+    const cancel = document.createElement('button')
+    cancel.className = 'df-save-create-cancel'
+    cancel.type = 'button'
+    cancel.textContent = 'Cancel'
+    row.append(create, cancel)
+    form.appendChild(row)
+
+    const error = document.createElement('p')
+    error.className = 'df-save-create-error'
+    form.appendChild(error)
+
+    footer.appendChild(form)
+    name.focus()
+
+    name.oninput = () => {
+      create.disabled = !name.value.trim()
+      error.textContent = ''
+    }
+
+    cancel.onclick = () => {
+      footer.replaceWith(renderCreateFooter(panel, videoId, btn, all))
+    }
+
+    form.onsubmit = async (e) => {
+      e.preventDefault()
+      const title = name.value.trim()
+      if (!title || create.disabled) return
+      create.disabled = true
+      cancel.disabled = true
+      create.textContent = 'Creating'
+      error.textContent = ''
+
+      const made = await createPlaylistWithVideo(title, videoId, privacy.value as 'PRIVATE' | 'UNLISTED' | 'PUBLIC')
+      if (savePicker !== panel) return
+      if (!made) {
+        create.disabled = false
+        cancel.disabled = false
+        create.textContent = 'Create'
+        error.textContent = "Couldn't create that playlist"
+        return
+      }
+
+      all.push(made)
+      panel.insertBefore(renderSaveRow(made, videoId, btn, all), footer)
+      paintSaveButton(btn, all)
+      footer.replaceWith(renderCreateFooter(panel, videoId, btn, all))
+    }
+  }
+
+  return footer
+}
+
+function toggleSavePicker(btn: HTMLButtonElement, videoId: string) {
+  if (savePicker) {
+    closeSavePicker()
     return
   }
-  saveBtn.click()
-  let tries = 0
-  const poll = window.setInterval(() => {
-    tries++
-    const dialog = findSaveDialog()
-    const row = dialog ? findWatchLaterRow(dialog) : null
-    if (row) {
-      window.clearInterval(poll)
-      const { checked, target } = watchLaterRowState(row)
-      target.click()
-      setWlUi(btn, !checked)
-      if (DEBUG) console.log('[dumbify] toggled watch later:', !checked)
-      window.setTimeout(closeSaveDialog, 400)
-    } else if (tries >= 15) {
-      window.clearInterval(poll)
-      console.warn('[dumbify] watch-later option not found in save dialog')
-      closeSaveDialog()
+
+  const panel = document.createElement('div')
+  panel.className = 'df-save-picker'
+  savePicker = panel
+
+  const status = document.createElement('p')
+  status.className = 'df-save-picker-status'
+  status.textContent = 'Loading'
+  panel.appendChild(status)
+  btn.parentElement!.appendChild(panel)
+
+  const onDocClick = (e: MouseEvent) => {
+    const t = e.target as Node
+    if (panel.contains(t) || btn.contains(t)) return
+    closeSavePicker()
+  }
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') closeSavePicker()
+  }
+  savePickerClose = () => {
+    document.removeEventListener('click', onDocClick, true)
+    document.removeEventListener('keydown', onKey)
+    panel.remove()
+    savePicker = null
+    savePickerClose = null
+  }
+  document.addEventListener('click', onDocClick, true)
+  document.addEventListener('keydown', onKey)
+
+  fetchSavePlaylists(videoId).then((playlists) => {
+    if (savePicker !== panel) return
+    if (!playlists.length) {
+      status.textContent = 'No playlists — sign in to save'
+      return
     }
-  }, 200)
+    panel.innerHTML = ''
+    paintSaveButton(btn, playlists)
+    playlists.forEach((p) => panel.appendChild(renderSaveRow(p, videoId, btn, playlists)))
+    panel.appendChild(renderCreateFooter(panel, videoId, btn, playlists))
+  })
 }
 
 let moveCheck: number | null = null
@@ -568,9 +670,6 @@ function topLevelButtonsJson(): string {
 function logLikeDiagnostics() {
   for (const sel of LIKE_SELECTORS) {
     if (document.querySelector(sel)) console.log('[dumbify] like selector ok:', sel)
-  }
-  for (const sel of SAVE_BUTTON_SELECTORS) {
-    if (document.querySelector(sel)) console.log('[dumbify] save button selector ok:', sel)
   }
   console.log('[dumbify] top-level buttons:', topLevelButtonsJson())
 }
@@ -1125,6 +1224,7 @@ function buildWatchPage(nav: NavigationState) {
   content!.innerHTML = ''
   resetComments()
   resetPlaylist()
+  closeSavePicker()
 
   const hasPlaylist = !!nav.playlistId
 
@@ -1274,11 +1374,11 @@ function buildWatchPage(nav: NavigationState) {
   syncLikeState(likeBtn)
   watchLikeState(likeBtn)
 
-  const wlBtn = document.createElement('button')
-  wlBtn.className = 'df-watch-action'
-  wlBtn.textContent = 'Watch later'
-  wlBtn.onclick = () => clickNativeWl(wlBtn)
-  actions.appendChild(wlBtn)
+  const saveBtn = document.createElement('button')
+  saveBtn.className = 'df-watch-action'
+  saveBtn.textContent = 'Save'
+  saveBtn.onclick = () => toggleSavePicker(saveBtn, data.video.id)
+  actions.appendChild(saveBtn)
 
   const commentsBtn = document.createElement('button')
   commentsBtn.className = 'df-watch-action'
@@ -1335,6 +1435,7 @@ export const watchPageFeature: Feature = {
   unmount() {
     resetComments()
     resetPlaylist()
+    closeSavePicker()
     restorePlayer()
     content!.innerHTML = ''
   },
