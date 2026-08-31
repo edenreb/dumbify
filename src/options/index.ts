@@ -143,8 +143,13 @@ function render() {
 
     app.appendChild(el('h2', undefined, 'Appearance'))
     app.appendChild(
-      selectRow('Theme', THEMES, s.theme, (v) => {
-        save(s, { theme: v })
+      selectRow('Theme', THEMES, s.theme, async (v) => {
+        // save() only mutates `s` once the write actually lands (setSettings can
+        // reject, e.g. over the storage quota), so everything reading `s` afterwards
+        // has to wait on it too - firing this off and reading `s` on the next line
+        // read the *previous* value, which is why only the color swatch (which
+        // patches `s` itself, bypassing save()) ever appeared to update live.
+        if (!(await save(s, { theme: v }))) return
         applyPageTheme(s)
         const colorKey = v === 'dark' ? 'fontColorDark' : 'fontColor'
         colorInput.value = s[colorKey]
@@ -159,12 +164,12 @@ function render() {
         'Font Size',
         FONT_SIZES.map((sz) => ({ value: sz, label: `${sz}px` })),
         s.fontSize,
-        (v) => { save(s, { fontSize: v }); updatePreview(s) }
+        async (v) => { if (!(await save(s, { fontSize: v }))) return; updatePreview(s) }
       )
     )
     app.appendChild(
-      selectRow('Font Family', FONT_FAMILIES, s.fontFamily, (v) => {
-        save(s, { fontFamily: v })
+      selectRow('Font Family', FONT_FAMILIES, s.fontFamily, async (v) => {
+        if (!(await save(s, { fontFamily: v }))) return
         updatePreview(s)
       })
     )
