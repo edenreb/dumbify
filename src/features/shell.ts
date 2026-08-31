@@ -171,6 +171,20 @@ function buildSidebar() {
 
   footer.appendChild(toggle)
 
+  const settingsBtn = document.createElement('button')
+  settingsBtn.className = 'df-settings-btn'
+  settingsBtn.setAttribute('aria-label', 'Settings')
+  const settingsIcon = document.createElement('span')
+  settingsIcon.className = 'df-settings-icon'
+  settingsIcon.textContent = '\u2699'
+  const settingsLabel = document.createElement('span')
+  settingsLabel.className = 'df-settings-label'
+  settingsLabel.textContent = 'Settings'
+  settingsBtn.appendChild(settingsIcon)
+  settingsBtn.appendChild(settingsLabel)
+  settingsBtn.onclick = () => chrome.runtime.openOptionsPage()
+  footer.appendChild(settingsBtn)
+
   const bottomTagline = document.createElement('p')
   bottomTagline.className = 'df-sidebar-tagline'
   bottomTagline.textContent = 'no thumbnails · no autoplay'
