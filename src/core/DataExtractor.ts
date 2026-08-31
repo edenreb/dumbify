@@ -738,7 +738,7 @@ function extractLockupVideos(data: any): Video[] {
 
 function collectItemVideos(item: any, out: Video[], seen: Set<string>) {
   if (!item || typeof item !== 'object') return
-  if (item.continuationItemRenderer) return
+  if (isContinuationItem(item)) return
   let node: any = item
   if (item.richItemRenderer) node = item.richItemRenderer.content ?? item.richItemRenderer
   else if (item.richSectionRenderer?.content) {
@@ -812,7 +812,7 @@ function collectFeedVideos(data: any): { videos: Video[]; itemKeys: Record<strin
       }
       const k = Object.keys(item)[0]
       if (k) itemKeys[k] = (itemKeys[k] ?? 0) + 1
-      if (k === 'continuationItemRenderer') continue
+      if (k === 'continuationItemRenderer' || k === 'continuationItemViewModel') continue
       collectItemVideos(item, out, seen)
     }
   }
@@ -978,29 +978,51 @@ async function getYTDataAsync(name: string): Promise<any> {
   return null
 }
 
+// YouTube ships two shapes for "there is more after this". The classic
+// continuationItemRenderer, and - on modern playlist pages - continuationItemViewModel,
+// whose token sits one level deeper, under its own nested continuationCommand.
+//
+// Knowing only the first shape is what broke playlist paging: a playlist's real
+// continuation went unseen, so the scan below ran on and latched onto whatever other
+// continuationItemRenderer the page happened to carry (a related-videos shelf). The
+// sidebar then paged *that* feed - a "Load more" that never ended, serving videos which
+// were never in the playlist.
+export function continuationTokenOf(node: any): string | null {
+  return (
+    node?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ??
+    node?.continuationItemRenderer?.button?.buttonRenderer?.command?.continuationCommand?.token ??
+    node?.continuationItemViewModel?.continuationCommand?.innertubeCommand?.continuationCommand?.token ??
+    null
+  )
+}
+
+function isContinuationItem(node: any): boolean {
+  return !!(node?.continuationItemRenderer || node?.continuationItemViewModel)
+}
+
 function extractContinuationToken(data: any): string | null {
   try {
     const c = selectedTabContent(data)
     if (!c) { log('  extractContinuationToken: no content'); return null }
     const rich = c?.richGridRenderer?.contents ?? []
     const last = rich[rich.length - 1]
-    let token = last?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? null
+    let token = continuationTokenOf(last)
     if (!token) {
       const sections = c?.sectionListRenderer?.contents ?? []
       for (const sec of sections) {
         const items = sec?.itemSectionRenderer?.contents ?? []
         for (const item of items) {
-          const t = item?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token
+          const t = continuationTokenOf(item)
           if (t) token = t
         }
-        const t = sec?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token
+        const t = continuationTokenOf(sec)
         if (t) token = t
       }
     }
     if (!token) {
       const playlistItems = c?.playlistVideoListRenderer?.contents ?? []
       const lastPl = playlistItems[playlistItems.length - 1]
-      token = lastPl?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? null
+      token = continuationTokenOf(lastPl)
     }
     log(`  extractContinuationToken => ${token ? token.slice(0,30)+'...' : 'null'}`)
     return token
@@ -1012,7 +1034,7 @@ function extractSearchContinuationToken(data: any): string | null {
     const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
       ?.sectionListRenderer?.contents ?? []
     for (const sec of sections) {
-      const token = sec?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? null
+      const token = continuationTokenOf(sec)
       if (token) return token
     }
     log('  extractSearchContinuationToken: no continuation item found')
@@ -1067,9 +1089,8 @@ function extractContinuationVideos(data: any): { videos: Video[]; token: string 
         // and yielded nothing, silently ending pagination after page one.
         for (const item of items) {
           collectItemVideos(item, videos, seen)
-          if (item?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token) {
-            token = item.continuationItemRenderer.continuationEndpoint.continuationCommand.token
-          }
+          const next = continuationTokenOf(item)
+          if (next) token = next
         }
       } else {
         log(`  no appendContinuationItemsAction found`)
@@ -1282,7 +1303,7 @@ function playlistFromGridRenderer(r: any): PlaylistItem | null {
 
 function collectPlaylistItems(item: any, out: PlaylistItem[], seen: Set<string>) {
   if (!item || typeof item !== 'object') return
-  if (item.continuationItemRenderer) return
+  if (isContinuationItem(item)) return
   if (item.itemSectionRenderer?.contents) {
     for (const sub of item.itemSectionRenderer.contents) collectPlaylistItems(sub, out, seen)
     return
@@ -1479,7 +1500,7 @@ export async function fetchSearchContinuation(
   for (const cmd of commands) {
     for (const ci of cmd?.appendContinuationItemsAction?.continuationItems ?? []) {
       for (const item of ci?.itemSectionRenderer?.contents ?? []) collectSearchItem(item, sink)
-      next = ci?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? next
+      next = continuationTokenOf(ci) ?? next
     }
   }
   const videos = sink.items.flatMap((i) => (i.kind === 'video' ? [i.video] : []))
