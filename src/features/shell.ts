@@ -5,15 +5,6 @@ import { sidebar, main } from '../core/UIEngine'
 import { onNavigate, navigateTo } from '../core/PageManager'
 import { getSettings, setSettings } from '../core/storage'
 
-function injectFonts() {
-  if (document.getElementById('df-fonts')) return
-  const link = document.createElement('link')
-  link.id = 'df-fonts'
-  link.rel = 'stylesheet'
-  link.href = 'https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Inter+Tight:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap'
-  document.head.appendChild(link)
-}
-
 const ROUTE_NAMES: Record<Route, string> = {
   home: 'Home',
   watch: 'Watch',
@@ -212,7 +203,6 @@ export const shellFeature: Feature = {
   id: 'shell',
 
   mount(nav: NavigationState) {
-    injectFonts()
     currentRoute = nav.route
     buildSidebar()
     buildTopbar()
