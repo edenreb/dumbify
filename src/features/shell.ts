@@ -182,7 +182,7 @@ function buildSidebar() {
   settingsLabel.textContent = 'Settings'
   settingsBtn.appendChild(settingsIcon)
   settingsBtn.appendChild(settingsLabel)
-  settingsBtn.onclick = () => chrome.runtime.openOptionsPage()
+  settingsBtn.onclick = () => window.open(chrome.runtime.getURL('src/options/index.html'), '_blank')
   footer.appendChild(settingsBtn)
 
   const bottomTagline = document.createElement('p')
