@@ -555,8 +555,16 @@ export const homeFeedFeature: Feature = {
     function appendVideos(videos: Video[]): number {
       if (feedCancelled) return 0
       if (list.querySelector('.df-loading, .df-empty')) list.innerHTML = ''
+      const playlistContext = (nav.route === 'playlist' || nav.route === 'liked' || nav.route === 'watch-later')
+        ? nav.searchParams.get('list') : null
       const newVids = videos.filter((v) => !videoIds.has(v.id))
-      newVids.forEach((v) => { videoIds.add(v.id); list.appendChild(renderVideo(v)) })
+      newVids.forEach((v) => {
+        videoIds.add(v.id)
+        if (playlistContext && !v.url.includes('list=')) {
+          v = { ...v, url: `${v.url}&list=${playlistContext}` }
+        }
+        list.appendChild(renderVideo(v))
+      })
       if (nav.route === 'channel') {
         const newForChannel = videos.filter((v) => !channelVideoIds.has(v.id))
         newForChannel.forEach((v) => channelVideoIds.add(v.id))
