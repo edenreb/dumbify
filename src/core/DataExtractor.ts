@@ -2235,6 +2235,17 @@ export function extractPageChannelId(): string | null {
   return href.match(/\/channel\/(UC[\w-]{22})/)?.[1] ?? null
 }
 
+// Whether the viewer has liked the current video, read straight from the page payload
+// (likeStatusEntity.likeStatus: LIKE | DISLIKE | INDIFFERENT). This is server-rendered
+// per-user state, available at load with no render race - unlike the DOM equivalent,
+// which has to be scraped out of YouTube's own markup once it appears.
+export function extractLikeStatus(): 'LIKE' | 'DISLIKE' | 'INDIFFERENT' | null {
+  const data = extractFromScripts('ytInitialData')
+  if (!data) return null
+  const status = findByKeyDeep(data, 'likeStatusEntity', 20)?.likeStatus
+  return status === 'LIKE' || status === 'DISLIKE' || status === 'INDIFFERENT' ? status : null
+}
+
 // Signed-out check: ytcfg carries LOGGED_IN. Fail open when ytcfg is missing
 // (some error pages have none) rather than locking a signed-in user out.
 export function isSignedIn(): boolean {
