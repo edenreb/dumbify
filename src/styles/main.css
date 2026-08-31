@@ -133,6 +133,7 @@ html.df-failed #dumbify-root {
 #dumbify-root.has-bg .df-sidebar {
   border-radius: 16px;
   margin-top: 24px;
+  margin-bottom: 24px;
   padding: 24px 20px;
 }
 
