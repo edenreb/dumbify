@@ -1,9 +1,15 @@
 /* Self-hosted from the extension package. These used to come from a <link> to
    fonts.googleapis.com that shell.ts injected into every YouTube page - a third-party
-   request on every page load, and one the page's own CSP could silently block. The
-   absolute path resolves against this stylesheet's own chrome-extension:// origin, and
-   the files are listed in web_accessible_resources. unicode-range is preserved, so a
-   reader who never sees a Cyrillic title never loads that subset. */
+   request on every page load, and one the page's own CSP could silently block.
+
+   NOT imported by main.css. shell.ts reads this file as a string and injects it with
+   the "/fonts/" prefix rewritten to chrome.runtime.getURL(). The bundled stylesheet is
+   applied to the page as inline <style>, so it has no chrome-extension:// URL of its
+   own to resolve against - a "/fonts/..." path there resolves against youtube.com and
+   404s. Only a runtime absolute URL is reliable.
+
+   unicode-range is preserved as Google declares it, so a reader who never sees a
+   Cyrillic title never loads that subset. */
 
 @font-face {
   font-family: 'IBM Plex Mono';

@@ -1,9 +1,21 @@
+import fontFaces from '../styles/fonts.css?raw'
 import type { NavigationState, Route } from '../types'
 import type { DumbifySettings } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { sidebar, main } from '../core/UIEngine'
 import { onNavigate, navigateTo } from '../core/PageManager'
 import { getSettings, setSettings } from '../core/storage'
+
+// The @font-face rules live in styles/fonts.css; only the src URLs have to be built
+// here, because chrome.runtime.getURL is the sole way to get a path that resolves
+// against the extension rather than youtube.com.
+function injectFonts() {
+  if (document.getElementById('df-fonts')) return
+  const style = document.createElement('style')
+  style.id = 'df-fonts'
+  style.textContent = fontFaces.replace(/url\("\/fonts\//g, `url("${chrome.runtime.getURL('fonts/')}`)
+  document.head.appendChild(style)
+}
 
 const ROUTE_NAMES: Record<Route, string> = {
   home: 'Home',
@@ -203,6 +215,7 @@ export const shellFeature: Feature = {
   id: 'shell',
 
   mount(nav: NavigationState) {
+    injectFonts()
     currentRoute = nav.route
     buildSidebar()
     buildTopbar()
