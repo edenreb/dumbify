@@ -29,9 +29,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node
 }
 
-// Built with createElement rather than interpolated into an HTML string: six of the
-// eight font stacks contain double quotes (including the default), which terminate a
-// value="..." attribute early and silently persist a truncated stack.
 function selectRow<T extends string | number>(
   label: string,
   options: { value: T; label: string }[],
@@ -73,17 +70,34 @@ async function save(partial: Partial<DumbifySettings>, message = 'Saved') {
   showStatus(message)
 }
 
+function applyPageTheme(theme: 'light' | 'dark') {
+  document.body.classList.toggle('light', theme === 'light')
+  document.body.classList.toggle('dark', theme === 'dark')
+}
+
+function updatePreview(s: DumbifySettings) {
+  const text = document.getElementById('preview-text') as HTMLElement | null
+  if (!text) return
+  text.style.fontFamily = s.fontFamily
+  text.style.fontSize = s.fontSize + 'px'
+  text.style.color = s.fontColor
+}
+
 function render() {
   const app = document.getElementById('app')!
   getSettings().then((s) => {
     app.replaceChildren()
+    applyPageTheme(s.theme)
 
     app.appendChild(el('h1', undefined, 'Dumbify Settings'))
     app.appendChild(el('div', 'sub', 'Typography and theme for the reading view'))
 
     app.appendChild(el('h2', undefined, 'Appearance'))
     app.appendChild(
-      selectRow('Theme', THEMES, s.theme, (v) => save({ theme: v }))
+      selectRow('Theme', THEMES, s.theme, (v) => {
+        save({ theme: v })
+        applyPageTheme(v)
+      })
     )
 
     app.appendChild(el('h2', undefined, 'Font'))
@@ -92,12 +106,48 @@ function render() {
         'Font Size',
         FONT_SIZES.map((sz) => ({ value: sz, label: `${sz}px` })),
         s.fontSize,
-        (v) => save({ fontSize: v })
+        (v) => { save({ fontSize: v }); updatePreview({ ...s, fontSize: v }) }
       )
     )
     app.appendChild(
-      selectRow('Font Family', FONT_FAMILIES, s.fontFamily, (v) => save({ fontFamily: v }))
+      selectRow('Font Family', FONT_FAMILIES, s.fontFamily, (v) => {
+        s.fontFamily = v
+        save({ fontFamily: v })
+        updatePreview(s)
+      })
     )
+
+    // Font color picker
+    const colorRow = el('div', 'color-row')
+    colorRow.appendChild(el('div', 'color-row-lbl', 'Font Color'))
+    const colorWrap = el('div', 'color-input-wrap')
+    const colorInput = document.createElement('input')
+    colorInput.type = 'color'
+    colorInput.value = s.fontColor
+    colorInput.addEventListener('input', () => {
+      s.fontColor = colorInput.value
+      hexLabel.textContent = colorInput.value
+      updatePreview(s)
+    })
+    colorInput.addEventListener('change', () => {
+      save({ fontColor: colorInput.value })
+    })
+    const hexLabel = el('span', 'color-hex', s.fontColor)
+    colorWrap.appendChild(colorInput)
+    colorWrap.appendChild(hexLabel)
+    colorRow.appendChild(colorWrap)
+    app.appendChild(colorRow)
+
+    // Live preview
+    const previewBox = el('div', 'preview-box')
+    previewBox.appendChild(el('div', 'preview-label', 'Preview'))
+    const previewText = el('div', 'preview-text', 'This is what it looks like')
+    previewText.id = 'preview-text'
+    previewText.style.fontFamily = s.fontFamily
+    previewText.style.fontSize = s.fontSize + 'px'
+    previewText.style.color = s.fontColor
+    previewBox.appendChild(previewText)
+    app.appendChild(previewBox)
 
     const footer = el('div', 'footer')
     const reset = el('button', undefined, 'Reset All Settings')

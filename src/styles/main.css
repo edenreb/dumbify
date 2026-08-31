@@ -80,12 +80,12 @@ html.df-failed #dumbify-root {
   overflow-y: auto;
   overscroll-behavior: none;
 
-  /* --df-font-family / --df-font-size are set by UIEngine.applyFont from the user's
-     saved settings. Falling back to the design-system defaults when unset. */
+  /* --df-font-family / --df-font-size / --df-font-color are set by UIEngine.applyFont
+     from the user's saved settings. Falling back to the design-system defaults when unset. */
   font-family: var(--df-font-family, var(--font-sans));
   font-size: var(--df-font-size, 16px);
   line-height: 1.6;
-  color: var(--foreground);
+  color: var(--df-font-color, var(--foreground));
   background: var(--background);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv01";
