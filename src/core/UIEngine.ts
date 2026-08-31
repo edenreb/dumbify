@@ -14,7 +14,7 @@ function applyFont(s: DumbifySettings) {
   if (!root) return
   root.style.setProperty('--df-font-family', s.fontFamily)
   root.style.setProperty('--df-font-size', s.fontSize + 'px')
-  root.style.setProperty('--df-font-color', s.fontColor)
+  root.style.setProperty('--df-font-color', s.theme === 'dark' ? s.fontColorDark : s.fontColor)
 }
 
 function applyTheme(s: DumbifySettings) {
