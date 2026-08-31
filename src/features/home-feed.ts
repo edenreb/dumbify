@@ -80,7 +80,7 @@ const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note
   subscriptions: {
     eyebrow: 'Subscriptions',
     title: 'Subscriptions',
-    note: 'No badges, no bells. New titles simply appear at the top of the list.',
+    note: '',
   },
   'watch-later': {
     eyebrow: 'Queue',
