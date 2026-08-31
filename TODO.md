@@ -3,7 +3,6 @@
 # Open Tasks
 
 Found while testing the extension against real YouTube.
-- Add upload picture from files for custom background, expand to fill page. 
 - Rename 'Watch Later' to 'Save' on a watch page, and fix the functionality to save to 'Watch Later', 'Sounds', or any otehr custom playlist that the user can save to.
 
 
@@ -21,6 +20,22 @@ Completed:
 - Files modified:
 - Testing:
 
+
+## Custom background image
+
+Completed:
+- Date: 2026-08-31
+- Changes:
+  - Added `backgroundImage` field to `DumbifySettings` (stores base64 data URL).
+  - Settings page has a "Background Image" section with a file picker (image/*),
+    thumbnail preview of the current image, and a "Remove" button.
+  - Image is applied as a CSS background (cover, center, fixed) on both the
+    Dumbify reading view and the settings page itself.
+  - Background sits behind the semi-transparent paper, so text readability is
+    preserved in both day and night modes.
+- Files modified: src/types.ts, src/core/storage.ts, src/core/UIEngine.ts,
+  src/options/index.html, src/options/index.ts
+- Testing: `npx tsc --noEmit` and `npm run build` pass.
 
 ## Remove "Newest" and "Shortest First" from homepage
 

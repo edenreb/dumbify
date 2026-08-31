@@ -21,9 +21,20 @@ function applyTheme(s: DumbifySettings) {
   if (!root) return
   root.classList.toggle('dark', s.theme === 'dark')
   const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
+  const bgImage = s.backgroundImage
+    ? `url(${s.backgroundImage})`
+    : ''
+  const bgStyles = bgImage
+    ? `${bgImage} center/cover fixed`
+    : bg
   document.documentElement.style.backgroundColor = bg
   document.body.style.backgroundColor = bg
-  root.style.setProperty('background', bg, 'important')
+  root.style.setProperty('background', bgStyles, 'important')
+  if (bgImage) {
+    root.style.setProperty('background-color', bg, 'important')
+  } else {
+    root.style.removeProperty('background-color')
+  }
 }
 
 export function mountUI() {
@@ -80,6 +91,7 @@ export function unmountUI() {
     node.style.overflow = ''
     node.style.overscrollBehavior = ''
     node.style.backgroundColor = ''
+    node.style.backgroundImage = ''
   }
 }
 

@@ -71,9 +71,18 @@ async function save(s: DumbifySettings, partial: Partial<DumbifySettings>, messa
   showStatus(message)
 }
 
-function applyPageTheme(theme: 'light' | 'dark') {
-  document.body.classList.toggle('light', theme === 'light')
-  document.body.classList.toggle('dark', theme === 'dark')
+const LIGHT_BG = '#f7f5ee'
+const DARK_BG = '#1d1d1d'
+
+function applyPageTheme(s: DumbifySettings) {
+  document.body.classList.toggle('light', s.theme === 'light')
+  document.body.classList.toggle('dark', s.theme === 'dark')
+  const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
+  if (s.backgroundImage) {
+    document.body.style.background = `url(${s.backgroundImage}) center/cover fixed, ${bg}`
+  } else {
+    document.body.style.background = ''
+  }
 }
 
 function updatePreview(s: DumbifySettings) {
@@ -88,7 +97,7 @@ function render() {
   const app = document.getElementById('app')!
   getSettings().then((s) => {
     app.replaceChildren()
-    applyPageTheme(s.theme)
+    applyPageTheme(s)
 
     app.appendChild(el('h1', undefined, 'Dumbify Settings'))
     app.appendChild(el('div', 'sub', 'Typography and theme for the reading view'))
@@ -97,7 +106,7 @@ function render() {
     app.appendChild(
       selectRow('Theme', THEMES, s.theme, (v) => {
         save(s, { theme: v })
-        applyPageTheme(v)
+        applyPageTheme(s)
         const colorKey = v === 'dark' ? 'fontColorDark' : 'fontColor'
         colorInput.value = s[colorKey]
         hexLabel.textContent = s[colorKey]
@@ -155,6 +164,62 @@ function render() {
     previewText.style.color = s.theme === 'dark' ? s.fontColorDark : s.fontColor
     previewBox.appendChild(previewText)
     app.appendChild(previewBox)
+
+    // Background image
+    app.appendChild(el('h2', undefined, 'Background'))
+    const bgSection = el('div', 'bg-section')
+    bgSection.appendChild(el('div', 'bg-section-lbl', 'Background Image'))
+
+    const bgUpload = el('div', 'bg-upload')
+    const fileInput = document.createElement('input')
+    fileInput.type = 'file'
+    fileInput.accept = 'image/*'
+    const uploadLabel = el('label', 'bg-upload-label', 'Choose image')
+    uploadLabel.setAttribute('for', 'bg-file-input')
+    fileInput.id = 'bg-file-input'
+    fileInput.appendChild(uploadLabel)
+    bgUpload.appendChild(fileInput)
+    bgUpload.appendChild(el('span', 'bg-upload-hint', 'Fits to screen behind content'))
+    bgSection.appendChild(bgUpload)
+
+    const previewWrap = el('div', 'bg-preview-wrap')
+    let previewImg: HTMLImageElement | null = null
+    let removeBtn: HTMLElement | null = null
+
+    function showBgPreview(dataUrl: string) {
+      if (previewImg) previewImg.remove()
+      if (removeBtn) removeBtn.remove()
+      previewImg = document.createElement('img')
+      previewImg.className = 'bg-preview'
+      previewImg.src = dataUrl
+      removeBtn = el('button', 'bg-remove', 'Remove')
+      removeBtn.addEventListener('click', () => {
+        save(s, { backgroundImage: '' })
+        applyPageTheme(s)
+        if (previewImg) { previewImg.remove(); previewImg = null }
+        if (removeBtn) { removeBtn.remove(); removeBtn = null }
+      })
+      previewWrap.appendChild(previewImg)
+      previewWrap.appendChild(removeBtn)
+    }
+
+    if (s.backgroundImage) showBgPreview(s.backgroundImage)
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+        save(s, { backgroundImage: dataUrl })
+        applyPageTheme(s)
+        showBgPreview(dataUrl)
+      }
+      reader.readAsDataURL(file)
+    })
+
+    bgSection.appendChild(previewWrap)
+    app.appendChild(bgSection)
 
     const footer = el('div', 'footer')
     const reset = el('button', undefined, 'Reset All Settings')
