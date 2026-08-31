@@ -174,11 +174,11 @@ function render() {
     const fileInput = document.createElement('input')
     fileInput.type = 'file'
     fileInput.accept = 'image/*'
+    fileInput.id = 'bg-file-input'
     const uploadLabel = el('label', 'bg-upload-label', 'Choose image')
     uploadLabel.setAttribute('for', 'bg-file-input')
-    fileInput.id = 'bg-file-input'
-    fileInput.appendChild(uploadLabel)
     bgUpload.appendChild(fileInput)
+    bgUpload.appendChild(uploadLabel)
     bgUpload.appendChild(el('span', 'bg-upload-hint', 'Fits to screen behind content'))
     bgSection.appendChild(bgUpload)
 
