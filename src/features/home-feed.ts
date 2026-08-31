@@ -1,7 +1,7 @@
 import type { NavigationState, Video, Channel, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { content, root } from '../core/UIEngine'
-import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, setChannelSubscription } from '../core/DataExtractor'
+import { extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, fetchUserPlaylists, fetchLikedPlaylist, fetchPlaylistPage, setChannelSubscription } from '../core/DataExtractor'
 import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
 import { navigateTo } from '../core/PageManager'
 
@@ -28,14 +28,24 @@ const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note
     note: 'Saved for when you have time.',
     aside: 'Sort by length',
   },
-  search: {
-    eyebrow: 'Search',
-    title: 'Search results',
-    note: '',
+  liked: {
+    eyebrow: 'Favorites',
+    title: 'Liked',
+    note: 'Videos you have liked, kept in one place.',
+  },
+  playlists: {
+    eyebrow: 'Library',
+    title: 'Playlists',
+    note: 'Your saved playlists.',
   },
   playlist: {
     eyebrow: 'Playlist',
     title: 'Playlist',
+    note: '',
+  },
+  search: {
+    eyebrow: 'Search',
+    title: 'Search results',
     note: '',
   },
   channel: {
@@ -57,6 +67,7 @@ function renderPageHead(nav: NavigationState) {
 
   const head = document.createElement('header')
   head.className = 'df-page-head'
+  head.id = 'df-page-head'
 
   const body = document.createElement('div')
   body.className = 'df-page-head-body'
@@ -93,6 +104,17 @@ function renderPageHead(nav: NavigationState) {
   }
 
   content!.appendChild(head)
+}
+
+function updatePageHead(overrides: { eyebrow?: string; title?: string; note?: string }) {
+  const head = document.getElementById('df-page-head')
+  if (!head) return
+  const eyebrow = head.querySelector('.df-page-eyebrow')
+  if (eyebrow && overrides.eyebrow) eyebrow.textContent = overrides.eyebrow
+  const title = head.querySelector('.df-page-title')
+  if (title && overrides.title) title.textContent = overrides.title
+  const note = head.querySelector('.df-page-note')
+  if (note && overrides.note !== undefined) note.textContent = overrides.note
 }
 
 function renderToolbar(route: Route) {
@@ -533,8 +555,16 @@ export const homeFeedFeature: Feature = {
     function appendVideos(videos: Video[]): number {
       if (feedCancelled) return 0
       if (list.querySelector('.df-loading, .df-empty')) list.innerHTML = ''
+      const playlistContext = (nav.route === 'playlist' || nav.route === 'liked' || nav.route === 'watch-later')
+        ? nav.searchParams.get('list') : null
       const newVids = videos.filter((v) => !videoIds.has(v.id))
-      newVids.forEach((v) => { videoIds.add(v.id); list.appendChild(renderVideo(v)) })
+      newVids.forEach((v) => {
+        videoIds.add(v.id)
+        if (playlistContext && !v.url.includes('list=')) {
+          v = { ...v, url: `${v.url}&list=${playlistContext}` }
+        }
+        list.appendChild(renderVideo(v))
+      })
       if (nav.route === 'channel') {
         const newForChannel = videos.filter((v) => !channelVideoIds.has(v.id))
         newForChannel.forEach((v) => channelVideoIds.add(v.id))
@@ -735,6 +765,36 @@ export const homeFeedFeature: Feature = {
         renderChannelAbout(channel, list)
         videos = result.videos
         continuationToken = result.continuation
+      } else if (nav.route === 'liked') {
+        const result = await fetchLikedPlaylist()
+        if (feedCancelled) return
+        videos = result.videos
+        continuationToken = result.token
+      } else if (nav.route === 'playlists') {
+        const playlists = await fetchUserPlaylists()
+        if (feedCancelled) return
+        list.innerHTML = ''
+        if (playlists.length) {
+          playlists.forEach((p) => list.appendChild(renderPlaylistRow(p)))
+          updateItemNumbers()
+        } else {
+          const empty = document.createElement('div')
+          empty.className = 'df-empty'
+          empty.textContent = 'No playlists to display'
+          list.appendChild(empty)
+        }
+        initialLoadDone = true
+        feedExhausted = true
+        return
+      } else if (nav.route === 'playlist') {
+        const playlistId = nav.searchParams.get('list') ?? ''
+        const result = await fetchPlaylistPage(playlistId)
+        if (feedCancelled) return
+        if (result.title) {
+          updatePageHead({ title: result.title, note: '' })
+        }
+        videos = result.videos
+        continuationToken = result.token
       } else {
         const result = await fetchContinuation('', nav.route)
         videos = result.videos

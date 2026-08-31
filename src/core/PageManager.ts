@@ -11,6 +11,8 @@ function getRoute(pathname: string, searchParams: URLSearchParams): Route {
   if (pathname === '/feed/subscriptions') return 'subscriptions'
   if (pathname === '/feed/history') return 'history'
   if (pathname === '/playlist' && searchParams.get('list') === 'WL') return 'watch-later'
+  if (pathname === '/playlist' && searchParams.get('list') === 'LL') return 'liked'
+  if (pathname === '/feed/playlists') return 'playlists'
   if (pathname === '/playlist') return 'playlist'
   if (pathname.startsWith('/channel/') || pathname.startsWith('/@')) return 'channel'
   if (pathname.startsWith('/shorts/')) return 'shorts'

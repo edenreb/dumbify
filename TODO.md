@@ -4,11 +4,6 @@
 
 Found while testing the extension against real YouTube.
 
-## Playlists do not work
-
-Playlists (Liked videos, sounds, Watch Later) do not render at all in this version.
-Playlist routes need to actually fetch and show their contents.
-
 ## Subscriptions: sort by creator, group by date
 
 On the subscriptions feed, add sorting by creator, and group videos into date
@@ -33,6 +28,36 @@ Completed:
 - Changes:
 - Files modified:
 - Testing:
+
+
+## Fix Liked tab, Playlists tab, and playlist sidebar
+
+Completed:
+- Date: 2026-08-31
+- Changes:
+  - Added `'liked'` and `'playlists'` routes to `Route` type in `types.ts`.
+  - Updated `PageManager.ts` route detection: `/playlist?list=LL` → `liked`,
+    `/feed/playlists` → `playlists`.
+  - Updated `content.ts` feature routing and `shell.ts` NAV entries.
+  - Added `fetchUserPlaylists()`, `fetchLikedPlaylist()`, `fetchPlaylistPage()` to
+    `DataExtractor.ts`.
+  - Implemented `doLoad` branches for `liked`, `playlists`, and `playlist` routes in
+    `home-feed.ts` with dynamic page head titles.
+  - Added playlist sidebar on the watch page: when a video is opened from a playlist,
+    a scrollable panel below the player shows all videos in the playlist with the
+    current one highlighted. Clicking a video navigates within the playlist and
+    reloads the page.
+  - Videos on playlist pages now carry the `&list=` parameter so clicking them
+    preserves playlist context on the watch page.
+  - Added URL watcher that detects YouTube's auto-advance in playlists and reloads the
+    page so title, sidebar highlight, and metadata update.
+- Files modified: src/types.ts, src/core/PageManager.ts, src/core/DataExtractor.ts,
+  src/content.ts, src/features/home-feed.ts, src/features/watch-page.ts,
+  src/features/shell.ts, src/styles/main.css
+- Testing: `npx tsc --noEmit` and `npm run build` pass. Manually tested in Chrome:
+  Liked tab shows liked videos, Playlists tab shows user playlists, clicking a playlist
+  opens its video list, clicking a video shows the playlist sidebar on the watch page,
+  auto-advance reloads the page correctly.
 
 
 ## Codebase audit: phases 1-3 (correctness, trust, cleanup)
