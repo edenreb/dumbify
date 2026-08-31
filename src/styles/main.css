@@ -78,7 +78,8 @@ html.df-failed #dumbify-root {
   inset: 0;
   z-index: 2147483647;
   overflow-y: auto;
-  overscroll-behavior: none;
+  /* Y only: overscroll-behavior-x would disable the macOS two-finger back/forward swipe. */
+  overscroll-behavior-y: none;
 
   /* --df-font-family / --df-font-size are set by UIEngine.applyFont from the user's
      saved settings. Falling back to the design-system defaults when unset. */

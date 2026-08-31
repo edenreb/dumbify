@@ -38,9 +38,9 @@ export function mountUI() {
   root.style.setProperty('visibility', 'visible', 'important')
 
   document.documentElement.style.overflow = 'hidden'
-  document.documentElement.style.overscrollBehavior = 'none'
+  document.documentElement.style.overscrollBehaviorY = 'none'
   document.body.style.overflow = 'hidden'
-  document.body.style.overscrollBehavior = 'none'
+  document.body.style.overscrollBehaviorY = 'none'
 
   document.body.appendChild(root)
 
@@ -77,7 +77,7 @@ export function unmountUI() {
   root?.remove()
   for (const node of [document.documentElement, document.body]) {
     node.style.overflow = ''
-    node.style.overscrollBehavior = ''
+    node.style.overscrollBehaviorY = ''
     node.style.backgroundColor = ''
   }
 }
