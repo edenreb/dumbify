@@ -44,16 +44,43 @@ function tryFindInText(text: string, name: string): any {
   return null
 }
 
+// The page's inline scripts never change for a given document, but the same blob was
+// being re-scanned and re-JSON.parsed 2-4x per load (extractPageError, extractWatchData
+// and extractCommentsFromPage each pulled it fresh) - megabytes of parsing per repeat.
+// Keyed on href so YouTube's own SPA navigation can't serve stale data, and only hits
+// are cached: a miss may just mean the script hasn't landed yet.
+const scriptCache = new Map<string, any>()
+let scriptCacheHref = ''
+
 function extractFromScripts(name: string): any {
+  if (scriptCacheHref !== location.href) {
+    scriptCache.clear()
+    scriptCacheHref = location.href
+  }
+  const cached = scriptCache.get(name)
+  if (cached) return cached
   for (const s of document.querySelectorAll('script')) {
     if (s.src) continue
     const d = tryFindInText(s.textContent ?? '', name)
-    if (d) return d
+    if (d) { scriptCache.set(name, d); return d }
   }
   return null
 }
 
+// Cached for the same reason as extractFromScripts, and more urgently: callInnerTube
+// runs this on every API call (every comment page, like, subscribe, playlist edit) and
+// each run regex-scans every inline script on the page.
+let cfgCache: any = null
+let cfgCacheHref = ''
+
 function tryFindYTCfg(): any {
+  if (cfgCacheHref === location.href && cfgCache) return cfgCache
+  const cfg = findYTCfg()
+  if (cfg) { cfgCache = cfg; cfgCacheHref = location.href }
+  return cfg
+}
+
+function findYTCfg(): any {
   for (const s of document.querySelectorAll('script')) {
     if (s.src) continue
     const t = s.textContent ?? ''
@@ -96,8 +123,14 @@ function tryFindYTCfg(): any {
     if (found > 0 && cfg.INNERTUBE_API_KEY) return cfg
   }
 
-  const data = tryFindInText(document.documentElement.innerHTML || '', 'ytcfg')
-  if (data?.INNERTUBE_API_KEY) return data
+  // Last resort: the plain-assignment forms, over the same inline scripts. This used to
+  // run tryFindInText over document.documentElement.innerHTML - serializing all of
+  // youtube.com's DOM to search text that only ever lives in these script tags.
+  for (const s of document.querySelectorAll('script')) {
+    if (s.src) continue
+    const data = tryFindInText(s.textContent ?? '', 'ytcfg')
+    if (data?.INNERTUBE_API_KEY) return data
+  }
   return null
 }
 
@@ -213,6 +246,16 @@ function extractText(v: any): string {
   return ''
 }
 
+// Channel.handle has two producers: channelRenderer's `canonicalBaseUrl` is a path
+// ("/@Name"), channelMetadataRenderer's `vanityChannelUrl` is absolute
+// ("http://www.youtube.com/@Name"). Consumers build links by appending to the origin,
+// so the absolute form produced "https://www.youtube.comhttp://www.youtube.com/@Name".
+// Normalize to the path form at every site that reads vanityChannelUrl.
+function channelHandlePath(url: unknown): string {
+  if (typeof url !== 'string' || !url) return ''
+  return url.replace(/^https?:\/\/(www\.)?youtube\.com/i, '')
+}
+
 function channelFromRenderer(r: any): Channel | null {
   if (!r?.channelId) return null
   const name = extractText(r.title)
@@ -244,39 +287,42 @@ function scanChannelRenderers(obj: any, depth = 0, maxDepth = 20, out: Channel[]
   return out
 }
 
+interface SearchItemSink {
+  items: SearchItem[]
+  seenVideos: Set<string>
+  seenChannels: Set<string>
+}
+
+function newSearchItemSink(): SearchItemSink {
+  return { items: [], seenVideos: new Set(), seenChannels: new Set() }
+}
+
+function collectSearchItem(item: any, sink: SearchItemSink) {
+  if (item?.videoRenderer?.videoId) {
+    const v = vidFromRenderer(item.videoRenderer)
+    if (v && !sink.seenVideos.has(v.id)) { sink.seenVideos.add(v.id); sink.items.push({ kind: 'video', video: v }) }
+  } else if (item?.channelRenderer?.channelId) {
+    const c = channelFromRenderer(item.channelRenderer)
+    if (c && !sink.seenChannels.has(c.id)) { sink.seenChannels.add(c.id); sink.items.push({ kind: 'channel', channel: c }) }
+  } else if (item?.lockupViewModel?.contentId) {
+    const v = vidFromLockup(item.lockupViewModel)
+    if (v && !sink.seenVideos.has(v.id)) { sink.seenVideos.add(v.id); sink.items.push({ kind: 'video', video: v }) }
+  }
+}
+
 function extractSearchItems(data: any): SearchItem[] {
   const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
     ?.sectionListRenderer?.contents ?? []
-  const items: SearchItem[] = []
-  const seenVideos = new Set<string>()
-  const seenChannels = new Set<string>()
+  const sink = newSearchItemSink()
 
   for (const sec of sections) {
-    for (const item of (sec?.itemSectionRenderer?.contents ?? [])) {
-      if (item?.videoRenderer?.videoId) {
-        const v = vidFromRenderer(item.videoRenderer)
-        if (v && !seenVideos.has(v.id)) { seenVideos.add(v.id); items.push({ kind: 'video', video: v }) }
-      } else if (item?.channelRenderer?.channelId) {
-        const c = channelFromRenderer(item.channelRenderer)
-        if (c && !seenChannels.has(c.id)) { seenChannels.add(c.id); items.push({ kind: 'channel', channel: c }) }
-      } else if (item?.lockupViewModel?.contentId) {
-        const v = vidFromLockup(item.lockupViewModel)
-        if (v && !seenVideos.has(v.id)) { seenVideos.add(v.id); items.push({ kind: 'video', video: v }) }
-      }
-    }
+    for (const item of (sec?.itemSectionRenderer?.contents ?? [])) collectSearchItem(item, sink)
   }
 
   for (const c of scanChannelRenderers(data)) {
-    if (!seenChannels.has(c.id)) { seenChannels.add(c.id); items.push({ kind: 'channel', channel: c }) }
+    if (!sink.seenChannels.has(c.id)) { sink.seenChannels.add(c.id); sink.items.push({ kind: 'channel', channel: c }) }
   }
-  return items
-}
-
-function extractChannelsFromData(data: any): Channel[] {
-  return extractSearchItems(data)
-    .filter((i) => i.kind === 'channel')
-    .map((i) => (i.kind === 'channel' ? i.channel : null))
-    .filter((c): c is Channel => !!c)
+  return sink.items
 }
 
 function extractChannelHeader(data: any): Channel | null {
@@ -289,7 +335,7 @@ function extractChannelHeader(data: any): Channel | null {
     return {
       id: h.channelId,
       name: extractText(h.title) || (meta?.title ?? ''),
-      handle: meta?.vanityChannelUrl ?? '',
+      handle: channelHandlePath(meta?.vanityChannelUrl),
       subscribers: extractText(h.subscriberCountText),
       videoCount: extractText(h.videosCountText),
       description: meta?.description ?? '',
@@ -332,7 +378,7 @@ function extractChannelHeader(data: any): Channel | null {
       return {
         id: channelId,
         name: extractText(ph.title) || meta?.title || '',
-        handle: meta?.vanityChannelUrl ?? '',
+        handle: channelHandlePath(meta?.vanityChannelUrl),
         subscribers: subs,
         videoCount: vids,
         description: meta?.description ?? '',
@@ -350,7 +396,7 @@ function extractChannelHeader(data: any): Channel | null {
     return {
       id: meta.externalId,
       name: meta.title ?? '',
-      handle: meta.vanityChannelUrl ?? '',
+      handle: channelHandlePath(meta.vanityChannelUrl),
       subscribers: meta.subscriberCountText ?? '',
       videoCount: meta.videosCountText ?? '',
       description: meta.description ?? '',
@@ -852,39 +898,31 @@ function extractFromData(data: any): Video[] {
   return []
 }
 
-function findVideoRenderers(obj: any, depth = 0, maxDepth = 20): any[] {
-  if (depth > maxDepth || typeof obj !== 'object' || obj === null) return []
+const VIDEO_RENDERER_KEYS = ['videoRenderer', 'compactVideoRenderer', 'gridVideoRenderer',
+  'reelItemRenderer', 'playlistVideoRenderer', 'movieRenderer', 'showRenderer',
+  'cardVideoRenderer', 'shortVideoRenderer']
+
+// Last-resort deep scan. It used to `return` the first non-empty subtree, so a page with
+// two sibling shelves only ever yielded the first, and an object holding a renderer
+// yielded exactly one video. Now it walks the whole object and dedupes by id.
+function findVideoRenderers(obj: any, depth = 0, maxDepth = 20, out: Video[] = [], seen = new Set<string>()): Video[] {
+  if (depth > maxDepth || typeof obj !== 'object' || obj === null) return out
   if (Array.isArray(obj)) {
-    const results: any[] = []
-    for (const item of obj) {
-      const found = findVideoRenderers(item, depth + 1, maxDepth)
-      results.push(...found)
-    }
-    return results
+    for (const item of obj) findVideoRenderers(item, depth + 1, maxDepth, out, seen)
+    return out
   }
-  const rendererKeys = ['videoRenderer', 'compactVideoRenderer', 'gridVideoRenderer',
-    'reelItemRenderer', 'playlistVideoRenderer', 'movieRenderer', 'showRenderer',
-    'cardVideoRenderer', 'shortVideoRenderer']
-  for (const key of rendererKeys) {
-    const renderer = obj[key]
-    if (renderer?.videoId) {
-      const v = vidFromRenderer(renderer)
-      if (v) return [v]
-    }
+  const push = (v: Video | null) => {
+    if (v && !seen.has(v.id)) { seen.add(v.id); out.push(v) }
   }
-  if (obj.lockupViewModel?.contentId) {
-    const v = vidFromLockup(obj.lockupViewModel)
-    if (v) return [v]
+  for (const key of VIDEO_RENDERER_KEYS) {
+    if (obj[key]?.videoId) push(vidFromRenderer(obj[key]))
   }
+  if (obj.lockupViewModel?.contentId) push(vidFromLockup(obj.lockupViewModel))
   if (obj.videoId && typeof obj.videoId === 'string' && obj.title && (obj.lengthText || obj.viewCountText || obj.publishedTimeText)) {
-    const v = vidFromRenderer(obj)
-    if (v) return [v]
+    push(vidFromRenderer(obj))
   }
-  for (const key of Object.keys(obj)) {
-    const found = findVideoRenderers(obj[key], depth + 1, maxDepth)
-    if (found.length) return found
-  }
-  return []
+  for (const key of Object.keys(obj)) findVideoRenderers(obj[key], depth + 1, maxDepth, out, seen)
+  return out
 }
 
 function extractFromDOM(): Video[] {
@@ -911,12 +949,7 @@ async function fetchHTML(url: string): Promise<string | null> {
 
 async function extractFromFetchedHTML(name: string): Promise<any> {
   const html = await fetchHTML(location.href)
-  if (!html) return null
-  for (const m of [`${name}=`, `${name} = `, `window.${name}=`, `window.${name} = `, `var ${name}=`, `var ${name} = `]) {
-    const p = html.indexOf(m)
-    if (p !== -1) { try { const d = parseJSONBlock(html, p + m.length); if (d) return d } catch {} }
-  }
-  return null
+  return html ? tryFindInText(html, name) : null
 }
 
 function getYTDataSync(name: string): any {
@@ -980,7 +1013,8 @@ function extractContinuationVideos(data: any): { videos: Video[]; token: string 
   const seen = new Set<string>()
   let token: string | null = null
   try {
-    const eps = data?.onResponseReceivedEndpoints ?? data?.onResponseReceivedActions ?? []
+    const eps = data?.onResponseReceivedEndpoints ?? data?.onResponseReceivedActions
+      ?? data?.onResponseReceivedCommands ?? []
     log(`extractContinuationVideos: ${eps.length} endpoints`)
     for (const ep of eps) {
       log(`  endpoint keys=${Object.keys(ep).join(',')}`)
@@ -1050,22 +1084,50 @@ const ROUTE_URLS: Record<string, string> = {
   liked: '/playlist?list=LL',
 }
 
+// This had its own brace-matcher (duplicated again inside fetchFreshData) that tested
+// `text[i-1] !== '\\'` for the closing quote - which misreads a literal backslash before
+// that quote as an escape, never closes the string, and returns null, silently emptying
+// a whole feed. parseJSONBlock tracks escapes properly, and tryFindInText already covers
+// strictly more assignment forms than the two spelled out here.
 function parseInitialData(text: string): any | null {
-  for (const p of ['window.ytInitialData = ', 'ytInitialData = ']) {
-    const idx = text.indexOf(p)
-    if (idx === -1) continue
-    const start = text.indexOf('{', idx + p.length)
-    if (start === -1) continue
-    let depth = 0, inStr = false, strChar = ''
-    for (let i = start; i < text.length; i++) {
-      const c = text[i]
-      if (inStr) { if (c === strChar && text[i-1] !== '\\') inStr = false; continue }
-      if (c === '"' || c === "'") { inStr = true; strChar = c; continue }
-      if (c === '{') depth++
-      if (c === '}') { depth--; if (depth === 0) { try { return JSON.parse(text.slice(start, i + 1)) } catch { return null } } }
+  return tryFindInText(text, 'ytInitialData')
+}
+
+// One place for "fetch a YouTube page and parse its ytInitialData". Six callers each had
+// their own copy of this, and only search sent a Range header - so the other five pulled
+// the whole multi-megabyte page. The Range window is now consistent, and a truncated body
+// (which can't be brace-matched, and used to surface as a silent empty feed) retries in
+// full instead of failing.
+const INITIAL_DATA_WINDOW = 400000
+
+async function fetchInitialData(path: string, label = path): Promise<any | null> {
+  const url = location.origin + path + (path.includes('?') ? '&' : '?') + 'df=' + Date.now()
+  const read = async (ranged: boolean) => {
+    const res = await fetch(url, {
+      credentials: 'include',
+      headers: ranged
+        ? { Accept: 'text/html', Range: `bytes=0-${INITIAL_DATA_WINDOW}` }
+        : { Accept: 'text/html' },
+    })
+    if (!res.ok && res.status !== 206) {
+      log(`fetchInitialData(${label}): HTTP ${res.status}`)
+      return { status: res.status, data: null as any }
     }
+    const text = await res.text()
+    return { status: res.status, data: parseInitialData(text) }
   }
-  return null
+  try {
+    const first = await read(true)
+    if (first.data) return first.data
+    // 206 means the server honoured the window, so a parse failure is most likely just
+    // truncation rather than a missing payload.
+    if (first.status !== 206) return null
+    log(`fetchInitialData(${label}): ytInitialData did not fit the range window, refetching in full`)
+    return (await read(false)).data
+  } catch (e: any) {
+    log(`fetchInitialData(${label}) ERROR: ${e.message}`)
+    return null
+  }
 }
 
 async function fetchFreshData(route = 'home'): Promise<{ videos: Video[]; token: string | null } | null> {
@@ -1091,60 +1153,28 @@ async function fetchFreshData(route = 'home'): Promise<{ videos: Video[]; token:
     }
   }
 
-  const url = path + '?df=' + Date.now()
-  try {
-    const res = await fetch(location.origin + url, {
-      credentials: 'include',
-      headers: { 'Accept': 'text/html' },
-    })
-    if (!res.ok && res.status !== 206) { log(`fetchFreshData(${route}): HTTP ${res.status}`); return null }
-    const text = await res.text()
-    log(`fetchFreshData(${route}): HTTP ${res.status}, ${text.length} bytes`)
-    for (const p of ['window.ytInitialData = ', 'ytInitialData = ']) {
-      const idx = text.indexOf(p)
-      if (idx === -1) continue
-      const start = text.indexOf('{', idx + p.length)
-      if (start === -1) continue
-      let depth = 0, inStr = false, strChar = ''
-      for (let i = start; i < text.length; i++) {
-        const c = text[i]
-        if (inStr) { if (c === strChar && text[i-1] !== '\\') inStr = false; continue }
-        if (c === '"' || c === "'") { inStr = true; strChar = c; continue }
-        if (c === '{') depth++
-        if (c === '}') { depth--; if (depth === 0) { try {
-          const d = JSON.parse(text.slice(start, i + 1))
-          const t0 = d?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
-          const contentKeys = t0 ? Object.keys(t0).join(',') : 'none'
-          log(`fetchFreshData(${route}): parsed ytInitialData, tab content keys: ${contentKeys}`)
-          return { videos: extractFromData(d), token: extractContinuationToken(d) }
-        } catch { log(`fetchFreshData(${route}): JSON parse failed`); return null } } }
-      }
-    }
-    log(`fetchFreshData(${route}): no ytInitialData found in HTML`)
-    return null
-  } catch (e: any) { log(`fetchFreshData(${route}) ERROR: ${e.message}`); return null }
+  const d = await fetchInitialData(path, route)
+  if (!d) return null
+  const t0 = d?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
+  log(`fetchFreshData(${route}): tab content keys: ${t0 ? Object.keys(t0).join(',') : 'none'}`)
+  return { videos: extractFromData(d), token: extractContinuationToken(d) }
 }
 
 export async function fetchSearchResults(query: string): Promise<PageResult> {
   diag.length = 0
   log(`=== fetchSearchResults: "${query}" ===`)
   if (!query.trim()) return emptyPageResult()
-  const url = `/results?search_query=${encodeURIComponent(query.trim())}&df=${Date.now()}`
-  try {
-    const res = await fetch(location.origin + url, {
-      credentials: 'include',
-      headers: { 'Accept': 'text/html', 'Range': 'bytes=0-400000' },
-    })
-    if (!res.ok && res.status !== 206) return emptyPageResult()
-    const d = parseInitialData(await res.text())
-    if (!d) return emptyPageResult()
-    const videos = extractFromData(d)
-    const items = extractSearchItems(d)
-    const channels = extractChannelsFromData(d)
-    const token = extractSearchContinuationToken(d)
-    log(`fetchSearchResults: ${videos.length} videos, ${channels.length} channels, token=${token ? 'yes' : 'no'}`)
-    return { videos, channels, items, continuation: token }
-  } catch { return emptyPageResult() }
+  const d = await fetchInitialData(`/results?search_query=${encodeURIComponent(query.trim())}`, 'search')
+  if (!d) return emptyPageResult()
+  const videos = extractFromData(d)
+  // extractChannelsFromData used to re-run extractSearchItems (and its full recursive
+  // scanChannelRenderers walk) over the same multi-megabyte payload just to pull the
+  // channels back out. They are already in `items`.
+  const items = extractSearchItems(d)
+  const channels = items.flatMap((i) => (i.kind === 'channel' ? [i.channel] : []))
+  const token = extractSearchContinuationToken(d)
+  log(`fetchSearchResults: ${videos.length} videos, ${channels.length} channels, token=${token ? 'yes' : 'no'}`)
+  return { videos, channels, items, continuation: token }
 }
 
 export interface ChannelPageResult {
@@ -1158,17 +1188,8 @@ export async function fetchChannelPage(channelId: string): Promise<ChannelPageRe
   log(`=== fetchChannelPage: ${channelId} ===`)
   if (!channelId) return { channel: null, videos: [], continuation: null }
 
-  const url = `/channel/${channelId}/videos?df=${Date.now()}`
   let channelFromAPI: Channel | null = null
-  let d: any = null
-
-  try {
-    const res = await fetch(location.origin + url, {
-      credentials: 'include',
-      headers: { 'Accept': 'text/html' },
-    })
-    if (res.ok) d = parseInitialData(await res.text())
-  } catch {}
+  let d: any = await fetchInitialData(`/channel/${channelId}/videos`, 'channel')
 
   if (!d) {
     const data = await callInnerTube('browse', { browseId: channelId })
@@ -1188,9 +1209,9 @@ export async function fetchChannelPage(channelId: string): Promise<ChannelPageRe
       channelFromAPI = {
         id: channelId,
         name: md.title ?? '',
-        handle: md.vanityChannelUrl ?? '',
+        handle: channelHandlePath(md.vanityChannelUrl),
         subscribers: '',
-        videoCount: md.externalId ? '' : '',
+        videoCount: '',
         description: md.shortDescription ?? '',
         verified: false,
       }
@@ -1288,31 +1309,13 @@ export function extractChannelPlaylists(data: any): PlaylistItem[] {
 
 export async function fetchChannelPlaylists(channelId: string): Promise<PlaylistItem[]> {
   if (!channelId) return []
-  try {
-    const res = await fetch(location.origin + `/channel/${channelId}/playlists?df=${Date.now()}`, {
-      credentials: 'include',
-      headers: { Accept: 'text/html' },
-    })
-    if (res.ok) {
-      const d = parseInitialData(await res.text())
-      if (d) return extractChannelPlaylists(d)
-    }
-  } catch {}
-  return []
+  const d = await fetchInitialData(`/channel/${channelId}/playlists`, 'channel-playlists')
+  return d ? extractChannelPlaylists(d) : []
 }
 
 export async function fetchUserPlaylists(): Promise<PlaylistItem[]> {
-  try {
-    const res = await fetch(location.origin + `/feed/playlists?df=${Date.now()}`, {
-      credentials: 'include',
-      headers: { Accept: 'text/html' },
-    })
-    if (res.ok) {
-      const d = parseInitialData(await res.text())
-      if (d) return extractChannelPlaylists(d)
-    }
-  } catch {}
-  return []
+  const d = await fetchInitialData('/feed/playlists', 'playlists')
+  return d ? extractChannelPlaylists(d) : []
 }
 
 export interface SavePlaylist {
@@ -1403,21 +1406,9 @@ export async function setVideoInPlaylist(
 }
 
 export async function fetchLikedPlaylist(): Promise<{ videos: Video[]; token: string | null }> {
-  try {
-    const res = await fetch(location.origin + `/playlist?list=LL&df=${Date.now()}`, {
-      credentials: 'include',
-      headers: { Accept: 'text/html' },
-    })
-    if (res.ok) {
-      const d = parseInitialData(await res.text())
-      if (d) {
-        const videos = extractFromData(d)
-        const token = extractContinuationToken(d)
-        return { videos, token }
-      }
-    }
-  } catch {}
-  return { videos: [], token: null }
+  const d = await fetchInitialData('/playlist?list=LL', 'liked')
+  if (!d) return { videos: [], token: null }
+  return { videos: extractFromData(d), token: extractContinuationToken(d) }
 }
 
 export interface PlaylistPageResult {
@@ -1428,33 +1419,21 @@ export interface PlaylistPageResult {
 
 export async function fetchPlaylistPage(playlistId: string): Promise<PlaylistPageResult> {
   if (!playlistId) return { title: '', videos: [], token: null }
-  try {
-    const res = await fetch(location.origin + `/playlist?list=${playlistId}&df=${Date.now()}`, {
-      credentials: 'include',
-      headers: { Accept: 'text/html' },
-    })
-    if (res.ok) {
-      const d = parseInitialData(await res.text())
-      if (d) {
-        const title =
-          d?.header?.playlistHeaderRenderer?.title?.simpleText ??
-          d?.header?.playlistHeaderRenderer?.title?.runs?.map((r: any) => r.text).join('') ??
-          d?.metadata?.playlistMetadataRenderer?.title ??
-          ''
-        const videos = extractFromData(d)
-        const token = extractContinuationToken(d)
-        return { title, videos, token }
-      }
-    }
-  } catch {}
-  return { title: '', videos: [], token: null }
+  const d = await fetchInitialData(`/playlist?list=${encodeURIComponent(playlistId)}`, 'playlist')
+  if (!d) return { title: '', videos: [], token: null }
+  const title =
+    d?.header?.playlistHeaderRenderer?.title?.simpleText ??
+    d?.header?.playlistHeaderRenderer?.title?.runs?.map((r: any) => r.text).join('') ??
+    d?.metadata?.playlistMetadataRenderer?.title ??
+    ''
+  return { title, videos: extractFromData(d), token: extractContinuationToken(d) }
 }
 
 export async function fetchContinuation(token: string, route = 'home', searchQuery = '', channelId = ''): Promise<{ videos: Video[]; token: string | null; items?: SearchItem[] }> {
   if (route === 'search') {
+    if (token) return fetchSearchContinuation(token)
     const q = searchQuery || (new URLSearchParams(location.search).get('search_query') ?? '')
     const result = await fetchSearchResults(q)
-    if (!result) return { videos: [], token: null }
     log(`fetchContinuation(search): got ${result.videos.length} videos, token=${result.continuation ? 'yes' : 'no'}`)
     return { videos: result.videos, token: result.continuation, items: result.items }
   }
@@ -1473,6 +1452,29 @@ export async function fetchContinuation(token: string, route = 'home', searchQue
   if (!result) return { videos: [], token: null }
   log(`fetchContinuation: got ${result.videos.length} videos for ${route}, token=${result.token ? 'yes' : 'no'}`)
   return result
+}
+
+// Search pages page through the `search` endpoint, not `browse`, and hand their items
+// back under onResponseReceivedCommands. Without this, fetchContinuation ignored its
+// token and re-ran fetchSearchResults - i.e. re-fetched page one, whose items all
+// deduped away, so scroll-loading marked the feed exhausted after a single wasted fetch.
+export async function fetchSearchContinuation(
+  token: string
+): Promise<{ videos: Video[]; items: SearchItem[]; token: string | null }> {
+  const data = await callInnerTube('search', { continuation: token })
+  if (!data) return { videos: [], items: [], token: null }
+  const sink = newSearchItemSink()
+  let next: string | null = null
+  const commands = data.onResponseReceivedCommands ?? data.onResponseReceivedActions ?? []
+  for (const cmd of commands) {
+    for (const ci of cmd?.appendContinuationItemsAction?.continuationItems ?? []) {
+      for (const item of ci?.itemSectionRenderer?.contents ?? []) collectSearchItem(item, sink)
+      next = ci?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? next
+    }
+  }
+  const videos = sink.items.flatMap((i) => (i.kind === 'video' ? [i.video] : []))
+  log(`fetchSearchContinuation: ${sink.items.length} items, token=${next ? 'yes' : 'no'}`)
+  return { videos, items: sink.items, token: next }
 }
 
 export interface PageResult {

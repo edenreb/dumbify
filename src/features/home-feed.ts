@@ -1,6 +1,6 @@
 import type { NavigationState, Video, Channel, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { content, root, renderNotFound } from '../core/UIEngine'
+import { content, root, renderNotFound, makeClickable } from '../core/UIEngine'
 import { extractPageError, extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, fetchUserPlaylists, fetchLikedPlaylist, fetchPlaylistPage, setChannelSubscription, diag } from '../core/DataExtractor'
 import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
 import { navigateTo } from '../core/PageManager'
@@ -189,11 +189,11 @@ function renderToolbar(route: Route, onOption?: (option: string) => void): HTMLE
     span.className = i === 0 ? 'df-toolbar-item df-active' : 'df-toolbar-item'
     span.textContent = o
     if (onOption) {
-      span.onclick = () => {
+      makeClickable(span, () => {
         bar.querySelectorAll('.df-toolbar-item').forEach((el) => el.classList.remove('df-active'))
         span.classList.add('df-active')
         onOption(o)
-      }
+      })
     }
     bar.appendChild(span)
   })
@@ -354,7 +354,10 @@ function renderChannelHead(ch: Channel, before?: HTMLElement) {
 
   const eyebrow = document.createElement('p')
   eyebrow.className = 'df-page-eyebrow'
-  eyebrow.textContent = ch.handle ? `Channel · ${ch.handle.replace('@', '')}` : 'Channel'
+  // handle is a path: "/@Name" for a channel with a handle, "/channel/UC..." without one.
+  // Only the handle form is worth showing; stripping just "@" left the whole path behind.
+  const handleName = ch.handle.match(/@([^/]+)/)?.[1]
+  eyebrow.textContent = handleName ? `Channel · ${handleName}` : 'Channel'
   body.appendChild(eyebrow)
 
   const title = document.createElement('h1')
@@ -563,14 +566,6 @@ function renderPlaylistRow(p: PlaylistItem): HTMLElement {
   return article
 }
 
-function updateItemNumbers() {
-  const items = content!.querySelectorAll('.df-item-row')
-  items.forEach((item, i) => {
-    const num = item.querySelector('.df-item-number')
-    if (num) num.textContent = String(i + 1).padStart(2, '0')
-  })
-}
-
 let feedCancelled = false
 
 export const homeFeedFeature: Feature = {
@@ -675,7 +670,7 @@ export const homeFeedFeature: Feature = {
       creatorSelect.value = ''
     }
 
-    function renderSubscriptionGroup(list: HTMLElement, header: string, videos: Video[]) {
+    function renderSubscriptionGroup(into: ParentNode, header: string, videos: Video[]) {
       const group = document.createElement('div')
       group.className = 'df-date-group'
       const h = document.createElement('p')
@@ -686,12 +681,15 @@ export const homeFeedFeature: Feature = {
         videoIds.add(v.id)
         group.appendChild(renderVideo(v))
       })
-      list.appendChild(group)
+      into.appendChild(group)
     }
 
+    // Every scroll page regroups the whole feed, since a new video can land in an
+    // existing bucket. Building into a fragment keeps that one insertion rather than
+    // N appends against a live list.
     function renderSubscriptionList() {
       if (feedCancelled) return
-      list.innerHTML = ''
+      const frag = document.createDocumentFragment()
       videoIds.clear()
       updateCreatorSelect()
       if (subscriptionsFilter === 'By creator') {
@@ -703,25 +701,25 @@ export const homeFeedFeature: Feature = {
         }
         const sorted = [...byCreator.entries()].sort((a, b) => a[0].localeCompare(b[0]))
         for (const [channel, videos] of sorted) {
-          renderSubscriptionGroup(list, channel, videos)
+          renderSubscriptionGroup(frag, channel, videos)
         }
       } else if (subscriptionsFilter === 'All') {
         const groups = groupVideosByDate(allSubscriptions)
         for (const [bucket, videos] of groups) {
-          renderSubscriptionGroup(list, bucket, videos)
+          renderSubscriptionGroup(frag, bucket, videos)
         }
       } else {
         const filtered = allSubscriptions.filter((v) => dateBucket(v.published) === subscriptionsFilter)
         if (filtered.length) {
-          renderSubscriptionGroup(list, subscriptionsFilter, filtered)
+          renderSubscriptionGroup(frag, subscriptionsFilter, filtered)
         } else {
           const e = document.createElement('div')
           e.className = 'df-empty'
           e.textContent = `No videos from ${subscriptionsFilter}`
-          list.appendChild(e)
+          frag.appendChild(e)
         }
       }
-      updateItemNumbers()
+      list.replaceChildren(frag)
     }
 
     // Returns how many items were actually new, so loadMore can tell real progress
@@ -749,7 +747,6 @@ export const homeFeedFeature: Feature = {
         newForChannel.forEach((v) => channelVideoIds.add(v.id))
         channelVideos = channelVideos.concat(newForChannel)
       }
-      updateItemNumbers()
       return newVids.length
     }
 
@@ -772,17 +769,19 @@ export const homeFeedFeature: Feature = {
       }
       channels.forEach((c) => list.appendChild(renderChannelCard(c)))
       videos.forEach((v) => list.appendChild(renderVideo(v)))
-      updateItemNumbers()
       return channels.length + videos.length
     }
 
     function rerenderChannelList(sorted: Video[]) {
       if (feedCancelled) return
-      list.innerHTML = ''
       videoIds.clear()
-      const newVids = sorted.filter((v) => !videoIds.has(v.id))
-      newVids.forEach((v) => { videoIds.add(v.id); list.appendChild(renderVideo(v)) })
-      updateItemNumbers()
+      const frag = document.createDocumentFragment()
+      for (const v of sorted) {
+        if (videoIds.has(v.id)) continue
+        videoIds.add(v.id)
+        frag.appendChild(renderVideo(v))
+      }
+      list.replaceChildren(frag)
     }
 
     function renderPlaylists(items: PlaylistItem[]) {
@@ -796,7 +795,6 @@ export const homeFeedFeature: Feature = {
         return
       }
       items.forEach((p) => list.appendChild(renderPlaylistRow(p)))
-      updateItemNumbers()
     }
 
     function loadPlaylists() {
@@ -843,7 +841,7 @@ export const homeFeedFeature: Feature = {
         const span = document.createElement('span')
         span.className = i === 0 ? 'df-toolbar-item df-active' : 'df-toolbar-item'
         span.textContent = o
-        span.onclick = () => setTab(i === 0 ? 'videos' : i === 1 ? 'popular' : i === 2 ? 'playlists' : 'about')
+        makeClickable(span, () => setTab(i === 0 ? 'videos' : i === 1 ? 'popular' : i === 2 ? 'playlists' : 'about'))
         tabsEl!.appendChild(span)
       })
       if (before && before.parentNode) before.parentNode.insertBefore(tabsEl, before)
@@ -955,8 +953,7 @@ export const homeFeedFeature: Feature = {
         list.innerHTML = ''
         if (playlists.length) {
           playlists.forEach((p) => list.appendChild(renderPlaylistRow(p)))
-          updateItemNumbers()
-        } else {
+            } else {
           const empty = document.createElement('div')
           empty.className = 'df-empty'
           empty.textContent = 'No playlists to display'

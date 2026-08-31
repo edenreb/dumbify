@@ -1,5 +1,17 @@
 import { getSettings, setSettings, resetSettings } from '../core/storage'
 
+let statusText = 'Changes save automatically'
+
+async function saving(work: Promise<unknown>) {
+  try {
+    await work
+    statusText = 'Changes save automatically'
+  } catch (err) {
+    statusText = err instanceof Error ? err.message : 'Could not save'
+  }
+  render()
+}
+
 function render() {
   const app = document.getElementById('app')!
   getSettings().then((s) => {
@@ -33,10 +45,7 @@ function render() {
     toggle.appendChild(knob)
     row.appendChild(toggle)
 
-    row.addEventListener('click', async () => {
-      await setSettings({ theme: isDark ? 'light' : 'dark' })
-      render()
-    })
+    row.addEventListener('click', () => saving(setSettings({ theme: isDark ? 'light' : 'dark' })))
     app.appendChild(row)
 
     const actions = document.createElement('div')
@@ -44,10 +53,7 @@ function render() {
 
     const reset = document.createElement('button')
     reset.textContent = 'Reset'
-    reset.addEventListener('click', async () => {
-      await resetSettings()
-      render()
-    })
+    reset.addEventListener('click', () => saving(resetSettings()))
     actions.appendChild(reset)
 
     const options = document.createElement('button')
@@ -59,7 +65,7 @@ function render() {
 
     const status = document.createElement('div')
     status.className = 'status'
-    status.textContent = 'Changes save automatically'
+    status.textContent = statusText
     app.appendChild(status)
   })
 }

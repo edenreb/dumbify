@@ -154,19 +154,25 @@ function buildSidebar() {
   track.appendChild(knob)
   toggle.appendChild(label)
 
-  getSettings().then((s) => {
-    const isDark = s.theme === 'dark'
-    knob.className = `df-theme-knob ${isDark ? 'dark' : 'light'}`
-    label.textContent = isDark ? 'Night' : 'Day'
-  })
+  const paintTheme = (theme: DumbifySettings['theme']) => {
+    knob.className = `df-theme-knob ${theme === 'dark' ? 'dark' : 'light'}`
+    label.textContent = theme === 'dark' ? 'Night' : 'Day'
+  }
 
-  toggle.onclick = () => {
-    getSettings().then((s) => {
-      const next = s.theme === 'dark' ? 'light' : 'dark'
-      setSettings({ theme: next })
-      knob.className = `df-theme-knob ${next === 'dark' ? 'dark' : 'light'}`
-      label.textContent = next === 'dark' ? 'Night' : 'Day'
-    })
+  getSettings().then((s) => paintTheme(s.theme))
+
+  // Paints optimistically, then puts the label back if the write actually failed -
+  // setSettings now rejects rather than resolving regardless.
+  toggle.onclick = async () => {
+    const s = await getSettings()
+    const next = s.theme === 'dark' ? 'light' : 'dark'
+    paintTheme(next)
+    try {
+      await setSettings({ theme: next })
+    } catch (err) {
+      console.warn('[Dumbify] could not save theme:', err)
+      paintTheme(s.theme)
+    }
   }
 
   footer.appendChild(toggle)

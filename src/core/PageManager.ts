@@ -42,25 +42,11 @@ function channelIdFor(pathname: string): string | null {
   return pageChannelId.id
 }
 
-function buildState(): NavigationState {
-  const p = location.pathname
-  const s = new URLSearchParams(location.search)
-  return {
-    route: getRoute(p, s),
-    href: location.href,
-    pathname: p,
-    searchParams: s,
-    videoId: s.get('v'),
-    searchQuery: s.get('search_query'),
-    channelId: channelIdFor(p),
-    playlistId: s.get('list'),
-  }
-}
-
-function buildStateFromPath(path: string): NavigationState {
-  const url = new URL(path.startsWith('/') ? `https://www.youtube.com${path}` : path)
+// buildState and buildStateFromPath were the same eight fields written out twice; the
+// only difference was where the URL came from.
+function stateFromURL(url: URL | Location): NavigationState {
   const p = url.pathname
-  const s = url.searchParams
+  const s = new URLSearchParams(url.search)
   return {
     route: getRoute(p, s),
     href: url.href,
@@ -71,6 +57,10 @@ function buildStateFromPath(path: string): NavigationState {
     channelId: channelIdFor(p),
     playlistId: s.get('list'),
   }
+}
+
+function buildState(): NavigationState {
+  return stateFromURL(location)
 }
 
 function fire() {
@@ -103,12 +93,11 @@ export function getNavigationState(): NavigationState {
 }
 
 export function navigateTo(path: string) {
-  // Same-origin paths only. buildStateFromPath treats anything not starting with "/"
-  // as an absolute URL, which would make this an open-redirect sink the moment a
-  // caller passed through data from the page.
+  // Same-origin paths only. new URL() ignores the base for anything that is already
+  // absolute, so without this guard a caller passing data through from the page would
+  // turn this into an open-redirect sink.
   if (!path.startsWith('/')) return
-  const state = buildStateFromPath(path)
-  const href = state.href
+  const href = new URL(path, 'https://www.youtube.com').href
   if (href === location.href) return
   window.location.href = href
 }

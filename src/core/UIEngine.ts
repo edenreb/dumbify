@@ -1,14 +1,11 @@
 import '../styles/main.css'
-import { getSettings, onSettingsChange } from './storage'
+import { getSettings, onSettingsChange, LIGHT_BG, DARK_BG } from './storage'
 import type { DumbifySettings } from '../types'
 
 export let root: HTMLElement
 export let content: HTMLElement
 export let sidebar: HTMLElement | null = null
 export let main: HTMLElement | null = null
-
-const LIGHT_BG = '#f7f5ee'
-const DARK_BG = '#1d1d1d'
 
 function applyFont(s: DumbifySettings) {
   if (!root) return
@@ -36,7 +33,7 @@ function applyTheme(s: DumbifySettings) {
   root.classList.toggle('has-bg', !!s.backgroundImage)
   root.style.setProperty('--bg-opacity', String(s.bgOpacity))
   const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
-  const bgImage = s.backgroundImage ? `url(${s.backgroundImage})` : ''
+  const bgImage = s.backgroundImage ? `url("${s.backgroundImage}")` : ''
   document.documentElement.style.backgroundColor = bg
   document.body.style.backgroundColor = bg
   root.style.setProperty('background', bgImage ? `${bgImage} center/cover fixed` : bg, 'important')
@@ -135,6 +132,21 @@ export function renderNotFound(detail?: string) {
 
 export function clearContent() {
   if (content) content.innerHTML = ''
+}
+
+// Non-<button> controls (toolbar filters, channel tabs, playlist rows) were click-only:
+// no role, no tab stop, no key handler, so none of them were reachable by keyboard. The
+// video and channel rows already did this by hand; this is the same thing, once.
+export function makeClickable(el: HTMLElement, onActivate: () => void) {
+  el.setAttribute('role', 'button')
+  el.tabIndex = 0
+  el.onclick = (e) => { e.stopPropagation(); onActivate() }
+  el.onkeydown = (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    e.preventDefault()
+    e.stopPropagation()
+    onActivate()
+  }
 }
 
 // Signed-out gate: replaces the whole layout, since none of the features can

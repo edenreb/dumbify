@@ -1,6 +1,6 @@
 import type { NavigationState } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { content, renderNotFound } from '../core/UIEngine'
+import { content, renderNotFound, makeClickable } from '../core/UIEngine'
 
 import {
   extractPageError,
@@ -145,7 +145,10 @@ function renderMoreButton(list: HTMLElement) {
     }
     if (commentsSection?.isConnected) {
       dataComments = [...dataComments, ...comments]
-      renderComments(list, dataComments)
+      // Append only the new page. Re-rendering the full list was O(n) per page and threw
+      // away every already-built item to produce the identical DOM.
+      btn.remove()
+      for (const c of comments) list.appendChild(renderCommentItem(c))
       renderMoreButton(list)
     }
   }
@@ -732,8 +735,10 @@ async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'fa
   }
   if (ok) {
     dataComments = [localComment('You', comment), ...dataComments]
-    const next = parseInt(dataCommentCount.replace(/[^0-9]/g, ''), 10) || 0
-    dataCommentCount = `${next + 1}`
+    // dataCommentCount is the abbreviated form ("1.2K"), so stripping non-digits and
+    // incrementing turned 1.2K into 13. Only a plain integer can be counted up; anything
+    // abbreviated stays as it is until the next real count arrives.
+    if (/^\d+$/.test(dataCommentCount)) dataCommentCount = String(Number(dataCommentCount) + 1)
     updateCommentsToggle()
     const list = commentsSection?.querySelector<HTMLElement>('.df-comment-list')
     if (list && commentsSection?.isConnected) {
@@ -1148,11 +1153,11 @@ function renderPlaylistItem(video: Video, index: number, current: boolean): HTML
   item.appendChild(info)
 
   if (!current) {
-    item.onclick = () => {
+    makeClickable(item, () => {
       const listParam = new URLSearchParams(location.search).get('list')
       const url = listParam ? `/watch?v=${video.id}&list=${listParam}` : `/watch?v=${video.id}`
       navigateTo(url)
-    }
+    })
   }
 
   return item
@@ -1179,15 +1184,19 @@ function renderPlaylistPanel() {
     loadMore.className = 'df-playlist-load-more'
     loadMore.textContent = 'Load more'
     loadMore.onclick = async () => {
-      if (!playlistToken) return
+      if (!playlistToken || loadMore.disabled) return
       loadMore.disabled = true
       loadMore.textContent = 'Loading…'
       const result = await fetchContinuation(playlistToken, 'playlist')
-      if (result.videos.length > 0) {
-        playlistVideos = [...playlistVideos, ...result.videos]
-        playlistToken = result.token
-        renderPlaylistPanel()
+      if (!result.videos.length) {
+        // Nothing more to page through - say so rather than sitting on "Loading…".
+        playlistToken = null
+        loadMore.remove()
+        return
       }
+      playlistVideos = [...playlistVideos, ...result.videos]
+      playlistToken = result.token
+      renderPlaylistPanel()
     }
     playlistPanel.appendChild(loadMore)
   }

@@ -2,6 +2,11 @@ import type { DumbifySettings } from '../types'
 
 const SETTINGS_KEY = 'dumbify:settings'
 
+// The reading view's two paper colours. Shared because the options page paints itself
+// with the same palette and used to carry its own copy of both hex values.
+export const LIGHT_BG = '#f7f5ee'
+export const DARK_BG = '#1d1d1d'
+
 const DEFAULT_SETTINGS: DumbifySettings = {
   fontSize: 20,
   fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
@@ -18,8 +23,17 @@ function get<T>(key: string): Promise<T | null> {
   )
 }
 
+// Rejects on failure instead of resolving regardless. chrome.storage.local is capped at
+// 10 MB, so a large background image genuinely does fail to write - and callers were
+// reporting "Saved" for a write that never happened.
 function set(key: string, value: unknown): Promise<void> {
-  return new Promise((r) => chrome.storage.local.set({ [key]: value }, r))
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [key]: value }, () => {
+      const err = chrome.runtime.lastError
+      if (err) reject(new Error(err.message ?? 'Could not save to extension storage'))
+      else resolve()
+    })
+  })
 }
 
 export async function getSettings(): Promise<DumbifySettings> {
