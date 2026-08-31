@@ -36,6 +36,7 @@ export interface DumbifySettings {
   fontFamily: string
   fontColor: string
   fontColorDark: string
+  backgroundImage: string
   theme: 'light' | 'dark'
 }
 
