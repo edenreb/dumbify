@@ -1236,8 +1236,18 @@ function buildWatchPage(nav: NavigationState) {
     const metaItem = document.createElement('span')
     metaItem.className = 'df-watch-meta-item'
     const parts: string[] = []
-    if (data.video.views) parts.push(data.video.views)
-    if (data.video.published) parts.push(data.video.published)
+    if (data.video.views) {
+      const num = parseInt(data.video.views.replace(/[^0-9]/g, ''), 10)
+      parts.push(isNaN(num) ? data.video.views : `${num.toLocaleString()} views`)
+    }
+    if (data.video.published) {
+      const d = new Date(data.video.published)
+      if (!isNaN(d.getTime())) {
+        parts.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))
+      } else {
+        parts.push(data.video.published)
+      }
+    }
     metaItem.textContent = parts.join(' · ')
     metaBar.appendChild(metaItem)
   }
