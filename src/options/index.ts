@@ -65,7 +65,8 @@ function showStatus(message: string) {
   }, 2000)
 }
 
-async function save(partial: Partial<DumbifySettings>, message = 'Saved') {
+async function save(s: DumbifySettings, partial: Partial<DumbifySettings>, message = 'Saved') {
+  Object.assign(s, partial)
   await setSettings(partial)
   showStatus(message)
 }
@@ -95,12 +96,12 @@ function render() {
     app.appendChild(el('h2', undefined, 'Appearance'))
     app.appendChild(
       selectRow('Theme', THEMES, s.theme, (v) => {
-        save({ theme: v })
+        save(s, { theme: v })
         applyPageTheme(v)
         const colorKey = v === 'dark' ? 'fontColorDark' : 'fontColor'
         colorInput.value = s[colorKey]
         hexLabel.textContent = s[colorKey]
-        updatePreview({ ...s, theme: v })
+        updatePreview(s)
       })
     )
 
@@ -110,13 +111,12 @@ function render() {
         'Font Size',
         FONT_SIZES.map((sz) => ({ value: sz, label: `${sz}px` })),
         s.fontSize,
-        (v) => { save({ fontSize: v }); updatePreview({ ...s, fontSize: v }) }
+        (v) => { save(s, { fontSize: v }); updatePreview(s) }
       )
     )
     app.appendChild(
       selectRow('Font Family', FONT_FAMILIES, s.fontFamily, (v) => {
-        s.fontFamily = v
-        save({ fontFamily: v })
+        save(s, { fontFamily: v })
         updatePreview(s)
       })
     )
@@ -137,7 +137,7 @@ function render() {
     })
     colorInput.addEventListener('change', () => {
       const key = s.theme === 'dark' ? 'fontColorDark' : 'fontColor'
-      save({ [key]: colorInput.value })
+      save(s, { [key]: colorInput.value })
     })
     const hexLabel = el('span', 'color-hex', s[colorKey])
     colorWrap.appendChild(colorInput)
