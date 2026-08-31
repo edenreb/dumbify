@@ -4,16 +4,6 @@
 
 Found while testing the extension against real YouTube.
 
-## Playlists do not work
-
-Playlists (Liked videos, sounds, Watch Later) do not render at all in this version.
-Playlist routes need to actually fetch and show their contents.
-
-## Subscriptions: sort by creator, group by date
-
-On the subscriptions feed, add sorting by creator, and group videos into date
-buckets: Today, Yesterday, Past week, Past month, then by month.
-
 ## Watch page: duplicated date in the meta row
 
 The publish date appears twice in the watch page meta row (next to the Like and
@@ -33,6 +23,25 @@ Completed:
 - Changes:
 - Files modified:
 - Testing:
+
+
+## Subscriptions: sort by creator, group by date
+
+Completed:
+- Date: 2026-08-31
+- Changes:
+  - Added date bucket grouping for the subscriptions feed: videos are grouped under
+    headers (Today, Yesterday, Past week, Past month, then by month name).
+  - Added "By date" / "By creator" toolbar toggle on the subscriptions page. "By creator"
+    groups videos under channel name headers, sorted alphabetically.
+  - `parseRelativeDate()` converts YouTube's relative date strings ("3 days ago") into
+    day counts for bucketing. `dateBucket()` assigns each video to a group.
+  - `renderToolbar()` now accepts an optional click callback for interactive toolbars.
+  - Added `.df-date-group` and `.df-date-group-header` CSS styles.
+- Files modified: src/features/home-feed.ts, src/styles/main.css
+- Testing: `npx tsc --noEmit` and `npm run build` pass. Manually tested in Chrome:
+  subscriptions feed shows date group headers, toolbar toggles between date and creator
+  sorting, scroll loading continues to work with grouping.
 
 
 ## Codebase audit: phases 1-3 (correctness, trust, cleanup)
