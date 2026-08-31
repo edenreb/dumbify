@@ -196,7 +196,7 @@ function buildSidebar() {
 
   const bottomTagline = document.createElement('p')
   bottomTagline.className = 'df-sidebar-tagline'
-  bottomTagline.textContent = 'no thumbnails · no autoplay'
+  bottomTagline.textContent = 'No Thumbnails - No Distractions'
   footer.appendChild(bottomTagline)
 
   sidebarEl.appendChild(footer)
