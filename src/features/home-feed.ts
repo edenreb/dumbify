@@ -116,7 +116,7 @@ const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note
 }
 
 const TOOLBAR_OPTIONS: Partial<Record<Route, string[]>> = {
-  home: ['Recommended', 'Newest', 'Shortest first'],
+  home: ['Recommended'],
   history: ['All time', 'This week', 'Unfinished only'],
   'watch-later': ['Added order', 'Shortest first', 'Longest first'],
   subscriptions: ['All', 'Today', 'Yesterday', 'Past week', 'Past month', 'By creator'],
