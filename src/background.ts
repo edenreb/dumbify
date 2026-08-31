@@ -7,7 +7,11 @@ interface YTCfgMessage {
   type: 'GET_YT_CFG'
 }
 
-type BGMessage = YTDataMessage | YTCfgMessage
+interface OpenOptionsMessage {
+  type: 'OPEN_OPTIONS'
+}
+
+type BGMessage = YTDataMessage | YTCfgMessage | OpenOptionsMessage
 
 chrome.runtime.onMessage.addListener((message: BGMessage, sender, sendResponse) => {
   if (message.type === 'GET_YT_DATA') {
@@ -54,5 +58,10 @@ chrome.runtime.onMessage.addListener((message: BGMessage, sender, sendResponse) 
     }).catch(() => sendResponse(null))
 
     return true
+  }
+
+  if (message.type === 'OPEN_OPTIONS') {
+    chrome.runtime.openOptionsPage()
+    return
   }
 })
