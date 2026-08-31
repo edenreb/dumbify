@@ -136,9 +136,9 @@ html.df-failed #dumbify-root {
   margin-bottom: 24px;
   padding: 24px 20px;
   position: fixed;
-  top: 0;
-  left: 0;
-  height: 100vh;
+  top: 24px;
+  left: 24px;
+  height: calc(100vh - 48px);
   overflow-y: auto;
 }
 
@@ -152,11 +152,10 @@ html.df-failed #dumbify-root {
 
 @media (min-width: 1024px) {
   #dumbify-root.has-bg .df-sidebar {
-    width: 280px;
-    margin-left: 24px;
+    width: 240px;
   }
   #dumbify-root.has-bg .df-main {
-    margin-left: 328px;
+    margin-left: 288px;
   }
 }
 
