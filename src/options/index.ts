@@ -77,6 +77,8 @@ const DARK_BG = '#1d1d1d'
 function applyPageTheme(s: DumbifySettings) {
   document.body.classList.toggle('light', s.theme === 'light')
   document.body.classList.toggle('dark', s.theme === 'dark')
+  document.body.classList.toggle('has-bg', !!s.backgroundImage)
+  document.documentElement.style.setProperty('--bg-opacity', String(s.bgOpacity))
   const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
   if (s.backgroundImage) {
     document.body.style.background = `url(${s.backgroundImage}) center/cover fixed, ${bg}`
@@ -220,6 +222,31 @@ function render() {
 
     bgSection.appendChild(previewWrap)
     app.appendChild(bgSection)
+
+    // Background opacity slider
+    const opacityRow = el('div', 'opacity-row')
+    opacityRow.appendChild(el('div', 'opacity-row-lbl', 'Overlay opacity'))
+    const opacityWrap = el('div', 'opacity-input-wrap')
+    const opacitySlider = document.createElement('input')
+    opacitySlider.type = 'range'
+    opacitySlider.min = '0.3'
+    opacitySlider.max = '1'
+    opacitySlider.step = '0.05'
+    opacitySlider.value = String(s.bgOpacity)
+    const opacityVal = el('span', 'opacity-val', Math.round(s.bgOpacity * 100) + '%')
+    opacitySlider.addEventListener('input', () => {
+      const v = parseFloat(opacitySlider.value)
+      opacityVal.textContent = Math.round(v * 100) + '%'
+      s.bgOpacity = v
+      document.documentElement.style.setProperty('--bg-opacity', String(v))
+    })
+    opacitySlider.addEventListener('change', () => {
+      save(s, { bgOpacity: parseFloat(opacitySlider.value) })
+    })
+    opacityWrap.appendChild(opacitySlider)
+    opacityWrap.appendChild(opacityVal)
+    opacityRow.appendChild(opacityWrap)
+    app.appendChild(opacityRow)
 
     const footer = el('div', 'footer')
     const reset = el('button', undefined, 'Reset All Settings')

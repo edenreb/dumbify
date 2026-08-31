@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS: DumbifySettings = {
   fontColor: '#1d1d1d',
   fontColorDark: '#f3f0e8',
   backgroundImage: '',
+  bgOpacity: 0.85,
   theme: 'light',
 }
 

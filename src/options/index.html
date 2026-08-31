@@ -9,7 +9,9 @@
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.5;transition:background 200ms,color 200ms}
 body.light{background:#f7f5ee;color:#1d1d1d}
 body.dark{background:#202020;color:#fff}
-.wrap{max-width:640px;margin:0 auto;padding:48px 24px}
+.wrap{max-width:640px;margin:0 auto;padding:48px 24px;transition:background 200ms}
+body.light.has-bg .wrap{background:rgba(247,245,238,var(--bg-opacity,0.85));border-radius:16px}
+body.dark.has-bg .wrap{background:rgba(32,32,32,var(--bg-opacity,0.85));border-radius:16px}
 h1{font-size:32px;font-weight:700;margin-bottom:4px;letter-spacing:-0.02em}
 .light h1{color:#1d1d1d}
 .dark h1{color:#fff}
@@ -20,19 +22,19 @@ h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em
 .light h2{color:rgba(0,0,0,0.35)}
 .dark h2{color:rgba(255,255,255,0.25)}
 .setting-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:8px}
-.light .setting-row:hover{background:rgba(0,0,0,0.03)}
-.dark .setting-row:hover{background:rgba(255,255,255,0.03)}
+.light .setting-row:hover{background:rgba(0,0,0,0.06)}
+.dark .setting-row:hover{background:rgba(255,255,255,0.06)}
 .setting-row-lbl{font-size:15px;font-weight:500}
 .light .setting-row-lbl{color:rgba(0,0,0,0.7)}
 .dark .setting-row-lbl{color:rgba(255,255,255,0.7)}
 .df-select{padding:6px 10px;border-radius:6px;border:1px solid rgba(128,128,128,0.25);font-size:13px;cursor:pointer;max-width:220px}
-.light .df-select{background:rgba(0,0,0,0.04);color:#1d1d1d;border-color:rgba(0,0,0,0.15)}
-.dark .df-select{background:rgba(255,255,255,0.06);color:#fff;border-color:rgba(255,255,255,0.15)}
+.light .df-select{background:rgba(0,0,0,0.06);color:#1d1d1d;border-color:rgba(0,0,0,0.15)}
+.dark .df-select{background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2)}
 .light .df-select option{background:#f0f0f0;color:#1d1d1d}
 .dark .df-select option{background:#333;color:#fff}
 .color-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:8px}
-.light .color-row:hover{background:rgba(0,0,0,0.03)}
-.dark .color-row:hover{background:rgba(255,255,255,0.03)}
+.light .color-row:hover{background:rgba(0,0,0,0.06)}
+.dark .color-row:hover{background:rgba(255,255,255,0.06)}
 .color-row-lbl{font-size:15px;font-weight:500}
 .light .color-row-lbl{color:rgba(0,0,0,0.7)}
 .dark .color-row-lbl{color:rgba(255,255,255,0.7)}
@@ -44,44 +46,55 @@ h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em
 .light .color-hex{color:rgba(0,0,0,0.5)}
 .dark .color-hex{color:rgba(255,255,255,0.4)}
 .preview-box{margin-top:20px;padding:24px;border-radius:12px;transition:background 200ms,border-color 200ms}
-.light .preview-box{background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08)}
-.dark .preview-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08)}
+.light .preview-box{background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.1)}
+.dark .preview-box{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12)}
 .preview-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px}
-.light .preview-label{color:rgba(0,0,0,0.3)}
-.dark .preview-label{color:rgba(255,255,255,0.25)}
+.light .preview-label{color:rgba(0,0,0,0.35)}
+.dark .preview-label{color:rgba(255,255,255,0.3)}
 .preview-text{transition:font-family 150ms,font-size 150ms,color 150ms}
-.footer{margin-top:40px;padding-top:20px;border-top:1px solid rgba(128,128,128,0.15);display:flex;justify-content:space-between;align-items:center}
+.footer{margin-top:40px;padding-top:20px;border-top:1px solid rgba(128,128,128,0.2);display:flex;justify-content:space-between;align-items:center}
 .footer button{padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;border:1px solid transparent;transition:background 150ms}
-.light .footer button{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.1);color:rgba(0,0,0,0.6)}
-.light .footer button:hover{background:rgba(0,0,0,0.08)}
-.dark .footer button{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6)}
-.dark .footer button:hover{background:rgba(255,255,255,0.1)}
+.light .footer button{background:rgba(0,0,0,0.07);border-color:rgba(0,0,0,0.12);color:rgba(0,0,0,0.7)}
+.light .footer button:hover{background:rgba(0,0,0,0.12)}
+.dark .footer button{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.7)}
+.dark .footer button:hover{background:rgba(255,255,255,0.15)}
 .footer .status{font-size:12px}
-.light .footer .status{color:rgba(0,0,0,0.25)}
-.dark .footer .status{color:rgba(255,255,255,0.2)}
+.light .footer .status{color:rgba(0,0,0,0.3)}
+.dark .footer .status{color:rgba(255,255,255,0.25)}
 .bg-section{padding:14px 16px;border-radius:8px}
-.light .bg-section{background:rgba(0,0,0,0.03)}
-.dark .bg-section{background:rgba(255,255,255,0.03)}
+.light .bg-section{background:rgba(0,0,0,0.05)}
+.dark .bg-section{background:rgba(255,255,255,0.06)}
 .bg-section-lbl{font-size:15px;font-weight:500;margin-bottom:12px}
 .light .bg-section-lbl{color:rgba(0,0,0,0.7)}
 .dark .bg-section-lbl{color:rgba(255,255,255,0.7)}
 .bg-upload{display:flex;align-items:center;gap:12px}
 .bg-upload input[type="file"]{display:none}
 .bg-upload-label{padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;transition:background 150ms;border:1px solid transparent}
-.light .bg-upload-label{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.1);color:rgba(0,0,0,0.6)}
-.light .bg-upload-label:hover{background:rgba(0,0,0,0.08)}
-.dark .bg-upload-label{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6)}
-.dark .bg-upload-label:hover{background:rgba(255,255,255,0.1)}
+.light .bg-upload-label{background:rgba(0,0,0,0.07);border-color:rgba(0,0,0,0.12);color:rgba(0,0,0,0.7)}
+.light .bg-upload-label:hover{background:rgba(0,0,0,0.12)}
+.dark .bg-upload-label{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.7)}
+.dark .bg-upload-label:hover{background:rgba(255,255,255,0.15)}
 .bg-upload-hint{font-size:12px}
-.light .bg-upload-hint{color:rgba(0,0,0,0.35)}
-.dark .bg-upload-hint{color:rgba(255,255,255,0.3)}
+.light .bg-upload-hint{color:rgba(0,0,0,0.4)}
+.dark .bg-upload-hint{color:rgba(255,255,255,0.35)}
 .bg-preview-wrap{margin-top:12px;display:flex;align-items:flex-end;gap:12px}
-.bg-preview{width:120px;height:80px;border-radius:6px;object-fit:cover;border:1px solid rgba(128,128,128,0.2)}
+.bg-preview{width:120px;height:80px;border-radius:6px;object-fit:cover;border:1px solid rgba(128,128,128,0.3)}
 .bg-remove{padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;transition:background 150ms;border:1px solid transparent}
-.light .bg-remove{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.1);color:rgba(0,0,0,0.5)}
-.light .bg-remove:hover{background:rgba(180,40,40,0.1);border-color:rgba(180,40,40,0.2);color:rgb(180,40,40)}
-.dark .bg-remove{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.5)}
-.dark .bg-remove:hover{background:rgba(220,80,80,0.15);border-color:rgba(220,80,80,0.25);color:rgb(220,80,80)}
+.light .bg-remove{background:rgba(0,0,0,0.07);border-color:rgba(0,0,0,0.12);color:rgba(0,0,0,0.6)}
+.light .bg-remove:hover{background:rgba(180,40,40,0.12);border-color:rgba(180,40,40,0.25);color:rgb(180,40,40)}
+.dark .bg-remove{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.6)}
+.dark .bg-remove:hover{background:rgba(220,80,80,0.2);border-color:rgba(220,80,80,0.3);color:rgb(220,80,80)}
+.opacity-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:8px}
+.light .opacity-row{background:rgba(0,0,0,0.03)}
+.dark .opacity-row{background:rgba(255,255,255,0.04)}
+.opacity-row-lbl{font-size:15px;font-weight:500}
+.light .opacity-row-lbl{color:rgba(0,0,0,0.7)}
+.dark .opacity-row-lbl{color:rgba(255,255,255,0.7)}
+.opacity-input-wrap{display:flex;align-items:center;gap:10px}
+.opacity-input-wrap input[type="range"]{width:140px;accent-color:#4fc3f7}
+.opacity-val{font-size:13px;font-family:monospace;min-width:36px;text-align:right}
+.light .opacity-val{color:rgba(0,0,0,0.5)}
+.dark .opacity-val{color:rgba(255,255,255,0.4)}
 </style>
 </head>
 <body class="dark">
