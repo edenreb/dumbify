@@ -2210,3 +2210,10 @@ export async function fetchCreateParams(): Promise<string | null> {
   }
   return null
 }
+
+// Signed-out check: ytcfg carries LOGGED_IN. Fail open when ytcfg is missing
+// (some error pages have none) rather than locking a signed-in user out.
+export function isSignedIn(): boolean {
+  const cfg = tryFindYTCfg()
+  return cfg ? !!cfg.LOGGED_IN : true
+}
