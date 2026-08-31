@@ -18,6 +18,8 @@ function getFeatureIdsForRoute(route: string): string[] {
     case 'history':      return [...base, 'home-feed']
     case 'subscriptions': return [...base, 'home-feed']
     case 'watch-later':  return [...base, 'home-feed']
+    case 'liked':        return [...base, 'home-feed']
+    case 'playlists':    return [...base, 'home-feed']
     case 'playlist':     return [...base, 'home-feed']
     case 'channel':      return [...base, 'home-feed']
     case 'search':       return [...base, 'home-feed']
