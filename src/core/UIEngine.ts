@@ -136,3 +136,28 @@ export function renderNotFound(detail?: string) {
 export function clearContent() {
   if (content) content.innerHTML = ''
 }
+
+// Signed-out gate: replaces the whole layout, since none of the features can
+// render anything useful without a session.
+export function renderSignedOut() {
+  if (!root) return
+  root.innerHTML = ''
+  sidebar = null
+  main = null
+
+  const wrap = document.createElement('div')
+  wrap.className = 'df-signin'
+
+  const msg = document.createElement('p')
+  msg.className = 'df-signin-msg'
+  msg.textContent = 'Dumbify requires you to be signed into YouTube in order to function.'
+  wrap.appendChild(msg)
+
+  const btn = document.createElement('a')
+  btn.className = 'df-signin-btn'
+  btn.textContent = 'Sign In'
+  btn.href = `https://accounts.google.com/ServiceLogin?service=youtube&continue=${encodeURIComponent(location.href)}`
+  wrap.appendChild(btn)
+
+  root.appendChild(wrap)
+}
