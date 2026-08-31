@@ -13,6 +13,7 @@ import {
   fetchCreateParams,
   fetchCommentReplies,
   performCommentAction,
+  extractLikeStatus,
   localComment,
   fetchPlaylistPage,
   fetchContinuation,
@@ -47,6 +48,9 @@ let aspectBound = false
 let aspectTimer: number | null = null
 let boundVideo: HTMLVideoElement | null = null
 let likeObserver: MutationObserver | null = null
+// What the DOM last reported, so the observer can tell a real toggle from the unreliable
+// value YouTube renders initially.
+let likeDomBaseline: boolean | null = null
 let likeWaitObserver: MutationObserver | null = null
 let commentsWaitObserver: MutationObserver | null = null
 let commentsOpen = false
@@ -264,28 +268,46 @@ function setLikeUi(btn: HTMLButtonElement, liked: boolean) {
 }
 
 function syncLikeState(btn: HTMLButtonElement) {
-  setLikeUi(btn, nativeLikeState())
+  likeDomBaseline = nativeLikeState()
+  setLikeUi(btn, likeDomBaseline)
 }
 
+// The initial state comes from the payload (paintInitialLikeState), not from here. The
+// DOM's *first* value is not trustworthy: on a watch page opened inside a playlist it
+// reads "not liked" for a video that is liked. So the observer only follows the DOM once
+// it actually changes from what it said when we attached - which is a real like/unlike,
+// whether it came from our button or from YouTube's own.
 function watchLikeState(btn: HTMLButtonElement) {
   likeObserver?.disconnect()
   const target = nativeLikeEl()
   if (target) {
-    likeObserver = new MutationObserver(() => syncLikeState(btn))
+    likeDomBaseline = nativeLikeState()
+    likeObserver = new MutationObserver(() => {
+      const now = nativeLikeState()
+      if (now === likeDomBaseline) return
+      likeDomBaseline = now
+      setLikeUi(btn, now)
+    })
     likeObserver.observe(target, {
       attributes: true,
       subtree: true,
       attributeFilter: ['aria-pressed', 'aria-label'],
     })
-    syncLikeState(btn)
     return
   }
   likeWaitObserver?.disconnect()
   likeWaitObserver = waitForNative(() => !!nativeLikeEl(), () => watchLikeState(btn))
 }
 
+// Payload first, DOM only as a fallback when the page carries no like status at all.
+function paintInitialLikeState(btn: HTMLButtonElement) {
+  const status = extractLikeStatus()
+  setLikeUi(btn, status !== null ? status === 'LIKE' : nativeLikeState())
+}
+
 function clickLikeTarget(btn: HTMLButtonElement, target: HTMLElement) {
   const wasLiked = nativeLikeState()
+  likeDomBaseline = !wasLiked
   setLikeUi(btn, !wasLiked)
   target.click()
   if (DEBUG) console.log('[Dumbify] clicked like target:', target)
@@ -629,6 +651,7 @@ function restorePlayer() {
   likeObserver = null
   likeWaitObserver?.disconnect()
   likeWaitObserver = null
+  likeDomBaseline = null
   unbindAspectSync()
   if (onFullscreenChange) {
     document.removeEventListener('fullscreenchange', onFullscreenChange)
@@ -1380,7 +1403,7 @@ function buildWatchPage(nav: NavigationState) {
   likeBtn.textContent = 'Like'
   likeBtn.onclick = () => clickNativeLike(likeBtn)
   actions.appendChild(likeBtn)
-  syncLikeState(likeBtn)
+  paintInitialLikeState(likeBtn)
   watchLikeState(likeBtn)
 
   const saveBtn = document.createElement('button')
