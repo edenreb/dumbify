@@ -81,12 +81,12 @@ html.df-failed #dumbify-root {
   /* Y only: overscroll-behavior-x would disable the macOS two-finger back/forward swipe. */
   overscroll-behavior-y: none;
 
-  /* --df-font-family / --df-font-size are set by UIEngine.applyFont from the user's
-     saved settings. Falling back to the design-system defaults when unset. */
+  /* --df-font-family / --df-font-size / --df-font-color are set by UIEngine.applyFont
+     from the user's saved settings. Falling back to the design-system defaults when unset. */
   font-family: var(--df-font-family, var(--font-sans));
   font-size: var(--df-font-size, 16px);
   line-height: 1.6;
-  color: var(--foreground);
+  color: var(--df-font-color, var(--foreground));
   background: var(--background);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv01";
@@ -120,9 +120,31 @@ html.df-failed #dumbify-root {
 @media (min-width: 1024px) {
   .df-layout {
     flex-direction: row;
-    gap: 64px;
-    padding: 0 40px;
+    gap: 24px;
+    padding: 0 24px;
   }
+}
+
+/* ---- Background image panels ---- */
+
+#dumbify-root.has-bg .df-layout {
+  background: transparent;
+}
+
+#dumbify-root.has-bg .df-sidebar {
+  border-radius: 16px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  padding: 24px 20px;
+  height: fit-content;
+}
+
+#dumbify-root.has-bg .df-main {
+  border-radius: 16px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  padding: 24px 32px;
+  min-height: calc(100vh - 48px);
 }
 
 /* ---- Sidebar ---- */
@@ -302,6 +324,42 @@ html.df-failed #dumbify-root {
 }
 
 .df-theme-toggle:hover .df-theme-label {
+  color: var(--foreground);
+}
+
+/* ---- Settings button ---- */
+
+.df-settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 0;
+  margin-top: 12px;
+}
+
+.df-settings-icon {
+  font-size: 14px;
+  color: var(--ink-soft);
+  transition: color 150ms;
+}
+
+.df-settings-btn:hover .df-settings-icon {
+  color: var(--foreground);
+}
+
+.df-settings-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  transition: color 150ms;
+}
+
+.df-settings-btn:hover .df-settings-label {
   color: var(--foreground);
 }
 

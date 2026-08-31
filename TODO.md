@@ -3,10 +3,6 @@
 # Open Tasks
 
 Found while testing the extension against real YouTube.
-- Remove "Newest" and "Shortest First" from the homepage.
-- Fix Playlists tab of each channel page. (Currently shows no tabs to display)
-- Add upload picture from files for custom background, expand to fill page. 
-- Add color picker for font color. 
 - Rename 'Watch Later' to 'Save' on a watch page, and fix the functionality to save to 'Watch Later', 'Sounds', or any otehr custom playlist that the user can save to.
 
 
@@ -24,6 +20,60 @@ Completed:
 - Files modified:
 - Testing:
 
+
+## Custom background image
+
+Completed:
+- Date: 2026-08-31
+- Changes:
+  - Added `backgroundImage` field to `DumbifySettings` (stores base64 data URL).
+  - Settings page has a "Background Image" section with a file picker (image/*),
+    thumbnail preview of the current image, and a "Remove" button.
+  - Image is applied as a CSS background (cover, center, fixed) on both the
+    Dumbify reading view and the settings page itself.
+  - Background sits behind the semi-transparent paper, so text readability is
+    preserved in both day and night modes.
+- Files modified: src/types.ts, src/core/storage.ts, src/core/UIEngine.ts,
+  src/options/index.html, src/options/index.ts
+- Testing: `npx tsc --noEmit` and `npm run build` pass.
+
+## Remove "Newest" and "Shortest First" from homepage
+
+Completed:
+- Date: 2026-08-31
+- Changes: Removed "Newest" and "Shortest first" options from the homepage toolbar.
+  These filters had no backend support and were dead options. Toolbar now shows only
+  "Recommended".
+- Files modified: src/features/home-feed.ts
+- Testing: `npx tsc --noEmit` and `npm run build` pass.
+
+## Fix Playlists tab on channel pages
+
+Completed:
+- Date: 2026-08-31
+- Changes: `extractChannelPlaylists` was hardcoded to read `tabs[0]`, but when fetching
+  `/channel/{id}/playlists` the playlists tab may not be at index 0. Now finds the
+  selected tab instead, so the playlists tab actually renders its items.
+- Files modified: src/core/DataExtractor.ts
+- Testing: `npx tsc --noEmit` and `npm run build` pass. Manual Chrome testing needed to
+  verify channel playlists tab shows real data.
+
+## Add font color picker and live preview to settings
+
+Completed:
+- Date: 2026-08-31
+- Changes:
+  - Added `fontColor` field to `DumbifySettings` (default `#1d1d1d`).
+  - Added color picker row to the options page with a hex label.
+  - Added a live preview box ("This is what it looks like") that updates in real time
+    as font size, font family, or font color are changed.
+  - Made the options page theme-aware: Day/Night toggle now restyles the settings page
+    itself (background, text, borders, hover states all transition).
+  - Applied `--df-font-color` CSS variable in `UIEngine.applyFont` so the chosen color
+    is used on the Dumbify reading view.
+- Files modified: src/types.ts, src/core/storage.ts, src/core/UIEngine.ts,
+  src/styles/main.css, src/options/index.html, src/options/index.ts
+- Testing: `npx tsc --noEmit` and `npm run build` pass.
 
 ## Watch page: date in the meta row (issue #21)
 

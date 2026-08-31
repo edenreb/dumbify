@@ -14,15 +14,39 @@ function applyFont(s: DumbifySettings) {
   if (!root) return
   root.style.setProperty('--df-font-family', s.fontFamily)
   root.style.setProperty('--df-font-size', s.fontSize + 'px')
+  root.style.setProperty('--df-font-color', s.theme === 'dark' ? s.fontColorDark : s.fontColor)
+}
+
+function panelBg(s: DumbifySettings, el: HTMLElement) {
+  if (!s.backgroundImage) {
+    el.style.removeProperty('background')
+    return
+  }
+  const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
+  const hex = bg.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+  el.style.setProperty('background', `rgba(${r},${g},${b},${s.bgOpacity})`, 'important')
 }
 
 function applyTheme(s: DumbifySettings) {
   if (!root) return
   root.classList.toggle('dark', s.theme === 'dark')
+  root.classList.toggle('has-bg', !!s.backgroundImage)
+  root.style.setProperty('--bg-opacity', String(s.bgOpacity))
   const bg = s.theme === 'dark' ? DARK_BG : LIGHT_BG
+  const bgImage = s.backgroundImage ? `url(${s.backgroundImage})` : ''
   document.documentElement.style.backgroundColor = bg
   document.body.style.backgroundColor = bg
-  root.style.setProperty('background', bg, 'important')
+  root.style.setProperty('background', bgImage ? `${bgImage} center/cover fixed` : bg, 'important')
+  if (bgImage) {
+    root.style.setProperty('background-color', bg, 'important')
+  } else {
+    root.style.removeProperty('background-color')
+  }
+  if (sidebar) panelBg(s, sidebar)
+  if (main) panelBg(s, main)
 }
 
 export function mountUI() {
@@ -79,6 +103,7 @@ export function unmountUI() {
     node.style.overflow = ''
     node.style.overscrollBehaviorY = ''
     node.style.backgroundColor = ''
+    node.style.backgroundImage = ''
   }
 }
 

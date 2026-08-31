@@ -34,6 +34,10 @@ export interface WatchData {
 export interface DumbifySettings {
   fontSize: number
   fontFamily: string
+  fontColor: string
+  fontColorDark: string
+  backgroundImage: string
+  bgOpacity: number
   theme: 'light' | 'dark'
 }
 
