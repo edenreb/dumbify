@@ -3,8 +3,6 @@
 # Open Tasks
 
 Found while testing the extension against real YouTube.
-- Remove "Newest" and "Shortest First" from the homepage.
-- Fix Playlists tab of each channel page. (Currently shows no tabs to display)
 - Add upload picture from files for custom background, expand to fill page. 
 - Add color picker for font color. 
 - Rename 'Watch Later' to 'Save' on a watch page, and fix the functionality to save to 'Watch Later', 'Sounds', or any otehr custom playlist that the user can save to.
@@ -24,6 +22,27 @@ Completed:
 - Files modified:
 - Testing:
 
+
+## Remove "Newest" and "Shortest First" from homepage
+
+Completed:
+- Date: 2026-08-31
+- Changes: Removed "Newest" and "Shortest first" options from the homepage toolbar.
+  These filters had no backend support and were dead options. Toolbar now shows only
+  "Recommended".
+- Files modified: src/features/home-feed.ts
+- Testing: `npx tsc --noEmit` and `npm run build` pass.
+
+## Fix Playlists tab on channel pages
+
+Completed:
+- Date: 2026-08-31
+- Changes: `extractChannelPlaylists` was hardcoded to read `tabs[0]`, but when fetching
+  `/channel/{id}/playlists` the playlists tab may not be at index 0. Now finds the
+  selected tab instead, so the playlists tab actually renders its items.
+- Files modified: src/core/DataExtractor.ts
+- Testing: `npx tsc --noEmit` and `npm run build` pass. Manual Chrome testing needed to
+  verify channel playlists tab shows real data.
 
 ## Watch page: date in the meta row (issue #21)
 
