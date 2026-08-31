@@ -135,11 +135,7 @@ html.df-failed #dumbify-root {
   margin-top: 24px;
   margin-bottom: 24px;
   padding: 24px 20px;
-  position: fixed;
-  top: 24px;
-  left: 24px;
-  height: calc(100vh - 48px);
-  overflow-y: auto;
+  height: fit-content;
 }
 
 #dumbify-root.has-bg .df-main {
@@ -148,15 +144,6 @@ html.df-failed #dumbify-root {
   margin-bottom: 24px;
   padding: 24px 32px;
   min-height: calc(100vh - 48px);
-}
-
-@media (min-width: 1024px) {
-  #dumbify-root.has-bg .df-sidebar {
-    width: 240px;
-  }
-  #dumbify-root.has-bg .df-main {
-    margin-left: 288px;
-  }
 }
 
 /* ---- Sidebar ---- */
