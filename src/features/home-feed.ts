@@ -109,7 +109,7 @@ const TOOLBAR_OPTIONS: Partial<Record<Route, string[]>> = {
   home: ['Recommended', 'Newest', 'Shortest first'],
   history: ['All time', 'This week', 'Unfinished only'],
   'watch-later': ['Added order', 'Shortest first', 'Longest first'],
-  subscriptions: ['By date', 'By creator'],
+  subscriptions: ['All', 'Today', 'Yesterday', 'Past week', 'Past month', 'By creator'],
 }
 
 function renderPageHead(nav: NavigationState) {
@@ -560,7 +560,7 @@ export const homeFeedFeature: Feature = {
 
     renderPageHead(nav)
     renderToolbar(nav.route, nav.route === 'subscriptions' ? (option) => {
-      subscriptionsSort = option === 'By creator' ? 'creator' : 'date'
+      subscriptionsFilter = option
       if (allSubscriptions.length) renderSubscriptionList()
     } : undefined)
 
@@ -590,7 +590,7 @@ export const homeFeedFeature: Feature = {
     let currentTab = 'videos'
     let playlists: PlaylistItem[] | null = null
     let playlistsLoading = false
-    let subscriptionsSort: 'date' | 'creator' = 'date'
+    let subscriptionsFilter: string = 'All'
     let allSubscriptions: Video[] = []
 
     const onScroll = () => {
@@ -619,7 +619,7 @@ export const homeFeedFeature: Feature = {
       if (feedCancelled) return
       list.innerHTML = ''
       videoIds.clear()
-      if (subscriptionsSort === 'creator') {
+      if (subscriptionsFilter === 'By creator') {
         const byCreator = new Map<string, Video[]>()
         for (const v of allSubscriptions) {
           const key = v.channel || 'Unknown'
@@ -630,10 +630,20 @@ export const homeFeedFeature: Feature = {
         for (const [channel, videos] of sorted) {
           renderSubscriptionGroup(list, channel, videos)
         }
-      } else {
+      } else if (subscriptionsFilter === 'All') {
         const groups = groupVideosByDate(allSubscriptions)
         for (const [bucket, videos] of groups) {
           renderSubscriptionGroup(list, bucket, videos)
+        }
+      } else {
+        const filtered = allSubscriptions.filter((v) => dateBucket(v.published) === subscriptionsFilter)
+        if (filtered.length) {
+          renderSubscriptionGroup(list, subscriptionsFilter, filtered)
+        } else {
+          const e = document.createElement('div')
+          e.className = 'df-empty'
+          e.textContent = `No videos from ${subscriptionsFilter}`
+          list.appendChild(e)
         }
       }
       updateItemNumbers()
