@@ -192,16 +192,6 @@ html.df-failed #dumbify-root {
   filter: none;
 }
 
-.df-brand-tagline {
-  display: block;
-  margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-}
-
 .df-nav {
   margin-top: 32px;
   display: flex;

@@ -86,7 +86,6 @@ const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note
     eyebrow: 'Queue',
     title: 'Watch Later',
     note: 'Saved for when you have time.',
-    aside: 'Sort by length',
   },
   liked: {
     eyebrow: 'Favorites',
@@ -115,9 +114,10 @@ const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note
   },
 }
 
+// Subscriptions is the only feed with a working toolbar - its options are wired to a
+// real filter. History and Watch Later had one too, but nothing ever read the selected
+// value, so they were labels that looked like controls.
 const TOOLBAR_OPTIONS: Partial<Record<Route, string[]>> = {
-  history: ['All time', 'This week', 'Unfinished only'],
-  'watch-later': ['Added order', 'Shortest first', 'Longest first'],
   subscriptions: ['All', 'Today', 'Yesterday', 'Past week', 'Past month', 'By creator'],
 }
 

@@ -115,10 +115,6 @@ function buildSidebar() {
   logo.src = chrome.runtime.getURL('icons/logo.png')
   logo.alt = 'Dumbify'
   brand.appendChild(logo)
-  const tagline = document.createElement('span')
-  tagline.className = 'df-brand-tagline'
-  tagline.textContent = 'youtube, quieted'
-  brand.appendChild(tagline)
   sidebarEl.appendChild(brand)
 
   const nav = document.createElement('nav')
