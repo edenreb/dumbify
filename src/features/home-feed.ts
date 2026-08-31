@@ -68,8 +68,8 @@ function groupVideosByDate(videos: Video[]): Map<string, Video[]> {
 const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
   home: {
     eyebrow: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
-    title: "Today's reading list",
-    note: 'Recommendations, chosen once and held still for the day. Nothing refreshes while you read.',
+    title: 'Recommended for you',
+    note: '',
   },
   history: {
     eyebrow: 'Logbook',
