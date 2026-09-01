@@ -39,6 +39,19 @@ html.df-failed #dumbify-root {
   border-color: var(--border);
 }
 
+/* Browsers give button/input/select/textarea their own UA-stylesheet font instead of
+   inheriting the page's - Chrome's default button font is a fixed ~13.3px, unrelated to
+   #dumbify-root's font-size. Every one of these controls with a percent font-size (the
+   sidebar's theme toggle and Settings label among them) was computing its percentage off
+   that fixed UA value, not off the page - so it never scaled with the Font Size setting,
+   however far off the caption size it was tuned to look right at the default 20px root. */
+#dumbify-root button,
+#dumbify-root input,
+#dumbify-root select,
+#dumbify-root textarea {
+  font: inherit;
+}
+
 #dumbify-root {
   --radius: 4px;
 
