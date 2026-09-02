@@ -36,7 +36,16 @@ function applyTheme(s: DumbifySettings) {
   const bgImage = s.backgroundImage ? `url("${s.backgroundImage}")` : ''
   document.documentElement.style.backgroundColor = bg
   document.body.style.backgroundColor = bg
-  root.style.setProperty('background', bgImage ? `${bgImage} center/cover fixed` : bg, 'important')
+  // NOT `fixed`. background-attachment: fixed hands the background to its own
+  // compositing layer, sized to the viewport - and `cover` on a very wide/short source
+  // makes that layer enormous (a 118x12 image needs a ~10,000px-wide texture to cover a
+  // 764px viewport, vs ~1,850px for a normal photo). Chrome fails to rasterize a layer
+  // that oversized and paints it incomplete, so the root turns partly transparent and
+  // YouTube's own GPU-composited surfaces (the Shorts player, video) show through - live,
+  // refreshing, and invisible to elementsFromPoint, because the DOM was never the problem.
+  // The root is already position:fixed covering the viewport, so dropping `fixed` here
+  // looks identical and avoids that layer entirely.
+  root.style.setProperty('background', bgImage ? `${bgImage} center/cover` : bg, 'important')
   if (bgImage) {
     root.style.setProperty('background-color', bg, 'important')
   } else {

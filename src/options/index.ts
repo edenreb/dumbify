@@ -100,6 +100,11 @@ function applyPageTheme(s: DumbifySettings) {
 // something a full-screen background actually needs.
 const MAX_BG_EDGE = 2560
 const MAX_BG_FILE = 25 * 1024 * 1024
+// A background is stretched with `cover` to fill the whole window, so a small source is
+// upscaled hard: a 118x12 image needs roughly a 10,000px-wide texture to cover a normal
+// viewport. That is both unreadable mush and, at that size, more than the compositor
+// reliably rasterizes. Require something that can actually fill a screen.
+const MIN_BG_EDGE = 200
 
 function toStoredImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -109,6 +114,12 @@ function toStoredImage(file: File): Promise<string> {
       const img = new Image()
       img.onerror = () => reject(new Error("That file isn't an image"))
       img.onload = () => {
+        if (Math.min(img.width, img.height) < MIN_BG_EDGE) {
+          reject(new Error(
+            `That image is only ${img.width}x${img.height}. Backgrounds need to be at least ${MIN_BG_EDGE}x${MIN_BG_EDGE}.`
+          ))
+          return
+        }
         const scale = Math.min(1, MAX_BG_EDGE / Math.max(img.width, img.height))
         const canvas = document.createElement('canvas')
         canvas.width = Math.max(1, Math.round(img.width * scale))
