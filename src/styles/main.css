@@ -45,10 +45,15 @@ html.df-failed #dumbify-root {
    sidebar's theme toggle and Settings label among them) was computing its percentage off
    that fixed UA value, not off the page - so it never scaled with the Font Size setting,
    however far off the caption size it was tuned to look right at the default 20px root. */
-#dumbify-root button,
-#dumbify-root input,
-#dumbify-root select,
-#dumbify-root textarea {
+/* :where() so this contributes ZERO specificity. As `#dumbify-root button` it scored
+   (1,0,1) - an id - which beat every (0,1,0) class rule below, so `font: inherit` (a
+   shorthand, font-size included) overrode each button's own size and rendered them all
+   at the root's 20px. Author styles beat the UA stylesheet regardless of specificity,
+   so this still does its job while losing to any class that sets its own size. */
+:where(#dumbify-root) button,
+:where(#dumbify-root) input,
+:where(#dumbify-root) select,
+:where(#dumbify-root) textarea {
   font: inherit;
 }
 
@@ -136,7 +141,7 @@ html.df-failed #dumbify-root {
   display: flex;
   flex-direction: column;
   margin: 0 auto;
-  max-width: 1180px;
+  max-width: 1240px;
   padding: 0 24px;
   gap: 0;
   min-height: 100vh;
@@ -185,7 +190,7 @@ html.df-failed #dumbify-root {
     position: sticky;
     top: 0;
     height: 100vh;
-    width: 240px;
+    width: 300px;
     padding-top: 56px;
     margin-left: -20px;
   }

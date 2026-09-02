@@ -3,3 +3,6 @@ dist/
 .DS_Store
 *.local
 *.tsbuildinfo
+
+# packaged builds for the Web Store
+*.zip
