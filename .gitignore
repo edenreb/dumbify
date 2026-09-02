@@ -6,3 +6,10 @@ dist/
 
 # packaged builds for the Web Store
 *.zip
+
+# internal working docs - kept on disk, deliberately untracked so they are not
+# published on GitHub or served by Pages
+AGENTS.MD
+CLAUDE.md
+CURRENT_TASK.md
+TODO.md
