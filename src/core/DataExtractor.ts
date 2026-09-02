@@ -16,7 +16,7 @@ function log(...args: any[]) {
   if (DEBUG) console.log('[Dumbify]', ...args)
 }
 
-function parseJSONBlock(text: string, start: number): any {
+export function parseJSONBlock(text: string, start: number): any {
   let depth = 0, inStr = false, strChar = '', esc = false
   for (let i = start; i < text.length; i++) {
     const c = text[i]
@@ -33,7 +33,7 @@ function parseJSONBlock(text: string, start: number): any {
   return null
 }
 
-function tryFindInText(text: string, name: string): any {
+export function tryFindInText(text: string, name: string): any {
   const idx = text.indexOf(name)
   if (idx === -1) return null
   for (const m of [`${name}=`, `${name} = `, `window.${name}=`, `window.${name} = `, `var ${name}=`, `var ${name} = `]) {
@@ -216,7 +216,7 @@ async function callInnerTube(endpoint: string, body: any): Promise<any> {
   } catch { return null }
 }
 
-function vidFromRenderer(r: any): Video | null {
+export function vidFromRenderer(r: any): Video | null {
   if (!r?.videoId) return null
   const overlayDur = r.thumbnailOverlays?.find(
     (o: any) => o?.thumbnailOverlayTimeStatusRenderer?.text
@@ -236,12 +236,15 @@ function vidFromRenderer(r: any): Video | null {
   }
 }
 
-function extractText(v: any): string {
+export function extractText(v: any): string {
   if (typeof v === 'string') return v
   if (!v || typeof v !== 'object') return ''
   if (typeof v.content === 'string') return v.content
   if (typeof v.text === 'string') return v.text
-  if (v.runs?.[0]?.text) return v.runs[0].text
+  // Every run, not just the first. YouTube splits text across runs whenever any part
+  // carries formatting or a link, so reading runs[0] alone truncated channel names and
+  // counts at the first formatting boundary.
+  if (Array.isArray(v.runs)) return v.runs.map((r: any) => r?.text ?? '').join('')
   if (v.simpleText) return v.simpleText
   return ''
 }
@@ -251,9 +254,16 @@ function extractText(v: any): string {
 // ("http://www.youtube.com/@Name"). Consumers build links by appending to the origin,
 // so the absolute form produced "https://www.youtube.comhttp://www.youtube.com/@Name".
 // Normalize to the path form at every site that reads vanityChannelUrl.
-function channelHandlePath(url: unknown): string {
+export function channelHandlePath(url: unknown): string {
   if (typeof url !== 'string' || !url) return ''
-  return url.replace(/^https?:\/\/(www\.)?youtube\.com/i, '')
+  if (url.startsWith('/')) return url
+  // Anchored to a path boundary. The old regex stripped the prefix off any host merely
+  // *starting* with youtube.com, so "https://www.youtube.comevil.com/@x" became
+  // "evil.com/@x" - and consumers append that to "https://www.youtube.com", producing a
+  // link to the entirely different host www.youtube.comevil.com. Anything that is not a
+  // real youtube.com URL now yields no handle at all.
+  const m = /^https?:\/\/(?:www\.)?youtube\.com(\/.*)$/i.exec(url)
+  return m ? m[1] : ''
 }
 
 function channelFromRenderer(r: any): Channel | null {
@@ -622,11 +632,11 @@ function vidFromShortsLockup(sl: any): Video | null {
   }
 }
 
-function vidFromLockup(lockup: any): Video | null {
+export function vidFromLockup(lockup: any): Video | null {
   if (!lockup?.contentId || !lockup?.metadata?.lockupMetadataViewModel) return null
 
   const lmv = lockup.metadata.lockupMetadataViewModel
-  const title = extractText(lmv.title?.content)
+  const title = extractText(lmv.title?.content).trim()
   if (!title) return null
 
   const rows = lmv.metadata?.contentMetadataViewModel?.metadataRows ?? []
@@ -719,7 +729,7 @@ function vidFromDOM(el: Element): Video | null {
 // continuation token was never found, so channel pages loaded one page and could not
 // scroll-load. extractChannelPlaylists already worked around this on its own; this is
 // the same rule for every caller.
-function selectedTabContent(data: any): any {
+export function selectedTabContent(data: any): any {
   const tabs = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? []
   const tab = tabs.find((t: any) => t?.tabRenderer?.selected) ?? tabs[0]
   return tab?.tabRenderer?.content ?? null
@@ -1122,7 +1132,7 @@ const ROUTE_URLS: Record<string, string> = {
 // that quote as an escape, never closes the string, and returns null, silently emptying
 // a whole feed. parseJSONBlock tracks escapes properly, and tryFindInText already covers
 // strictly more assignment forms than the two spelled out here.
-function parseInitialData(text: string): any | null {
+export function parseInitialData(text: string): any | null {
   return tryFindInText(text, 'ytInitialData')
 }
 
@@ -1599,7 +1609,7 @@ export function extractPageError(): string | null {
   return null
 }
 
-function nodeText(n: any): string {
+export function nodeText(n: any): string {
   if (typeof n === 'string') return n
   return n?.simpleText ?? n?.runs?.map((x: any) => x.text).join('') ?? ''
 }
@@ -1636,10 +1646,17 @@ export function extractWatchData(): WatchData {
   }
 }
 
-function fmtSec(s: number): string {
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
+// Callers hand this parseInt(videoDetails.lengthSeconds), which is NaN whenever that
+// field is missing or non-numeric - and the result went straight to the screen, so a
+// video could display a duration of "NaN:NaN". Fractional input leaked its float too
+// ("1:30.700000000000003"). An unusable input has no honest duration to show, so it
+// renders as nothing rather than as garbage.
+export function fmtSec(s: number): string {
+  if (!Number.isFinite(s) || s < 0) return ''
+  const total = Math.floor(s)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const sec = total % 60
   if (h) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
   return `${m}:${String(sec).padStart(2,'0')}`
 }
