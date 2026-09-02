@@ -106,6 +106,16 @@ const MAX_BG_FILE = 25 * 1024 * 1024
 // reliably rasterizes. Require something that can actually fill a screen.
 const MIN_BG_EDGE = 200
 
+// The source is a data: URL from FileReader, same origin, so the canvas is never
+// tainted and getImageData is safe here.
+function hasTransparency(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): boolean {
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] < 255) return true
+  }
+  return false
+}
+
 function toStoredImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -127,7 +137,16 @@ function toStoredImage(file: File): Promise<string> {
         const ctx = canvas.getContext('2d')
         if (!ctx) { reject(new Error('Could not process that image')); return }
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/jpeg', 0.85))
+        // JPEG has no alpha channel, and an unpainted canvas pixel is transparent
+        // black - so exporting a PNG with transparency as JPEG silently turns every
+        // transparent region solid black. Keep PNG when the image actually uses alpha
+        // (graphics and logos, which compress well losslessly) and take JPEG's much
+        // smaller output only when there is no transparency to lose (photos).
+        resolve(
+          hasTransparency(ctx, canvas)
+            ? canvas.toDataURL('image/png')
+            : canvas.toDataURL('image/jpeg', 0.85)
+        )
       }
       img.src = reader.result as string
     }
