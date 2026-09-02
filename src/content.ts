@@ -50,8 +50,31 @@ function safeSync(nav: NavigationState) {
   }
 }
 
+// A rejected promise never reaches safeSync's try/catch - by the time it settles, the
+// synchronous call has long since returned. That matters because main.css hides <body>,
+// so an async failure during startup can leave a permanently blank youtube.com with the
+// df-failed escape hatch never triggered.
+//
+// Only bail when the extension context is actually gone (chrome.runtime.id disappears
+// when the extension reloads or auto-updates while this tab stays open) - at that point
+// nothing will work again and plain YouTube beats a blank page. Any other rejection is
+// somebody's failed fetch, which is not worth tearing the whole UI down for.
+function watchForLostContext() {
+  window.addEventListener('unhandledrejection', (e) => {
+    let alive = true
+    try {
+      alive = !!chrome.runtime?.id
+    } catch {
+      alive = false
+    }
+    if (alive) return
+    bailToYouTube(e.reason)
+  })
+}
+
 function init() {
   try {
+    watchForLostContext()
     mountUI()
     if (!isSignedIn()) { renderSignedOut(); return }
     startPageManager()
