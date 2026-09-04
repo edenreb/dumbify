@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   parseJSONBlock, tryFindInText, parseInitialData, extractText, nodeText,
   channelHandlePath, fmtSec, parseCountText, continuationTokenOf,
-  selectedTabContent, vidFromRenderer, vidFromLockup,
+  selectedTabContent, vidFromRenderer, vidFromLockup, collectItemVideos, sectionHeaderText,
 } from '../src/core/DataExtractor.ts'
 
 // ---- parseJSONBlock: the hand-rolled brace matcher every feed depends on ----
@@ -233,4 +233,45 @@ test('vidFromLockup: pulls title, channel, views, published', () => {
   assert.equal(v?.channel, 'Creator')
   assert.equal(v?.views, '379K views')
   assert.equal(v?.published, '3 days ago')
+})
+
+// ---- reel shelves: every item flagged short, so /history can bundle them ----
+
+test('collectItemVideos: reel shelf items are flagged as shorts', () => {
+  const out: any[] = []
+  collectItemVideos({
+    reelShelfRenderer: {
+      items: [
+        { reelItemRenderer: { videoId: 'aaaaaaaaaaa', headline: { simpleText: 'S1' } } },
+        { shortsLockupViewModel: { onTap: { innertubeCommand: { reelWatchEndpoint: { videoId: 'bbbbbbbbbbb' } } } } },
+      ],
+    },
+  }, out, new Set())
+  assert.equal(out.length, 2)
+  assert.ok(out.every((v) => v.short === true))
+})
+
+test('collectItemVideos: a plain video is not flagged short', () => {
+  const out: any[] = []
+  collectItemVideos({ videoRenderer: { videoId: 'ccccccccccc', title: { runs: [{ text: 'V' }] } } }, out, new Set())
+  assert.equal(out[0].short, undefined)
+})
+
+// ---- history date separators come off the section header, not the videos ----
+
+test('sectionHeaderText: reads both header shapes', () => {
+  assert.equal(sectionHeaderText({ header: { itemSectionHeaderRenderer: { title: { runs: [{ text: 'Today' }] } } } }), 'Today')
+  assert.equal(sectionHeaderText({ header: { itemSectionHeaderViewModel: { headline: { content: 'Yesterday' } } } }), 'Yesterday')
+  assert.equal(sectionHeaderText({}), '')
+})
+
+test('collectItemVideos: stamps the section label as watchedOn', () => {
+  const out: any[] = []
+  collectItemVideos({
+    itemSectionRenderer: {
+      header: { itemSectionHeaderRenderer: { title: { simpleText: 'Mar 5, 2026' } } },
+      contents: [{ videoRenderer: { videoId: 'ddddddddddd', title: { runs: [{ text: 'V' }] } } }],
+    },
+  }, out, new Set())
+  assert.equal(out[0].watchedOn, 'Mar 5, 2026')
 })

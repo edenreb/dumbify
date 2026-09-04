@@ -1690,3 +1690,29 @@ html.df-failed #dumbify-root {
   background: var(--ink);
   color: var(--paper);
 }
+
+/* ---- Shorts bundle (history) ---- */
+
+/* The summary is an .df-item-row, so it counts and looks like any other history entry.
+   Its own marker is removed - the arrow span is the disclosure indicator. */
+.df-shorts-summary {
+  list-style: none;
+}
+
+.df-shorts-summary::-webkit-details-marker {
+  display: none;
+}
+
+.df-shorts-arrow {
+  font-family: var(--font-mono);
+  color: var(--ink-soft);
+  transition: transform 200ms ease;
+}
+
+.df-shorts-bundle[open] .df-shorts-arrow {
+  transform: rotate(90deg);
+}
+
+.df-shorts-bundle .df-shorts-item {
+  padding-left: 16px;
+}

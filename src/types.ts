@@ -9,6 +9,8 @@ export interface Video {
   duration: string
   verified: boolean
   live: boolean
+  short?: boolean
+  watchedOn?: string
   description?: string
 }
 
