@@ -605,6 +605,7 @@ function vidFromReel(r: any): Video | null {
     duration,
     verified: false,
     live: false,
+    short: true,
   }
 }
 
@@ -629,6 +630,7 @@ function vidFromShortsLockup(sl: any): Video | null {
     duration: '',
     verified: false,
     live: false,
+    short: true,
   }
 }
 
@@ -746,7 +748,23 @@ function extractLockupVideos(data: any): Video[] {
   return out
 }
 
-function collectItemVideos(item: any, out: Video[], seen: Set<string>) {
+// History's date separators ("Today", "Yesterday", "Mar 5, 2026") live on the section
+// header, not on the videos - a history row's publishedTimeText is the upload date, which
+// is a different thing entirely. Stamping the section label onto its own videos is the
+// only way the feed can group by when you watched them.
+export function sectionHeaderText(sec: any): string {
+  const h = sec?.header
+  if (!h || typeof h !== 'object') return ''
+  const inner = h.itemSectionHeaderRenderer ?? h.itemSectionHeaderViewModel ?? h[Object.keys(h)[0]] ?? {}
+  return extractText(inner.title ?? inner.headline ?? inner.primaryText).trim()
+}
+
+function stampSection(out: Video[], start: number, label: string) {
+  if (!label) return
+  for (let i = start; i < out.length; i++) out[i].watchedOn = label
+}
+
+export function collectItemVideos(item: any, out: Video[], seen: Set<string>) {
   if (!item || typeof item !== 'object') return
   if (isContinuationItem(item)) return
   let node: any = item
@@ -760,7 +778,9 @@ function collectItemVideos(item: any, out: Video[], seen: Set<string>) {
     node = inner
   }
   else if (item.itemSectionRenderer?.contents) {
+    const start = out.length
     for (const sub of item.itemSectionRenderer.contents) collectItemVideos(sub, out, seen)
+    stampSection(out, start, sectionHeaderText(item.itemSectionRenderer))
     return
   }
   else if (item.playlistVideoListRenderer?.contents) {
@@ -772,7 +792,11 @@ function collectItemVideos(item: any, out: Video[], seen: Set<string>) {
     return
   }
   else if (item.reelShelfRenderer?.items) {
+    // Everything in a reel shelf is a Short, whatever renderer shape it arrives in -
+    // the flag is what lets /history bundle them instead of listing them one by one.
+    const start = out.length
     for (const sub of item.reelShelfRenderer.items) collectItemVideos(sub, out, seen)
+    for (let i = start; i < out.length; i++) out[i].short = true
     return
   }
   else if (item.richGridRenderer?.contents) {
@@ -807,11 +831,13 @@ function collectFeedVideos(data: any): { videos: Video[]; itemKeys: Record<strin
     for (const item of items) {
       if (!item || typeof item !== 'object') continue
       if (item.itemSectionRenderer?.contents) {
+        const start = out.length
         for (const sub of item.itemSectionRenderer.contents) {
           const k = Object.keys(sub)[0]
           if (k) itemKeys[k] = (itemKeys[k] ?? 0) + 1
           collectItemVideos(sub, out, seen)
         }
+        stampSection(out, start, sectionHeaderText(item.itemSectionRenderer))
         continue
       }
       if (item.richSectionRenderer || item.richItemRenderer) {

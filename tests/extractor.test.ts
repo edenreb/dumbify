@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   parseJSONBlock, tryFindInText, parseInitialData, extractText, nodeText,
   channelHandlePath, fmtSec, parseCountText, continuationTokenOf,
-  selectedTabContent, vidFromRenderer, vidFromLockup, commentsDisabledIn,
+  selectedTabContent, vidFromRenderer, vidFromLockup, collectItemVideos, sectionHeaderText,
 } from '../src/core/DataExtractor.ts'
 
 // ---- parseJSONBlock: the hand-rolled brace matcher every feed depends on ----
@@ -235,25 +235,43 @@ test('vidFromLockup: pulls title, channel, views, published', () => {
   assert.equal(v?.published, '3 days ago')
 })
 
-// ---- comments off vs. nobody commented yet ----
+// ---- reel shelves: every item flagged short, so /history can bundle them ----
 
-test('commentsDisabledIn: messageRenderer in the comment item section', () => {
-  assert.equal(commentsDisabledIn({
-    contents: { itemSectionRenderer: { sectionIdentifier: 'comment-item-section', contents: [{ messageRenderer: {} }] } },
-  }), true)
+test('collectItemVideos: reel shelf items are flagged as shorts', () => {
+  const out: any[] = []
+  collectItemVideos({
+    reelShelfRenderer: {
+      items: [
+        { reelItemRenderer: { videoId: 'aaaaaaaaaaa', headline: { simpleText: 'S1' } } },
+        { shortsLockupViewModel: { onTap: { innertubeCommand: { reelWatchEndpoint: { videoId: 'bbbbbbbbbbb' } } } } },
+      ],
+    },
+  }, out, new Set())
+  assert.equal(out.length, 2)
+  assert.ok(out.every((v) => v.short === true))
 })
 
-test('commentsDisabledIn: messageRenderer as the whole continuation payload', () => {
-  assert.equal(commentsDisabledIn({
-    onResponseReceivedEndpoints: [{ reloadContinuationItemsCommand: { continuationItems: [{ messageRenderer: {} }] } }],
-  }), true)
+test('collectItemVideos: a plain video is not flagged short', () => {
+  const out: any[] = []
+  collectItemVideos({ videoRenderer: { videoId: 'ccccccccccc', title: { runs: [{ text: 'V' }] } } }, out, new Set())
+  assert.equal(out[0].short, undefined)
 })
 
-test('commentsDisabledIn: real threads are not "off"', () => {
-  assert.equal(commentsDisabledIn({
-    onResponseReceivedEndpoints: [{ reloadContinuationItemsCommand: { continuationItems: [{ commentThreadRenderer: {} }, { messageRenderer: {} }] } }],
-  }), false)
-  assert.equal(commentsDisabledIn({
-    contents: { itemSectionRenderer: { sectionIdentifier: 'comment-item-section', contents: [{ commentThreadRenderer: {} }] } },
-  }), false)
+// ---- history date separators come off the section header, not the videos ----
+
+test('sectionHeaderText: reads both header shapes', () => {
+  assert.equal(sectionHeaderText({ header: { itemSectionHeaderRenderer: { title: { runs: [{ text: 'Today' }] } } } }), 'Today')
+  assert.equal(sectionHeaderText({ header: { itemSectionHeaderViewModel: { headline: { content: 'Yesterday' } } } }), 'Yesterday')
+  assert.equal(sectionHeaderText({}), '')
+})
+
+test('collectItemVideos: stamps the section label as watchedOn', () => {
+  const out: any[] = []
+  collectItemVideos({
+    itemSectionRenderer: {
+      header: { itemSectionHeaderRenderer: { title: { simpleText: 'Mar 5, 2026' } } },
+      contents: [{ videoRenderer: { videoId: 'ddddddddddd', title: { runs: [{ text: 'V' }] } } }],
+    },
+  }, out, new Set())
+  assert.equal(out[0].watchedOn, 'Mar 5, 2026')
 })

@@ -566,6 +566,46 @@ function renderPlaylistRow(p: PlaylistItem): HTMLElement {
   return article
 }
 
+// History interleaves whole Shorts shelves with regular videos, and YouTube collapses
+// each shelf into one row. We listed every Short individually, so an afternoon of them
+// buried the video you actually wanted. Each run of consecutive Shorts becomes one
+// <details> that reads as an ordinary row - native disclosure, no JS state to keep,
+// collapsed by default.
+function shortsBundle(): HTMLElement {
+  const box = document.createElement('details')
+  box.className = 'df-shorts-bundle'
+
+  const summary = document.createElement('summary')
+  summary.className = 'df-item-row df-shorts-summary'
+
+  const number = document.createElement('span')
+  number.className = 'df-item-number'
+  summary.appendChild(number)
+
+  const body = document.createElement('span')
+  const title = document.createElement('span')
+  title.className = 'df-item-title'
+  title.textContent = 'Shorts'
+  body.appendChild(title)
+  const meta = document.createElement('div')
+  meta.className = 'df-item-meta df-shorts-count'
+  body.appendChild(meta)
+  summary.appendChild(body)
+
+  const arrow = document.createElement('span')
+  arrow.className = 'df-shorts-arrow'
+  arrow.textContent = '>'
+  summary.appendChild(arrow)
+
+  box.appendChild(summary)
+  return box
+}
+
+function updateShortsCount(box: HTMLElement) {
+  const n = box.querySelectorAll('.df-shorts-item').length
+  box.querySelector('.df-shorts-count')!.textContent = n === 1 ? '1 short' : `${n} shorts`
+}
+
 let feedCancelled = false
 
 export const homeFeedFeature: Feature = {
@@ -620,6 +660,8 @@ export const homeFeedFeature: Feature = {
     let currentTab = 'videos'
     let playlists: PlaylistItem[] | null = null
     let playlistsLoading = false
+    let historyBucket: string | null = null
+    let historyGroup: HTMLElement | null = null
     let subscriptionsFilter: string = 'All'
     let allSubscriptions: Video[] = []
     let creatorSelect: HTMLSelectElement | null = null
@@ -722,6 +764,35 @@ export const homeFeedFeature: Feature = {
       list.replaceChildren(frag)
     }
 
+    // History arrives already in watched order, grouped by the section label the
+    // extractor stamped on ("Today", "Yesterday", "Mar 5, 2026"). Appending keeps that
+    // order, so a group only ever ends when the label changes - no regrouping pass, and
+    // an expanded Shorts bundle survives the next scroll page.
+    function appendHistoryVideo(v: Video) {
+      const bucket = v.watchedOn ?? ''
+      if (bucket && bucket !== historyBucket) {
+        historyBucket = bucket
+        historyGroup = document.createElement('div')
+        historyGroup.className = 'df-date-group'
+        const h = document.createElement('p')
+        h.className = 'df-date-group-header'
+        h.textContent = bucket
+        historyGroup.appendChild(h)
+        list.appendChild(historyGroup)
+      }
+      const target: HTMLElement = historyGroup ?? list
+      if (!v.short) { target.appendChild(renderVideo(v)); return }
+      // Reuse the trailing bundle so a run split across two scroll pages stays one row.
+      const last = target.lastElementChild
+      const box = last?.classList.contains('df-shorts-bundle')
+        ? (last as HTMLElement)
+        : target.appendChild(shortsBundle())
+      const row = renderVideo(v)
+      row.classList.add('df-shorts-item')
+      box.appendChild(row)
+      updateShortsCount(box)
+    }
+
     // Returns how many items were actually new, so loadMore can tell real progress
     // from a page that only repeated what we already have.
     function appendVideos(videos: Video[]): number {
@@ -739,6 +810,7 @@ export const homeFeedFeature: Feature = {
           if (playlistContext && !v.url.includes('list=')) {
             v = { ...v, url: `${v.url}&list=${playlistContext}` }
           }
+          if (nav.route === 'history') { appendHistoryVideo(v); return }
           list.appendChild(renderVideo(v))
         })
       }
