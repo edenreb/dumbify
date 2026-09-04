@@ -2123,6 +2123,36 @@ export interface CommentsPageResult {
   comments: CommentItem[]
   token: string | null
   createParams: string | null
+  disabled: boolean
+}
+
+// "Comments are turned off" and "nobody has commented yet" both arrive as zero comments,
+// and we showed "No comments yet" for both. YouTube marks the off case with a
+// messageRenderer standing where the threads would be - in the comment-item-section of
+// ytInitialData, or as the entire continuation payload from the next API. Matched
+// structurally: the message text itself is localized, so reading it would only work in
+// English.
+export function commentsDisabledIn(data: any): boolean {
+  let found = false
+  const walk = (o: any, depth = 0): void => {
+    if (found || depth > 15 || typeof o !== 'object' || o === null) return
+    if (Array.isArray(o)) {
+      for (const x of o) walk(x, depth + 1)
+      return
+    }
+    const sec = o.itemSectionRenderer
+    if (sec?.sectionIdentifier === 'comment-item-section') {
+      const contents = sec.contents ?? []
+      if (contents.some((c: any) => c?.messageRenderer)) { found = true; return }
+    }
+    const items = o.reloadContinuationItemsCommand?.continuationItems
+      ?? o.appendContinuationItemsAction?.continuationItems
+    if (Array.isArray(items) && items.some((i: any) => i?.messageRenderer)
+      && !items.some((i: any) => i?.commentThreadRenderer)) { found = true; return }
+    for (const key of Object.keys(o)) walk(o[key], depth + 1)
+  }
+  walk(data)
+  return found
 }
 
 export async function extractCommentsFromPage(): Promise<CommentsPageResult> {
@@ -2136,7 +2166,12 @@ export async function extractCommentsFromPage(): Promise<CommentsPageResult> {
         ...r,
         token: findNextCommentsToken(sync),
         createParams: findCreateCommentParams(sync),
+        disabled: false,
       }
+    }
+    if (commentsDisabledIn(sync)) {
+      log('  comments are turned off for this video')
+      return { count: '', comments: [], token: null, createParams: null, disabled: true }
     }
   } else {
     log('  ytInitialData NOT found in scripts')
@@ -2154,7 +2189,11 @@ export async function extractCommentsFromPage(): Promise<CommentsPageResult> {
           ...r,
           token: findNextCommentsToken(data),
           createParams: findCreateCommentParams(data),
+          disabled: false,
         }
+      }
+      if (commentsDisabledIn(data)) {
+        return { count: '', comments: [], token: null, createParams: null, disabled: true }
       }
       logCommentStructure(data)
     } else {
@@ -2172,26 +2211,31 @@ export async function extractCommentsFromPage(): Promise<CommentsPageResult> {
           ...r,
           token: findNextCommentsToken(data),
           createParams: findCreateCommentParams(data),
+          disabled: false,
         }
+      }
+      if (commentsDisabledIn(data)) {
+        return { count: '', comments: [], token: null, createParams: null, disabled: true }
       }
     } else {
       log('  next API: no response')
     }
   }
-  return { count: '', comments: [], token: null, createParams: null }
+  return { count: '', comments: [], token: null, createParams: null, disabled: false }
 }
 
 export async function fetchMoreComments(
   token: string
 ): Promise<CommentsPageResult> {
   const data = await callInnerTube('next', { continuation: token })
-  if (!data) return { count: '', comments: [], token: null, createParams: null }
+  if (!data) return { count: '', comments: [], token: null, createParams: null, disabled: false }
   const r = extractCommentsFromObject(data)
   return {
     count: r.count,
     comments: r.comments,
     token: findNextCommentsToken(data),
     createParams: findCreateCommentParams(data),
+    disabled: false,
   }
 }
 

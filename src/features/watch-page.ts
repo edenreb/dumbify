@@ -59,6 +59,7 @@ let commentsBtnEl: HTMLButtonElement | null = null
 let commentsObserver: MutationObserver | null = null
 let renderTimer: number | null = null
 let dataCommentCount = ''
+let commentsDisabled = false
 let dataRefreshAttempted = false
 let dataRefreshPending = false
 let moreToken: string | null = null
@@ -115,10 +116,15 @@ async function refreshCommentsFromData() {
   }
   if (dataRefreshAttempted || dataRefreshPending) return
   dataRefreshPending = true
-  const { count, comments, token, createParams: params } = await extractCommentsFromPage()
+  const { count, comments, token, createParams: params, disabled } = await extractCommentsFromPage()
   dataRefreshPending = false
   dataRefreshAttempted = true
   if (!commentsSection?.isConnected) return
+  if (disabled) {
+    commentsDisabled = true
+    renderComments(list, [])
+    return
+  }
   if (comments.length > 0) {
     dataComments = comments
     moreToken = token
@@ -990,12 +996,20 @@ function renderComments(list: HTMLElement, source: CommentItem[] | null = null) 
       ).length
       console.log('[Dumbify] no comments rendered; threads:', threads, 'with text:', withText)
     }
+    // A video with comments turned off and one nobody has commented on both render
+    // zero comments; only the off case has YouTube's own message element (or the
+    // extractor's flag) to tell them apart.
+    const off = commentsDisabled || !!document.querySelector('ytd-comments ytd-message-renderer')
+    const composer = commentsSection?.querySelector<HTMLElement>('.df-comment-composer')
+    if (composer) composer.style.display = off ? 'none' : ''
     const empty = document.createElement('p')
     empty.className = 'df-comment-empty'
-    empty.textContent = 'No comments yet'
+    empty.textContent = off ? 'Comments are turned off' : 'No comments yet'
     list.appendChild(empty)
     return
   }
+  const composer = commentsSection?.querySelector<HTMLElement>('.df-comment-composer')
+  if (composer) composer.style.display = ''
   comments.forEach((c) => list.appendChild(renderCommentItem(c)))
 }
 
@@ -1126,6 +1140,7 @@ function resetComments() {
     renderTimer = null
   }
   dataCommentCount = ''
+  commentsDisabled = false
   dataRefreshAttempted = false
   dataRefreshPending = false
   moreToken = null
