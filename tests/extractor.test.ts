@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   parseJSONBlock, tryFindInText, parseInitialData, extractText, nodeText,
   channelHandlePath, fmtSec, parseCountText, continuationTokenOf,
-  selectedTabContent, vidFromRenderer, vidFromLockup,
+  selectedTabContent, vidFromRenderer, vidFromLockup, commentsDisabledIn,
 } from '../src/core/DataExtractor.ts'
 
 // ---- parseJSONBlock: the hand-rolled brace matcher every feed depends on ----
@@ -233,4 +233,27 @@ test('vidFromLockup: pulls title, channel, views, published', () => {
   assert.equal(v?.channel, 'Creator')
   assert.equal(v?.views, '379K views')
   assert.equal(v?.published, '3 days ago')
+})
+
+// ---- comments off vs. nobody commented yet ----
+
+test('commentsDisabledIn: messageRenderer in the comment item section', () => {
+  assert.equal(commentsDisabledIn({
+    contents: { itemSectionRenderer: { sectionIdentifier: 'comment-item-section', contents: [{ messageRenderer: {} }] } },
+  }), true)
+})
+
+test('commentsDisabledIn: messageRenderer as the whole continuation payload', () => {
+  assert.equal(commentsDisabledIn({
+    onResponseReceivedEndpoints: [{ reloadContinuationItemsCommand: { continuationItems: [{ messageRenderer: {} }] } }],
+  }), true)
+})
+
+test('commentsDisabledIn: real threads are not "off"', () => {
+  assert.equal(commentsDisabledIn({
+    onResponseReceivedEndpoints: [{ reloadContinuationItemsCommand: { continuationItems: [{ commentThreadRenderer: {} }, { messageRenderer: {} }] } }],
+  }), false)
+  assert.equal(commentsDisabledIn({
+    contents: { itemSectionRenderer: { sectionIdentifier: 'comment-item-section', contents: [{ commentThreadRenderer: {} }] } },
+  }), false)
 })
