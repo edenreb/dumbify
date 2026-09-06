@@ -3,7 +3,7 @@ import { defineManifest } from '@crxjs/vite-plugin'
 export default defineManifest({
   manifest_version: 3,
   name: 'Dumbify - Customizable text-based YouTube, no thumbnails or distractions',
-  version: '1.0.0',
+  version: '1.1.0',
   description: 'Turn YouTube into a clean reading list: no autoplay, no recommended videos, no clutter. Custom fonts, sizes, dark mode, focus mode.',
   content_scripts: [
     {
