@@ -3,6 +3,7 @@ import { startPageManager, onNavigate, getNavigationState } from './core/PageMan
 import { registerFeature, activateFeatures } from './core/FeatureManager'
 import type { NavigationState } from './types'
 import { isSignedIn } from './core/DataExtractor'
+import { getSettings, onSettingsChange } from './core/storage'
 import { shellFeature } from './features/shell'
 import { homeFeedFeature } from './features/home-feed'
 import { watchPageFeature } from './features/watch-page'
@@ -86,10 +87,41 @@ function init() {
   safeSync(getNavigationState())
 }
 
-if (!redirectShorts(location.pathname)) {
+// main.css hides YouTube the moment it lands, whether or not anything mounts, so being
+// switched off is not "do nothing" - it has to hand the page back the same way a failed
+// start does.
+function applyEnabled(enabled: boolean) {
+  document.documentElement.classList.toggle('df-off', !enabled)
+}
+
+function isOff(): boolean {
+  return document.documentElement.classList.contains('df-off')
+}
+
+// The switch has to reach tabs that are already open. Re-running startup in place would
+// mean unwinding everything a mounted UI did to the page; a reload is one line and lands
+// in the right state whichever way the switch went.
+function watchSwitch() {
+  onSettingsChange((s) => {
+    const pageIsOn = !isOff()
+    if (s.enabled === pageIsOn) return
+    location.reload()
+  })
+}
+
+function start() {
+  watchSwitch()
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init)
   } else {
     init()
   }
+}
+
+if (!redirectShorts(location.pathname)) {
+  getSettings().then((s) => {
+    applyEnabled(s.enabled)
+    if (s.enabled) start()
+    else watchSwitch()
+  })
 }

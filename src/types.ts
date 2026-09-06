@@ -34,6 +34,7 @@ export interface WatchData {
 }
 
 export interface DumbifySettings {
+  enabled: boolean
   fontSize: number
   fontFamily: string
   fontColor: string
