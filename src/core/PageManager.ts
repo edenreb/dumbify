@@ -1,5 +1,6 @@
 import type { Route, NavigationState } from '../types'
 import { extractPageChannelId } from './DataExtractor'
+import { wantsNewTab } from './links'
 
 type NavCallback = (state: NavigationState) => void
 
@@ -100,4 +101,19 @@ export function navigateTo(path: string) {
   const href = new URL(path, 'https://www.youtube.com').href
   if (href === location.href) return
   window.location.href = href
+}
+
+// Every row and nav item used to call preventDefault() on any click at all, and the
+// sidebar was built from <button>, which cannot be opened in a tab however you click it.
+// So Cmd-click, middle-click and Shift-click all did nothing but navigate the current
+// tab, or nothing at all. Real href plus a handler that steps aside for a modified
+// click: the router keeps the plain left click, the browser keeps the rest.
+export function linkTo(el: HTMLAnchorElement, path: string) {
+  el.href = path
+  el.onclick = (e) => {
+    if (wantsNewTab(e)) return
+    e.preventDefault()
+    e.stopPropagation()
+    navigateTo(path)
+  }
 }

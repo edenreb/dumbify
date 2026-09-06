@@ -198,6 +198,7 @@ html.df-failed #dumbify-root {
 
 .df-brand {
   display: block;
+  text-decoration: none;
   cursor: pointer;
   user-select: none;
 }
@@ -233,6 +234,9 @@ html.df-failed #dumbify-root {
   display: block;
   background: none;
   border: none;
+  /* Real links now, so that Cmd-click opens a tab - but they still look like the
+     buttons they replaced. */
+  text-decoration: none;
   padding: 6px 0;
   font-family: var(--font-sans);
   font-size: 70%;

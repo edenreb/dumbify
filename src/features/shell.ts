@@ -3,7 +3,7 @@ import type { NavigationState, Route } from '../types'
 import type { DumbifySettings } from '../types'
 import type { Feature } from '../core/FeatureManager'
 import { sidebar, main } from '../core/UIEngine'
-import { onNavigate, navigateTo } from '../core/PageManager'
+import { onNavigate, navigateTo, linkTo } from '../core/PageManager'
 import { getSettings, setSettings } from '../core/storage'
 
 // The @font-face rules live in styles/fonts.css; only the src URLs have to be built
@@ -109,7 +109,7 @@ function buildSidebar() {
 
   const brand = document.createElement('a')
   brand.className = 'df-brand'
-  brand.onclick = (e) => { e.stopPropagation(); navigateTo('/') }
+  linkTo(brand, '/')
   const logo = document.createElement('img')
   logo.className = 'df-brand-logo'
   logo.src = chrome.runtime.getURL('icons/logo.png')
@@ -121,14 +121,14 @@ function buildSidebar() {
   nav.className = 'df-nav'
 
   NAV.forEach((item) => {
-    const btn = document.createElement('button')
-    btn.className = 'df-nav-link'
+    const link = document.createElement('a')
+    link.className = 'df-nav-link'
     const span = document.createElement('span')
     span.textContent = item.label
-    btn.appendChild(span)
-    btn.onclick = (e) => { e.stopPropagation(); navigateTo(item.path) }
-    linkEls.push(btn)
-    nav.appendChild(btn)
+    link.appendChild(span)
+    linkTo(link, item.path)
+    linkEls.push(link)
+    nav.appendChild(link)
   })
 
   sidebarEl.appendChild(nav)
