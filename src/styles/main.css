@@ -1720,3 +1720,32 @@ html.df-off #dumbify-root {
 .df-shorts-bundle .df-shorts-item {
   padding-left: 16px;
 }
+
+/* Numbers are the history's reading order, and a Short is not a place in it: an
+   afternoon of them used to spend twenty numbers and push the video you were looking
+   for down to 47. The bundle carries a tag instead, the Shorts inside carry nothing,
+   and neither advances the counter - so the real entries stay 01, 02, 03 either side
+   of a bundle. */
+.df-shorts-summary,
+.df-shorts-bundle .df-shorts-item {
+  counter-increment: none;
+}
+
+.df-shorts-summary .df-item-number::before,
+.df-shorts-bundle .df-shorts-item .df-item-number::before {
+  content: '';
+}
+
+.df-shorts-summary .df-item-number::before {
+  content: 'Shorts';
+  white-space: nowrap;
+}
+
+/* Every row is its own grid, so the fixed 36px number column is the only thing keeping
+   them aligned - a six-letter tag has to stay inside it. Measured: SHORTS is 35.8px at
+   9px and 39.7px at 10px, so the clamp keeps it legible at small reading sizes without
+   letting it run into the title at 32px, where 40% would otherwise be 13px. */
+.df-shorts-summary .df-item-number {
+  font-size: clamp(9px, 40%, 10px);
+  letter-spacing: 0.06em;
+}
