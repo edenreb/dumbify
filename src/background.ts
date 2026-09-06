@@ -51,13 +51,22 @@ async function reloadYouTubeTabs(): Promise<void> {
   await Promise.all(tabs.map((t) => (t.id ? chrome.tabs.reload(t.id) : undefined)))
 }
 
-chrome.runtime.onInstalled.addListener(() => { void syncContentScript() })
-chrome.runtime.onStartup.addListener(() => { void syncContentScript() })
+// A registration that throws leaves the extension silently doing nothing at all, which
+// is indistinguishable from the switch being off. Say so.
+function sync(): Promise<boolean> {
+  return syncContentScript().catch((err) => {
+    console.error('[Dumbify] could not update the content script registration:', err)
+    return false
+  })
+}
+
+chrome.runtime.onInstalled.addListener(() => { void sync() })
+chrome.runtime.onStartup.addListener(() => { void sync() })
 
 // Every settings write lands here, not just the switch - reload only if the switch was
 // the thing that moved, or changing a font would reload every YouTube tab.
 onSettingsChange(() => {
-  void syncContentScript().then((changed) => {
+  void sync().then((changed) => {
     if (changed) return reloadYouTubeTabs()
   })
 })
