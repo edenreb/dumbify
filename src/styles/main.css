@@ -1746,15 +1746,17 @@ html.df-off #dumbify-root {
 .df-shorts-summary .df-item-number {
   font-size: 100%;
   padding-top: 0;
+  /* The numbers hang from the text baseline; a glyph has none, so centre it on the row
+     instead - it was sitting high against the title. */
+  align-self: center;
   /* The glyph fills with currentColor, so this is what makes it the reading colour:
-     black on paper, white at night, and whatever the reader picked in Settings. The
-     numbers stay on the muted palette ink; the mark is the row's only content, so it
-     carries full ink the way a title does. */
+     black on paper, white at night, and whatever the reader picked in Settings. */
   color: var(--df-font-color, var(--foreground));
 }
 
 .df-shorts-icon {
-  width: 1.05em;
-  height: 1.05em;
+  /* Sized by height so the mark keeps the proportions of the real one. */
+  height: 1.15em;
+  width: auto;
   display: block;
 }
