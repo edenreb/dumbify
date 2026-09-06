@@ -571,6 +571,65 @@ function renderPlaylistRow(p: PlaylistItem): HTMLElement {
 // buried the video you actually wanted. Each run of consecutive Shorts becomes one
 // <details> that reads as an ordinary row - native disclosure, no JS state to keep,
 // collapsed by default.
+// The Shorts glyph, drawn rather than fetched: an <img> cannot take the reading
+// colour, and this has to be whatever ink the page is set to - black on paper, white
+// at night, or whatever the reader picked in Settings.
+//
+// Two identical capsules, both tilted 30 degrees and stacked with an overlap, are what
+// make this read as Shorts. A single rounded rectangle - the first attempt - just read
+// as a play button in a box.
+//
+// The arrow is a mask rather than an evenodd hole in the same path, because the two
+// capsules overlap: an evenodd hole cancels itself out exactly where they cross, which
+// is where the arrow sits.
+const SHORTS_CAPSULE =
+  'M-3.55 -4.7L3.55 -4.7A4.7 4.7 0 0 1 3.55 4.7L-3.55 4.7A4.7 4.7 0 0 1 -3.55 -4.7Z'
+
+// Cropped to the glyph, so the mark needs no centring of its own inside the box.
+const SHORTS_VIEWBOX = { x: 1.73, y: 0.93, w: 16.55, h: 22.15 }
+
+// A page can hold several bundles and every mask needs its own id.
+let shortsIconSeq = 0
+
+function shortsIcon(): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg'
+  const { x, y, w, h } = SHORTS_VIEWBOX
+  const maskId = `df-shorts-mask-${++shortsIconSeq}`
+
+  const svg = document.createElementNS(NS, 'svg')
+  svg.setAttribute('class', 'df-shorts-icon')
+  svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`)
+  svg.setAttribute('aria-hidden', 'true')
+  svg.setAttribute('focusable', 'false')
+
+  const mask = document.createElementNS(NS, 'mask')
+  mask.setAttribute('id', maskId)
+  const lit = document.createElementNS(NS, 'rect')
+  lit.setAttribute('x', String(x))
+  lit.setAttribute('y', String(y))
+  lit.setAttribute('width', String(w))
+  lit.setAttribute('height', String(h))
+  lit.setAttribute('fill', '#fff')
+  const arrow = document.createElementNS(NS, 'path')
+  arrow.setAttribute('d', 'M6.9 7.7L6.9 16.3L13.7 12Z')
+  arrow.setAttribute('fill', '#000')
+  mask.appendChild(lit)
+  mask.appendChild(arrow)
+  svg.appendChild(mask)
+
+  const body = document.createElementNS(NS, 'g')
+  body.setAttribute('mask', `url(#${maskId})`)
+  body.setAttribute('fill', 'currentColor')
+  for (const at of ['translate(10.5,7.4) rotate(-30)', 'translate(9.5,16.6) rotate(-30)']) {
+    const cap = document.createElementNS(NS, 'path')
+    cap.setAttribute('transform', at)
+    cap.setAttribute('d', SHORTS_CAPSULE)
+    body.appendChild(cap)
+  }
+  svg.appendChild(body)
+  return svg
+}
+
 function shortsBundle(): HTMLElement {
   const box = document.createElement('details')
   box.className = 'df-shorts-bundle'
@@ -580,6 +639,7 @@ function shortsBundle(): HTMLElement {
 
   const number = document.createElement('span')
   number.className = 'df-item-number'
+  number.appendChild(shortsIcon())
   summary.appendChild(number)
 
   const body = document.createElement('span')
