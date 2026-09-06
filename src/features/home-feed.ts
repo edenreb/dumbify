@@ -571,6 +571,40 @@ function renderPlaylistRow(p: PlaylistItem): HTMLElement {
 // buried the video you actually wanted. Each run of consecutive Shorts becomes one
 // <details> that reads as an ordinary row - native disclosure, no JS state to keep,
 // collapsed by default.
+// The Shorts glyph, drawn rather than fetched: an <img> cannot take the reading
+// colour, and this has to be whatever ink the page is set to - black on paper, white
+// at night. fill inherits currentColor from the number column it replaces.
+//
+// A rounded portrait pill with the play triangle cut out of it - evenodd makes the
+// triangle a hole, so the paper shows through it whatever the background is set to.
+function shortsIcon(): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(NS, 'svg')
+  svg.setAttribute('class', 'df-shorts-icon')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('aria-hidden', 'true')
+  svg.setAttribute('focusable', 'false')
+
+  // One path, not two: evenodd punches the triangle clean through the body, so the
+  // paper shows through it and the glyph needs no background colour of its own. Both
+  // subpaths share the tilt - the tilted capsule is what separates this from a plain
+  // play button.
+  const path = document.createElementNS(NS, 'path')
+  path.setAttribute('fill', 'currentColor')
+  path.setAttribute('fill-rule', 'evenodd')
+  path.setAttribute('transform', 'rotate(-18 12 12)')
+  path.setAttribute(
+    'd',
+    // Rounded rectangle, not a capsule - a full stadium reads as a blob at 20px.
+    'M10 2.5h4a5 5 0 0 1 5 5v9a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5v-9a5 5 0 0 1 5-5Z' +
+      // The arrow is pre-rotated by the same 18 degrees the group takes off, so it
+      // stands upright inside a tilted body instead of tipping over into a caret.
+      'M11.27 7.77L8.92 15.0L16.18 13.36Z'
+  )
+  svg.appendChild(path)
+  return svg
+}
+
 function shortsBundle(): HTMLElement {
   const box = document.createElement('details')
   box.className = 'df-shorts-bundle'
@@ -580,6 +614,7 @@ function shortsBundle(): HTMLElement {
 
   const number = document.createElement('span')
   number.className = 'df-item-number'
+  number.appendChild(shortsIcon())
   summary.appendChild(number)
 
   const body = document.createElement('span')

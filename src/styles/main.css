@@ -1736,16 +1736,25 @@ html.df-off #dumbify-root {
   content: '';
 }
 
-.df-shorts-summary .df-item-number::before {
-  content: 'Shorts';
-  white-space: nowrap;
+/* The glyph takes the ink of the column it replaces, so it is black on paper, white at
+   night, and whatever colour the reading view is set to - the point of drawing it
+   instead of shipping a picture. Sized in em so it tracks the reading size, and it fits
+   the 36px number column at every setting. */
+/* The number column runs at 55% for two digits of mono; a glyph needs the row's own
+   size or it shrinks to a smudge. Sized in em so it tracks the reading size, and at
+   1.05em it still clears the 36px column at the largest setting. */
+.df-shorts-summary .df-item-number {
+  font-size: 100%;
+  padding-top: 0;
+  /* The glyph fills with currentColor, so this is what makes it the reading colour:
+     black on paper, white at night, and whatever the reader picked in Settings. The
+     numbers stay on the muted palette ink; the mark is the row's only content, so it
+     carries full ink the way a title does. */
+  color: var(--df-font-color, var(--foreground));
 }
 
-/* Every row is its own grid, so the fixed 36px number column is the only thing keeping
-   them aligned - a six-letter tag has to stay inside it. Measured: SHORTS is 35.8px at
-   9px and 39.7px at 10px, so the clamp keeps it legible at small reading sizes without
-   letting it run into the title at 32px, where 40% would otherwise be 13px. */
-.df-shorts-summary .df-item-number {
-  font-size: clamp(9px, 40%, 10px);
-  letter-spacing: 0.06em;
+.df-shorts-icon {
+  width: 1.05em;
+  height: 1.05em;
+  display: block;
 }
