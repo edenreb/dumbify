@@ -7,7 +7,23 @@ const SETTINGS_KEY = 'dumbify:settings'
 export const LIGHT_BG = '#f7f5ee'
 export const DARK_BG = '#1d1d1d'
 
+// The reading view's font choices. Shared because the popup offers the same quick
+// picks the options page does, and a second copy would drift.
+export const FONT_SIZES = [14, 16, 18, 20, 22, 24, 28, 32]
+
+export const FONT_FAMILIES = [
+  { value: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', label: 'System (default)' },
+  { value: 'Georgia, "Times New Roman", serif', label: 'Georgia / Serif' },
+  { value: '"Helvetica Neue", Helvetica, Arial, sans-serif', label: 'Helvetica / Sans' },
+  { value: 'Garamond, "Times New Roman", serif', label: 'Garamond / Serif' },
+  { value: 'Courier, "Courier New", monospace', label: 'Courier / Mono' },
+  { value: 'Verdana, Geneva, sans-serif', label: 'Verdana' },
+  { value: '"Lucida Grande", "Lucida Sans Unicode", sans-serif', label: 'Lucida Grande' },
+  { value: '"Times New Roman", Times, serif', label: 'Times New Roman' },
+]
+
 const DEFAULT_SETTINGS: DumbifySettings = {
+  enabled: true,
   fontSize: 20,
   fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
   fontColor: '#1d1d1d',

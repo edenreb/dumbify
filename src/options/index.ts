@@ -1,17 +1,5 @@
-import { getSettings, setSettings, resetSettings, LIGHT_BG, DARK_BG } from '../core/storage'
+import { getSettings, setSettings, resetSettings, LIGHT_BG, DARK_BG, FONT_SIZES, FONT_FAMILIES } from '../core/storage'
 import type { DumbifySettings } from '../types'
-
-const FONT_SIZES = [14, 16, 18, 20, 22, 24, 28, 32]
-const FONT_FAMILIES = [
-  { value: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', label: 'System (default)' },
-  { value: 'Georgia, "Times New Roman", serif', label: 'Georgia / Serif' },
-  { value: '"Helvetica Neue", Helvetica, Arial, sans-serif', label: 'Helvetica / Sans' },
-  { value: 'Garamond, "Times New Roman", serif', label: 'Garamond / Serif' },
-  { value: 'Courier, "Courier New", monospace', label: 'Courier / Mono' },
-  { value: 'Verdana, Geneva, sans-serif', label: 'Verdana' },
-  { value: '"Lucida Grande", "Lucida Sans Unicode", sans-serif', label: 'Lucida Grande' },
-  { value: '"Times New Roman", Times, serif', label: 'Times New Roman' },
-]
 
 const THEMES: { value: DumbifySettings['theme']; label: string }[] = [
   { value: 'light', label: 'Day' },
