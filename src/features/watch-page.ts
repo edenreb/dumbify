@@ -25,7 +25,7 @@ import {
   type SavePlaylist,
 } from '../core/DataExtractor'
 import type { Video } from '../types'
-import { navigateTo } from '../core/PageManager'
+import { navigateTo, linkTo } from '../core/PageManager'
 
 
 const PLAYER_SELECTORS = [
@@ -1372,14 +1372,16 @@ function buildWatchPage(nav: NavigationState) {
 
   if (data.video.channel) {
     const channelId = data.video.channelId
-    const channelSpan = document.createElement('span')
+    // An <a> only when it actually goes somewhere, so Cmd-click opens the channel in a
+    // tab; plain text otherwise.
+    const channelSpan = document.createElement(channelId ? 'a' : 'span')
     channelSpan.className = 'df-watch-channel'
     if (channelId) {
       channelSpan.classList.add('df-watch-channel--link')
       const label = document.createElement('span')
       label.textContent = data.video.channel
       channelSpan.appendChild(label)
-      channelSpan.onclick = (e) => { e.stopPropagation(); navigateTo(`/channel/${channelId}`) }
+      linkTo(channelSpan as HTMLAnchorElement, `/channel/${channelId}`)
     } else {
       channelSpan.textContent = data.video.channel
     }

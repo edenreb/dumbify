@@ -3,7 +3,7 @@ import type { Feature } from '../core/FeatureManager'
 import { content, root, renderNotFound, makeClickable } from '../core/UIEngine'
 import { extractPageError, extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, fetchUserPlaylists, fetchLikedPlaylist, fetchPlaylistPage, setChannelSubscription, diag } from '../core/DataExtractor'
 import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
-import { navigateTo } from '../core/PageManager'
+import { navigateTo, linkTo } from '../core/PageManager'
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
@@ -205,7 +205,7 @@ function renderToolbar(route: Route, onOption?: (option: string) => void): HTMLE
 function renderChannelBanner(ch: Channel, before?: HTMLElement) {
   const banner = document.createElement('a')
   banner.className = 'df-channel-banner'
-  banner.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(`/channel/${ch.id}`) }
+  linkTo(banner, `/channel/${ch.id}`)
   banner.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(`/channel/${ch.id}`) } }
   banner.setAttribute('role', 'link')
   banner.tabIndex = 0
@@ -426,7 +426,7 @@ function renderChannelStats(ch: Channel, videos: Video[], before?: HTMLElement) 
 function renderChannelCard(ch: Channel): HTMLElement {
   const card = document.createElement('a')
   card.className = 'df-channel-card'
-  card.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(`/channel/${ch.id}`) }
+  linkTo(card, `/channel/${ch.id}`)
   card.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(`/channel/${ch.id}`) } }
   card.setAttribute('role', 'link')
   card.tabIndex = 0
@@ -476,8 +476,7 @@ function parseViews(v: string): number {
 function renderVideo(v: Video): HTMLElement {
   const article = document.createElement('a')
   article.className = 'df-item-row'
-  article.href = v.url
-  article.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(v.url) }
+  linkTo(article, v.url)
   article.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(v.url) } }
 
   const number = document.createElement('span')
@@ -538,8 +537,7 @@ function renderVideo(v: Video): HTMLElement {
 function renderPlaylistRow(p: PlaylistItem): HTMLElement {
   const article = document.createElement('a')
   article.className = 'df-item-row'
-  article.href = p.url
-  article.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(p.url) }
+  linkTo(article, p.url)
   article.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(p.url) } }
 
   const number = document.createElement('span')
