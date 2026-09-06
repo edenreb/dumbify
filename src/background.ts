@@ -1,3 +1,67 @@
+import { getSettings, onSettingsChange } from './core/storage'
+
+// The reading view is registered at runtime rather than declared in the manifest, so
+// that switching Dumbify off injects nothing at all - no stylesheet, no bundle. See the
+// deferContentScripts plugin in vite.config.ts for the build side of this.
+const SCRIPT_ID = 'dumbify-reading-view'
+
+// `vite dev` keeps the static declaration for HMR. Chrome already injects it there and
+// it cannot be unregistered, so leave it alone.
+function staticallyDeclared(): boolean {
+  return !!chrome.runtime.getManifest().content_scripts?.length
+}
+
+async function isRegistered(): Promise<boolean> {
+  try {
+    const found = await chrome.scripting.getRegisteredContentScripts({ ids: [SCRIPT_ID] })
+    return found.length > 0
+  } catch {
+    return false
+  }
+}
+
+// Returns whether the registration actually changed, so callers only disturb open tabs
+// when the switch moved. The live registration is the source of truth rather than a
+// remembered flag: the worker is torn down between events and wakes with no memory.
+async function syncContentScript(): Promise<boolean> {
+  if (staticallyDeclared()) return false
+
+  const { enabled } = await getSettings()
+  if (enabled === (await isRegistered())) return false
+
+  if (!enabled) {
+    await chrome.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] })
+    return true
+  }
+
+  // The hashed js/css filenames are only known at build time, so the plugin writes the
+  // manifest entry it removed to this file.
+  const res = await fetch(chrome.runtime.getURL('content-scripts.json'))
+  const [spec] = (await res.json()) as chrome.scripting.RegisteredContentScript[]
+  await chrome.scripting.registerContentScripts([
+    { ...spec, id: SCRIPT_ID, persistAcrossSessions: true },
+  ])
+  return true
+}
+
+// Nothing is injected while the switch is off, so an already-open tab has no content
+// script left to notice the change - the reload has to come from here, both ways.
+async function reloadYouTubeTabs(): Promise<void> {
+  const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' })
+  await Promise.all(tabs.map((t) => (t.id ? chrome.tabs.reload(t.id) : undefined)))
+}
+
+chrome.runtime.onInstalled.addListener(() => { void syncContentScript() })
+chrome.runtime.onStartup.addListener(() => { void syncContentScript() })
+
+// Every settings write lands here, not just the switch - reload only if the switch was
+// the thing that moved, or changing a font would reload every YouTube tab.
+onSettingsChange(() => {
+  void syncContentScript().then((changed) => {
+    if (changed) return reloadYouTubeTabs()
+  })
+})
+
 interface YTDataMessage {
   type: 'GET_YT_DATA'
   name: string

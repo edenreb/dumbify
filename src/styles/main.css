@@ -21,14 +21,10 @@ body {
    is what avoids a flash of the real page - but it means a content script that throws
    before mounting leaves a permanently blank page with no way back. content.ts sets
    this class from its own catch, so a failed start degrades to plain YouTube. */
-/* df-off is the same hand-off, chosen rather than failed: the toolbar switch is
-   turned off, so YouTube stays YouTube. */
-html.df-failed body,
-html.df-off body {
+html.df-failed body {
   visibility: visible !important;
 }
-html.df-failed #dumbify-root,
-html.df-off #dumbify-root {
+html.df-failed #dumbify-root {
   display: none !important;
 }
 
