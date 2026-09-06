@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
+import { sameInjectedFiles } from '../src/core/registration.ts'
 
 // The service worker hands dist/content-scripts.json straight to
 // chrome.scripting.registerContentScripts, which rejects the whole call on an unknown
@@ -42,4 +43,35 @@ test('registration spec points at files that were actually emitted', { skip: !bu
       assert.ok(existsSync(`dist/${f}`), `registration points at missing file ${f}`)
     }
   }
+})
+
+// --- what a registration is compared against ---
+
+test('a registration pointing at the same files is left alone', () => {
+  const a = { js: ['assets/c-AAA.js'], css: ['assets/s-AAA.css'] }
+  assert.equal(sameInjectedFiles(a, { ...a }), true)
+})
+
+// The release bug: vite content-hashes the bundle, so an updated extension found a
+// registration already in place and kept it - pointing at the previous build's files,
+// which no longer exist. It injected nothing at all, silently, for everyone who already
+// had it installed.
+test('a registration left over from the previous build is replaced', () => {
+  const stale = { js: ['assets/c-OLD.js'], css: ['assets/s-OLD.css'] }
+  const fresh = { js: ['assets/c-NEW.js'], css: ['assets/s-NEW.css'] }
+  assert.equal(sameInjectedFiles(stale, fresh), false)
+})
+
+test('a stale stylesheet alone is enough to re-register', () => {
+  assert.equal(
+    sameInjectedFiles(
+      { js: ['assets/c-AAA.js'], css: ['assets/s-OLD.css'] },
+      { js: ['assets/c-AAA.js'], css: ['assets/s-NEW.css'] }
+    ),
+    false
+  )
+})
+
+test('js and css are not compared as one flat run of names', () => {
+  assert.equal(sameInjectedFiles({ js: ['a', 'b'], css: [] }, { js: ['a'], css: ['b'] }), false)
 })

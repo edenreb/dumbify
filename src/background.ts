@@ -1,4 +1,5 @@
 import { getSettings, onSettingsChange } from './core/storage'
+import { sameInjectedFiles } from './core/registration'
 
 // The reading view is registered at runtime rather than declared in the manifest, so
 // that switching Dumbify off injects nothing at all - no stylesheet, no bundle. See the
@@ -11,36 +12,47 @@ function staticallyDeclared(): boolean {
   return !!chrome.runtime.getManifest().content_scripts?.length
 }
 
-async function isRegistered(): Promise<boolean> {
+async function registeredScript(): Promise<chrome.scripting.RegisteredContentScript | null> {
   try {
-    const found = await chrome.scripting.getRegisteredContentScripts({ ids: [SCRIPT_ID] })
-    return found.length > 0
+    const [found] = await chrome.scripting.getRegisteredContentScripts({ ids: [SCRIPT_ID] })
+    return found ?? null
   } catch {
-    return false
+    return null
   }
 }
 
+// The hashed js/css filenames are only known at build time, so the vite plugin writes
+// the manifest entry it removed to this file.
+async function wantedScript(): Promise<chrome.scripting.RegisteredContentScript> {
+  const res = await fetch(chrome.runtime.getURL('content-scripts.json'))
+  const [spec] = (await res.json()) as chrome.scripting.RegisteredContentScript[]
+  return { ...spec, id: SCRIPT_ID, persistAcrossSessions: true }
+}
+
 // Returns whether the registration actually changed, so callers only disturb open tabs
-// when the switch moved. The live registration is the source of truth rather than a
+// when something moved. The live registration is the source of truth rather than a
 // remembered flag: the worker is torn down between events and wakes with no memory.
 async function syncContentScript(): Promise<boolean> {
   if (staticallyDeclared()) return false
 
   const { enabled } = await getSettings()
-  if (enabled === (await isRegistered())) return false
+  const current = await registeredScript()
 
   if (!enabled) {
+    if (!current) return false
     await chrome.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] })
     return true
   }
 
-  // The hashed js/css filenames are only known at build time, so the plugin writes the
-  // manifest entry it removed to this file.
-  const res = await fetch(chrome.runtime.getURL('content-scripts.json'))
-  const [spec] = (await res.json()) as chrome.scripting.RegisteredContentScript[]
-  await chrome.scripting.registerContentScripts([
-    { ...spec, id: SCRIPT_ID, persistAcrossSessions: true },
-  ])
+  // Not just "is anything registered" - a registration left over from the previous
+  // version points at filenames this build no longer has. See core/registration.ts.
+  const wanted = await wantedScript()
+  if (current && sameInjectedFiles(current, wanted)) return false
+
+  // updateContentScripts would be one call, but it fails when nothing is registered yet.
+  // Unregistering first covers the fresh install and the stale-after-update case alike.
+  if (current) await chrome.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] })
+  await chrome.scripting.registerContentScripts([wanted])
   return true
 }
 
