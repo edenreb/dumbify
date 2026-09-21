@@ -6,21 +6,21 @@ A Chrome extension that replaces YouTube's cluttered interface with a calm, text
 
 ### Inspiration
 
-Dumbify started from a personal frustration: YouTube is incredible for finding content, but the experience of actually consuming it is buried under layers of engagement optimization. I'd open a video to learn something and find myself distracted by autoplay, recommended sidebars, and clickbait thumbnails before I even pressed play. The idea was simple — what if YouTube felt more like reading a book than scrolling a feed?
+Dumbify started from a personal frustration: YouTube is incredible for finding content, but the experience of actually consuming it is buried under layers of engagement optimization. We'd open a video to learn something and find ourselves distracted by autoplay, recommended sidebars, and clickbait thumbnails before we even pressed play. The idea was simple — what if YouTube felt more like reading a book than scrolling a feed?
 
-I drew inspiration from reader-mode browser extensions and text-based interfaces like Hacker News and old-school RSS readers. The goal wasn't to rebuild YouTube, but to strip it down to what matters: the video, its metadata, and the controls you need.
+We drew inspiration from reader-mode browser extensions and text-based interfaces like Hacker News and old-school RSS readers. The goal wasn't to rebuild YouTube, but to strip it down to what matters: the video, its metadata, and the controls you need.
 
-### What I Learned
+### What We Learned
 
-This project taught me more about YouTube's internals than I ever expected:
+This project taught us more about YouTube's internals than we ever expected:
 
 - **YouTube's data pipeline** — Every YouTube page embeds its data as inline JSON in `<script>` tags (`ytInitialData`, `ytInitialPlayerResponse`). Learning to parse these reliably, with fallbacks for when the format changes, was one of the biggest learning curves.
-- **The InnerTube API** — YouTube's internal API powers everything on the site. I reverse-engineered the authenticated endpoints for subscribing, liking, commenting, and managing playlists. Understanding SAPISIDHASH authentication and the request structure was a deep dive into how modern web apps handle identity.
+- **The InnerTube API** — YouTube's internal API powers everything on the site. We reverse-engineered the authenticated endpoints for subscribing, liking, commenting, and managing playlists. Understanding SAPISIDHASH authentication and the request structure was a deep dive into how modern web apps handle identity.
 - **Chrome extension architecture** — Manifest V3's service worker model, content script isolation, the `chrome.scripting` API for accessing the MAIN world, and `chrome.storage.local` for persistence. The separation between content scripts (limited) and background scripts (privileged) shaped the entire data extraction strategy.
 - **DOM manipulation at scale** — Physically moving YouTube's player element into a custom DOM, intercepting fullscreen, syncing aspect ratios, and handling SPA navigation without page reloads.
 - **CSS design systems** — Building a "paper and ink" aesthetic that works across light and dark modes, using CSS custom properties for theming, and handling YouTube's aggressive CSS overrides (like forcing `html { font-size: 10px }`).
 
-### How I Built It
+### How We Built It
 
 The project was built incrementally, starting with the simplest possible version and expanding page by page:
 
@@ -30,7 +30,7 @@ The project was built incrementally, starting with the simplest possible version
 4. **Phase 4: Polish** — Settings page, theme toggle, background images, subscription filtering, history grouping, channel pages, and playlist support.
 5. **Phase 5: Resilience** — Progressive fallback strategies for data extraction, graceful degradation on failure, and handling YouTube's frequent UI changes.
 
-Throughout, I prioritized reliability over features. The progressive data extraction pipeline (inline scripts → background bridge → fetch → DOM scraping) was built because YouTube's page structure changes frequently, and a single extraction method would break constantly.
+Throughout, we prioritized reliability over features. The progressive data extraction pipeline (inline scripts → background bridge → fetch → DOM scraping) was built because YouTube's page structure changes frequently, and a single extraction method would break constantly.
 
 ### Challenges
 
