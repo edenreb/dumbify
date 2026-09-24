@@ -2,6 +2,45 @@
 
 A Chrome extension that replaces YouTube's cluttered interface with a calm, text-first reading experience. No thumbnails, no autoplay, no distractions — just the content you came for.
 
+## About the Project
+
+### Inspiration
+
+Dumbify started from a personal frustration: YouTube is incredible for finding content, but the experience of actually consuming it is buried under layers of engagement optimization. We'd open a video to learn something and find ourselves distracted by autoplay, recommended sidebars, and clickbait thumbnails before we even pressed play. The idea was simple — what if YouTube felt more like reading a book than scrolling a feed?
+
+We drew inspiration from reader-mode browser extensions and text-based interfaces like Hacker News and old-school RSS readers. The goal wasn't to rebuild YouTube, but to strip it down to what matters: the video, its metadata, and the controls you need.
+
+### What We Learned
+
+This project taught us more about YouTube's internals than we ever expected:
+
+- **YouTube's data pipeline** — Every YouTube page embeds its data as inline JSON in `<script>` tags (`ytInitialData`, `ytInitialPlayerResponse`). Learning to parse these reliably, with fallbacks for when the format changes, was one of the biggest learning curves.
+- **The InnerTube API** — YouTube's internal API powers everything on the site. We reverse-engineered the authenticated endpoints for subscribing, liking, commenting, and managing playlists. Understanding SAPISIDHASH authentication and the request structure was a deep dive into how modern web apps handle identity.
+- **Chrome extension architecture** — Manifest V3's service worker model, content script isolation, the `chrome.scripting` API for accessing the MAIN world, and `chrome.storage.local` for persistence. The separation between content scripts (limited) and background scripts (privileged) shaped the entire data extraction strategy.
+- **DOM manipulation at scale** — Physically moving YouTube's player element into a custom DOM, intercepting fullscreen, syncing aspect ratios, and handling SPA navigation without page reloads.
+- **CSS design systems** — Building a "paper and ink" aesthetic that works across light and dark modes, using CSS custom properties for theming, and handling YouTube's aggressive CSS overrides (like forcing `html { font-size: 10px }`).
+
+### How We Built It
+
+The project was built incrementally, starting with the simplest possible version and expanding page by page:
+
+1. **Phase 1: Proof of concept** — A content script that hides YouTube's body and shows a text list of recommended videos. Just enough to prove the data extraction approach worked.
+2. **Phase 2: Core pages** — Home feed, watch page, and basic navigation. The watch page was the hardest part — physically moving the YouTube player element into Dumbify's DOM while keeping it functional required careful handling of resize observers, fullscreen events, and aspect ratio syncing.
+3. **Phase 3: Interactions** — Like, subscribe, save to playlist, and comments. Each required reverse-engineering the corresponding InnerTube API endpoint and handling authenticated requests with SAPISIDHASH.
+4. **Phase 4: Polish** — Settings page, theme toggle, background images, subscription filtering, history grouping, channel pages, and playlist support.
+5. **Phase 5: Resilience** — Progressive fallback strategies for data extraction, graceful degradation on failure, and handling YouTube's frequent UI changes.
+
+Throughout, we prioritized reliability over features. The progressive data extraction pipeline (inline scripts → background bridge → fetch → DOM scraping) was built because YouTube's page structure changes frequently, and a single extraction method would break constantly.
+
+### Challenges
+
+- **YouTube's moving target** — YouTube changes its internal data formats, class names, and page structure regularly. The multi-layered extraction approach was a direct response to this — when one method breaks, another takes over.
+- **Content script isolation** — Chrome's content scripts run in an isolated world and can't access JavaScript variables on the page (`window.ytInitialData`, `window.ytcfg`). The background script bridge (`chrome.scripting.executeScript` in the MAIN world) was the solution, but it added complexity to every data extraction call.
+- **Moving the native player** — YouTube's player is deeply coupled to its parent DOM. Moving it with `appendChild()` works, but it breaks fullscreen, aspect ratio, and resize behavior. Each had to be manually re-implemented with observers and event interception.
+- **Authenticated API calls** — YouTube's InnerTube API requires SAPISIDHASH authentication, which depends on cookies and timestamps. Getting this right for subscribe, like, and comment operations required careful inspection of YouTube's own network requests.
+- **SPA navigation** — YouTube doesn't do full page loads — it hijacks navigation and updates the DOM. Dumbify had to hook into `history.pushState`, `popstate`, and YouTube's custom `yt-navigate-finish` event to detect route changes and re-render.
+- **Settings persistence** — Chrome's `chrome.storage.local` has per-item size limits. Storing background images as base64 data URLs means large images can approach the 5MB limit. The settings page processes and resizes images client-side to mitigate this.
+
 ## The Problem
 
 YouTube's interface is designed to maximize engagement, not readability. Thumbnails compete for attention, autoplay pulls you into the next video, sidebars push recommendations, and the overall visual noise makes it hard to focus on what you actually want to watch. For users who come to YouTube with intent — to learn, to research, to listen — the default experience gets in the way.
