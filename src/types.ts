@@ -33,16 +33,8 @@ export interface WatchData {
   playerReady: boolean
 }
 
-export interface DumbifySettings {
-  enabled: boolean
-  fontSize: number
-  fontFamily: string
-  fontColor: string
-  fontColorDark: string
-  backgroundImage: string
-  bgOpacity: number
-  theme: 'light' | 'dark'
-}
+// Settings live with their defaults and validation in core/settings.ts.
+export type { DumbifySettings } from './core/settings'
 
 export type Route =
   | 'home'

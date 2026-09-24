@@ -3,8 +3,8 @@ import { defineManifest } from '@crxjs/vite-plugin'
 export default defineManifest({
   manifest_version: 3,
   name: 'Dumbify - Customizable text-based YouTube, no thumbnails or distractions',
-  version: '1.1.0',
-  description: 'Turn YouTube into a clean reading list: no autoplay, no recommended videos, no clutter. Custom fonts, sizes, dark mode, focus mode.',
+  version: '2.0.0',
+  description: 'Turn YouTube into a calm reading list: no thumbnails, no autoplay, no clutter. 19 themes, layouts, GIF wallpapers, custom fonts.',
   content_scripts: [
     {
       matches: ['https://www.youtube.com/*'],
@@ -34,11 +34,17 @@ export default defineManifest({
     },
   },
   options_page: 'src/options/index.html',
-  permissions: ['storage', 'scripting'],
+  // unlimitedStorage: an animated wallpaper is stored as the original file, and a GIF or
+  // video loop of a few megabytes would otherwise hit chrome.storage.local's 10 MB cap.
+  // It carries no install-time warning.
+  permissions: ['storage', 'scripting', 'unlimitedStorage'],
   host_permissions: ['https://www.youtube.com/*'],
   web_accessible_resources: [
     {
-      resources: ['icons/logo.png', 'fonts/*.woff2'],
+      // Only what the page itself loads. Anything listed here is fetchable by any site,
+      // which makes it a way to detect the extension - the sidebar mark is drawn now,
+      // so the logo image no longer needs to be.
+      resources: ['fonts/*.woff2'],
       matches: ['https://www.youtube.com/*'],
     },
   ],

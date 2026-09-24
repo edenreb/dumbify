@@ -1,4 +1,4 @@
-import { getSettings, onSettingsChange } from './core/storage'
+import { getSettings, migrateStorage, onSettingsChange } from './core/storage'
 import { sameInjectedFiles } from './core/registration'
 
 // The reading view is registered at runtime rather than declared in the manifest, so
@@ -72,7 +72,14 @@ function sync(): Promise<boolean> {
   })
 }
 
-chrome.runtime.onInstalled.addListener(() => { void sync() })
+// v1 kept the background image inside the settings object; move it out before anything
+// else reads or writes settings. A failure here is survivable - every read path falls
+// back to the inline copy - so it is logged rather than allowed to stop the sync.
+chrome.runtime.onInstalled.addListener(() => {
+  void migrateStorage()
+    .catch((err) => console.error('[Dumbify] settings migration failed:', err))
+    .finally(() => { void sync() })
+})
 chrome.runtime.onStartup.addListener(() => { void sync() })
 
 // Every settings write lands here, not just the switch - reload only if the switch was
@@ -94,9 +101,37 @@ interface YTCfgMessage {
 
 interface OpenOptionsMessage {
   type: 'OPEN_OPTIONS'
+  /** A settings section to scroll to, e.g. "wallpaper". */
+  section?: string
 }
 
 type BGMessage = YTDataMessage | YTCfgMessage | OpenOptionsMessage
+
+// Reuses an open settings tab rather than stacking a new one per click, and lands on the
+// section asked for.
+//
+// Found through runtime.getContexts, which lists this extension's own pages with no extra
+// permission. tabs.query({ url }) looks like the obvious tool, but without the "tabs"
+// permission it silently ignores the url filter and returns every tab - so "the settings
+// tab" would have been whatever tab came first, a YouTube tab included, and this would
+// have navigated it away.
+async function openOptions(section?: string) {
+  const page = chrome.runtime.getURL(chrome.runtime.getManifest().options_page ?? 'src/options/index.html')
+  const hash = section && /^[a-z-]+$/.test(section) ? `#${section}` : ''
+  let tabId: number | undefined
+  try {
+    const contexts = await chrome.runtime.getContexts({ contextTypes: ['TAB'] })
+    tabId = contexts.find((c) => c.documentUrl?.startsWith(page) && c.tabId >= 0)?.tabId
+  } catch {
+    // Older Chrome: fall through to a new tab.
+  }
+  if (tabId !== undefined) {
+    const tab = await chrome.tabs.update(tabId, { active: true, url: page + hash })
+    if (tab?.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true })
+    return
+  }
+  await chrome.tabs.create({ url: page + hash })
+}
 
 // GET_YT_DATA evaluates window[name] in the page's MAIN world. Only this extension can
 // reach onMessage (there is no externally_connectable), but there is no reason for the
@@ -151,7 +186,7 @@ chrome.runtime.onMessage.addListener((message: BGMessage, sender, sendResponse) 
   }
 
   if (message.type === 'OPEN_OPTIONS') {
-    chrome.runtime.openOptionsPage()
+    void openOptions(message.section)
     return
   }
 })

@@ -1,4 +1,4 @@
-import { mountUI, unmountUI, renderSignedOut } from './core/UIEngine'
+import { mountUI, unmountUI, renderSignedOut, paintEarly } from './core/UIEngine'
 import { startPageManager, onNavigate, getNavigationState } from './core/PageManager'
 import { registerFeature, activateFeatures } from './core/FeatureManager'
 import type { NavigationState } from './types'
@@ -87,6 +87,9 @@ function init() {
 }
 
 if (!redirectShorts(location.pathname)) {
+  // Before YouTube paints anything: the page colour of the reader's own theme, so a
+  // dark theme's first frame is dark.
+  paintEarly()
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init)
   } else {

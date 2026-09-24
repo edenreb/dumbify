@@ -1,37 +1,16 @@
-import type { DumbifySettings } from '../types'
+import {
+  DEFAULT_SETTINGS, LEGACY_UPLOAD_ID, RESET_PRESERVES, applySettingsPatch,
+  legacyBackground, normalizeSettings, type DumbifySettings, type WallpaperRef,
+} from './settings.ts'
+import { dataUrlBytes, isWallpaperRecord, mimeOfDataUrl, type WallpaperRecord } from './wallpaper.ts'
 
-const SETTINGS_KEY = 'dumbify:settings'
-
-// The reading view's two paper colours. Shared because the options page paints itself
-// with the same palette and used to carry its own copy of both hex values.
-export const LIGHT_BG = '#f7f5ee'
-export const DARK_BG = '#1d1d1d'
-
-// The reading view's font choices. Shared because the popup offers the same quick
-// picks the options page does, and a second copy would drift.
-export const FONT_SIZES = [14, 16, 18, 20, 22, 24, 28, 32]
-
-export const FONT_FAMILIES = [
-  { value: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', label: 'System (default)' },
-  { value: 'Georgia, "Times New Roman", serif', label: 'Georgia / Serif' },
-  { value: '"Helvetica Neue", Helvetica, Arial, sans-serif', label: 'Helvetica / Sans' },
-  { value: 'Garamond, "Times New Roman", serif', label: 'Garamond / Serif' },
-  { value: 'Courier, "Courier New", monospace', label: 'Courier / Mono' },
-  { value: 'Verdana, Geneva, sans-serif', label: 'Verdana' },
-  { value: '"Lucida Grande", "Lucida Sans Unicode", sans-serif', label: 'Lucida Grande' },
-  { value: '"Times New Roman", Times, serif', label: 'Times New Roman' },
-]
-
-const DEFAULT_SETTINGS: DumbifySettings = {
-  enabled: true,
-  fontSize: 20,
-  fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
-  fontColor: '#1d1d1d',
-  fontColorDark: '#f3f0e8',
-  backgroundImage: '',
-  bgOpacity: 0.85,
-  theme: 'light',
-}
+export const SETTINGS_KEY = 'dumbify:settings'
+// The wallpaper's bytes live apart from the settings. v1 kept the image inside the
+// settings object, so every font-size tweak re-read and re-wrote megabytes of base64,
+// and every storage change event shipped all of it to every open YouTube tab and the
+// service worker. Now a settings write is a few hundred bytes, and the image only moves
+// when the image changes.
+export const WALLPAPER_KEY = 'dumbify:wallpaper'
 
 // chrome.storage vanishes when the extension context is invalidated - the tab keeps
 // running the already-injected content script after the extension reloads or Chrome
@@ -49,63 +28,211 @@ function storageArea(): chrome.storage.StorageArea | null {
 
 const NO_CONTEXT = 'Dumbify lost its connection to the extension. Reload the page.'
 
-// Reads degrade to "nothing stored", so callers fall back to DEFAULT_SETTINGS and the
+// Reads degrade to "nothing stored", so callers fall back to the defaults and the
 // reading view still renders rather than dying on a rejected promise.
 function get<T>(key: string): Promise<T | null> {
   const area = storageArea()
   if (!area) return Promise.resolve(null)
-  return new Promise((r) =>
-    area.get(key, (res) => r((res as Record<string, T | undefined>)[key] ?? null))
-  )
+  return new Promise((r) => {
+    try {
+      area.get(key, (res) => r(((res ?? {}) as Record<string, T | undefined>)[key] ?? null))
+    } catch {
+      r(null)
+    }
+  })
 }
 
-// Rejects on failure instead of resolving regardless. chrome.storage.local is capped at
-// 10 MB, so a large background image genuinely does fail to write - and callers were
-// reporting "Saved" for a write that never happened.
-// Writes cannot degrade quietly - a save that did not happen must say so - but it
+function lastErrorMessage(): string | null {
+  try {
+    const err = chrome.runtime?.lastError
+    return err ? (err.message ?? 'Could not save to extension storage') : null
+  } catch {
+    return null
+  }
+}
+
+// Writes cannot degrade quietly - a save that did not happen must say so, and it
 // rejects with a message worth showing rather than a TypeError.
 function set(key: string, value: unknown): Promise<void> {
   const area = storageArea()
   if (!area) return Promise.reject(new Error(NO_CONTEXT))
   return new Promise((resolve, reject) => {
     area.set({ [key]: value }, () => {
-      const err = chrome.runtime.lastError
-      if (err) reject(new Error(err.message ?? 'Could not save to extension storage'))
+      const err = lastErrorMessage()
+      if (err) reject(new Error(friendlyQuotaMessage(err)))
       else resolve()
     })
   })
 }
 
-export async function getSettings(): Promise<DumbifySettings> {
-  // Merge over the defaults rather than returning the stored object as-is: a settings
-  // object written before a key existed would otherwise come back missing that key,
-  // and callers read it as a complete DumbifySettings.
-  const stored = await get<Partial<DumbifySettings>>(SETTINGS_KEY)
-  return { ...DEFAULT_SETTINGS, ...(stored ?? {}) }
+function remove(key: string): Promise<void> {
+  const area = storageArea()
+  if (!area) return Promise.reject(new Error(NO_CONTEXT))
+  return new Promise((resolve, reject) => {
+    area.remove(key, () => {
+      const err = lastErrorMessage()
+      if (err) reject(new Error(err))
+      else resolve()
+    })
+  })
 }
 
-export async function setSettings(partial: Partial<DumbifySettings>): Promise<void> {
-  const current = await getSettings()
-  await set(SETTINGS_KEY, { ...current, ...partial })
+function friendlyQuotaMessage(message: string): string {
+  return /quota/i.test(message)
+    ? 'There isn’t room to store that. Try a smaller file.'
+    : message
 }
 
-export async function resetSettings(): Promise<void> {
-  await set(SETTINGS_KEY, DEFAULT_SETTINGS)
+// setSettings is a read-modify-write. Two in flight at once - a double-click in the
+// popup, a slider and a toggle - both read the same old object and the second write
+// silently dropped the first change. Queueing them per context makes each one read the
+// result of the last.
+let queue: Promise<unknown> = Promise.resolve()
+
+function enqueue<T>(work: () => Promise<T>): Promise<T> {
+  const run = queue.then(work, work)
+  queue = run.catch(() => undefined)
+  return run
 }
 
-export function onSettingsChange(cb: (s: DumbifySettings) => void): () => void {
-  // chrome.storage.local.onChanged is newer than the typings here describe, hence the
-  // structural type rather than a named one.
-  type ChangeEvent = {
-    addListener(cb: (changes: Record<string, chrome.storage.StorageChange>) => void): void
-    removeListener(cb: (changes: Record<string, chrome.storage.StorageChange>) => void): void
+/** v1 kept the background image inside the settings object; file it under its own key. */
+async function migrateLegacyWallpaper(raw: unknown): Promise<void> {
+  const bg = legacyBackground(raw)
+  if (!bg) return
+  const existing = await get<WallpaperRecord>(WALLPAPER_KEY)
+  if (isWallpaperRecord(existing) && existing.id === LEGACY_UPLOAD_ID) return
+  const record: WallpaperRecord = {
+    id: LEGACY_UPLOAD_ID,
+    name: 'Background image',
+    mime: mimeOfDataUrl(bg) || 'image/jpeg',
+    kind: 'image',
+    dataUrl: bg,
+    posterUrl: '',
+    width: 0,
+    height: 0,
+    bytes: dataUrlBytes(bg),
+    addedAt: Date.now(),
   }
+  await set(WALLPAPER_KEY, record)
+}
+
+export async function getSettings(): Promise<DumbifySettings> {
+  return normalizeSettings(await get<unknown>(SETTINGS_KEY))
+}
+
+/** Applies a partial update and resolves with the settings as stored. */
+export function setSettings(partial: Partial<DumbifySettings>): Promise<DumbifySettings> {
+  return enqueue(async () => {
+    const raw = await get<unknown>(SETTINGS_KEY)
+    // The image has to be safe under its own key before the settings are rewritten
+    // without it - otherwise the first settings change after an update loses it.
+    await migrateLegacyWallpaper(raw)
+    const next = applySettingsPatch(normalizeSettings(raw), partial)
+    await set(SETTINGS_KEY, next)
+    return next
+  })
+}
+
+/** Moves v1 data into place. Safe to call repeatedly; the service worker calls it on update. */
+export function migrateStorage(): Promise<void> {
+  return enqueue(async () => {
+    const raw = await get<unknown>(SETTINGS_KEY)
+    if (!legacyBackground(raw) && (raw === null || (raw as { version?: unknown }).version !== undefined)) return
+    await migrateLegacyWallpaper(raw)
+    await set(SETTINGS_KEY, normalizeSettings(raw))
+  })
+}
+
+/** Back to defaults, wallpaper included - except the on/off switch, which is not a look. */
+export function resetSettings(): Promise<DumbifySettings> {
+  return enqueue(async () => {
+    const current = normalizeSettings(await get<unknown>(SETTINGS_KEY))
+    const next: DumbifySettings = { ...DEFAULT_SETTINGS, wallpaper: { ...DEFAULT_SETTINGS.wallpaper } }
+    for (const key of RESET_PRESERVES) (next as any)[key] = current[key]
+    await set(SETTINGS_KEY, next)
+    await remove(WALLPAPER_KEY)
+    return next
+  })
+}
+
+/** Replaces everything with an imported backup. */
+export function replaceSettings(settings: DumbifySettings, wallpaper: WallpaperRecord | null): Promise<DumbifySettings> {
+  return enqueue(async () => {
+    if (wallpaper) await set(WALLPAPER_KEY, wallpaper)
+    const next = normalizeSettings(settings)
+    await set(SETTINGS_KEY, next)
+    return next
+  })
+}
+
+/**
+ * The stored upload the settings point at, or null. Before the service worker has run
+ * the migration, a v1 image is still inline in the settings object - read it from there.
+ */
+export async function getWallpaper(ref: WallpaperRef): Promise<WallpaperRecord | null> {
+  if (ref.source !== 'upload' || !ref.uploadId) return null
+  const record = await get<unknown>(WALLPAPER_KEY)
+  if (isWallpaperRecord(record) && record.id === ref.uploadId) return record
+  if (ref.uploadId === LEGACY_UPLOAD_ID) {
+    const bg = legacyBackground(await get<unknown>(SETTINGS_KEY))
+    if (bg) {
+      return {
+        id: LEGACY_UPLOAD_ID, name: 'Background image', mime: mimeOfDataUrl(bg) || 'image/jpeg',
+        kind: 'image', dataUrl: bg, posterUrl: '', width: 0, height: 0,
+        bytes: dataUrlBytes(bg), addedAt: 0,
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Stores a new upload and points the settings at it, in that order: a reader who sees
+ * the new settings must be able to find the bytes they name.
+ */
+export function saveWallpaper(record: WallpaperRecord, ref: WallpaperRef, extra: Partial<DumbifySettings> = {}): Promise<DumbifySettings> {
+  return enqueue(async () => {
+    await set(WALLPAPER_KEY, record)
+    const raw = await get<unknown>(SETTINGS_KEY)
+    const next = applySettingsPatch(normalizeSettings(raw), { ...extra, wallpaper: ref })
+    await set(SETTINGS_KEY, next)
+    return next
+  })
+}
+
+/** Frees an upload's storage once nothing points at it. */
+export function clearStoredWallpaper(): Promise<void> {
+  return enqueue(() => remove(WALLPAPER_KEY))
+}
+
+type Changes = Record<string, chrome.storage.StorageChange>
+// chrome.storage.local.onChanged is newer than the typings here describe, hence the
+// structural type rather than a named one.
+type ChangeEvent = {
+  addListener(cb: (changes: Changes) => void): void
+  removeListener(cb: (changes: Changes) => void): void
+}
+
+function onLocalChange(cb: (changes: Changes) => void): () => void {
   const area = storageArea() as (chrome.storage.StorageArea & { onChanged?: ChangeEvent }) | null
   const onChanged = area?.onChanged
   if (!onChanged) return () => {}
-  const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
-    if (changes[SETTINGS_KEY]) cb((changes[SETTINGS_KEY].newValue as DumbifySettings) ?? DEFAULT_SETTINGS)
+  onChanged.addListener(cb)
+  return () => {
+    try { onChanged.removeListener(cb) } catch { /* context gone */ }
   }
-  onChanged.addListener(listener)
-  return () => onChanged.removeListener(listener)
+}
+
+export function onSettingsChange(cb: (s: DumbifySettings) => void): () => void {
+  return onLocalChange((changes) => {
+    // Normalised like every read: the new value may be a v1 object written by a tab
+    // still running the old build, or missing keys entirely.
+    if (changes[SETTINGS_KEY]) cb(normalizeSettings(changes[SETTINGS_KEY].newValue))
+  })
+}
+
+export function onWallpaperChange(cb: () => void): () => void {
+  return onLocalChange((changes) => {
+    if (changes[WALLPAPER_KEY]) cb()
+  })
 }

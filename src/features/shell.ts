@@ -1,10 +1,16 @@
 import fontFaces from '../styles/fonts.css?raw'
 import type { NavigationState, Route } from '../types'
-import type { DumbifySettings } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { sidebar, main } from '../core/UIEngine'
-import { onNavigate, navigateTo, linkTo } from '../core/PageManager'
+import {
+  closeDrawer, isDrawerOpen, onAppearance, openDrawer, root, showToast, sidebar, topbar,
+} from '../core/UIEngine'
+import { linkTo, navigateTo } from '../core/PageManager'
 import { getSettings, setSettings } from '../core/storage'
+import type { DumbifySettings } from '../core/settings'
+import { h, setSwitch } from '../ui/dom'
+import { brandMark, icon } from '../ui/icons'
+import { NAV_LIBRARY, NAV_MAIN, ROUTE_ICONS, ROUTE_NAMES, isModKey, shortcutLabel, type NavItem } from '../ui/routes'
+import { closeViewMenu, openOptions, toggleViewMenu } from './view-menu'
 
 // The @font-face rules live in styles/fonts.css; only the src URLs have to be built
 // here, because chrome.runtime.getURL is the sole way to get a path that resolves
@@ -17,40 +23,45 @@ function injectFonts() {
   document.head.appendChild(style)
 }
 
-const ROUTE_NAMES: Record<Route, string> = {
-  home: 'Home',
-  watch: 'Watch',
-  search: 'Search',
-  subscriptions: 'Subscriptions',
-  history: 'History',
-  'watch-later': 'Watch Later',
-  liked: 'Liked',
-  playlists: 'Playlists',
-  playlist: 'Playlist',
-  channel: 'Channel',
-  shorts: 'Shorts',
-  unknown: 'Not Found',
+let linkEls: { route: Route; el: HTMLAnchorElement }[] = []
+let currentRoute: Route = 'home'
+let unsubAppearance: (() => void) | null = null
+let searchInput: HTMLInputElement | null = null
+let crumbLabel: HTMLElement | null = null
+let crumbIcon: HTMLElement | null = null
+let darkSwitch: HTMLButtonElement | null = null
+let sidebarToggle: HTMLButtonElement | null = null
+let scheme: 'light' | 'dark' = 'light'
+let sidebarMode: DumbifySettings['sidebar'] = 'expanded'
+
+function save(patch: Partial<DumbifySettings>) {
+  setSettings(patch).catch((err) => showToast(err instanceof Error ? err.message : 'Couldn’t save that change'))
 }
 
-const NAV: { label: string; route: Route; path: string }[] = [
-  { label: 'Home', route: 'home', path: '/' },
-  { label: 'Subscriptions', route: 'subscriptions', path: '/feed/subscriptions' },
-  { label: 'History', route: 'history', path: '/feed/history' },
-  { label: 'Watch Later', route: 'watch-later', path: '/playlist?list=WL' },
-  { label: 'Liked', route: 'liked', path: '/playlist?list=LL' },
-  { label: 'Playlists', route: 'playlists', path: '/feed/playlists' },
-]
-
-let linkEls: HTMLElement[] = []
-let currentRoute: Route = 'home'
-let unsubNav: (() => void) | null = null
-let sidebarEl: HTMLElement | null = null
-let searchInput: HTMLInputElement | null = null
-
 function updateActiveLink() {
-  linkEls.forEach((el, i) => {
-    el.classList.toggle('df-active', NAV[i]?.route === currentRoute)
-  })
+  for (const { route, el } of linkEls) {
+    const active = route === currentRoute
+    el.classList.toggle('df-active', active)
+    if (active) el.setAttribute('aria-current', 'page')
+    else el.removeAttribute('aria-current')
+  }
+}
+
+/** Names the page in the top bar - a channel's name, a playlist's title, a search. */
+export function setCrumbs(label: string) {
+  if (crumbLabel) crumbLabel.textContent = label
+}
+
+function paintRoute(nav: NavigationState) {
+  currentRoute = nav.route
+  root.dataset.route = nav.route
+  updateActiveLink()
+  const name = ROUTE_NAMES[nav.route] ?? 'YouTube'
+  document.title = `${name} · Dumbify`
+  if (crumbLabel) crumbLabel.textContent = nav.route === 'search' && nav.searchQuery ? nav.searchQuery : name
+  if (crumbIcon) crumbIcon.replaceChildren(icon(ROUTE_ICONS[nav.route] ?? 'home'))
+  if (searchInput) searchInput.value = nav.route === 'search' ? (nav.searchQuery ?? '') : ''
+  closeDrawer()
 }
 
 function submitSearch() {
@@ -58,155 +69,123 @@ function submitSearch() {
   if (q) navigateTo(`/results?search_query=${encodeURIComponent(q)}`)
 }
 
-function buildTopbar() {
-  if (!main || main.querySelector('.df-topbar')) return
-
-  const topbar = document.createElement('header')
-  topbar.className = 'df-topbar'
-
-  const form = document.createElement('form')
-  form.className = 'df-search'
-  form.onsubmit = (e) => { e.preventDefault(); submitSearch() }
-
-  const input = document.createElement('input')
-  input.className = 'df-search-input'
-  input.type = 'text'
-  input.placeholder = 'Search YouTube'
-  input.setAttribute('aria-label', 'Search YouTube')
-  input.autocomplete = 'off'
-  searchInput = input
-
-  const btn = document.createElement('button')
-  btn.className = 'df-search-btn'
-  btn.type = 'submit'
-  btn.textContent = 'Search'
-
-  form.appendChild(input)
-  form.appendChild(btn)
-  topbar.appendChild(form)
-
-  main.insertBefore(topbar, main.firstChild)
+function focusSearch() {
+  closeDrawer()
+  searchInput?.focus()
+  searchInput?.select()
 }
 
-function removeTopbar() {
-  main?.querySelector('.df-topbar')?.remove()
-  searchInput = null
+function narrow(): boolean {
+  return window.matchMedia('(max-width: 860px)').matches
+}
+
+function toggleSidebar() {
+  if (narrow() || sidebarMode === 'hidden') {
+    if (isDrawerOpen()) closeDrawer()
+    else openDrawer()
+    return
+  }
+  save({ sidebar: 'hidden' })
+}
+
+function toggleDarkMode() {
+  save({ mode: scheme === 'dark' ? 'light' : 'dark' })
 }
 
 function onKeyDown(e: KeyboardEvent) {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+  if (!isModKey(e) || e.altKey) return
+  const key = e.key.toLowerCase()
+  if (key === 'k' && !e.shiftKey) {
     e.preventDefault()
-    searchInput?.focus()
-    searchInput?.select()
+    focusSearch()
+  } else if (e.key === '\\' || e.code === 'Backslash') {
+    e.preventDefault()
+    toggleSidebar()
+  } else if (key === 'l' && e.shiftKey) {
+    e.preventDefault()
+    toggleDarkMode()
   }
+}
+
+function navLink(item: NavItem): HTMLAnchorElement {
+  const label = ROUTE_NAMES[item.route]
+  const link = h('a', { class: 'df-nav-link', title: label }, icon(ROUTE_ICONS[item.route]), h('span', { class: 'df-nav-label', text: label }))
+  linkTo(link, item.path)
+  linkEls.push({ route: item.route, el: link })
+  return link
+}
+
+function paintSidebarToggle() {
+  if (!sidebarToggle) return
+  const hidden = sidebarMode === 'hidden'
+  const rail = sidebarMode === 'rail'
+  const label = hidden ? 'Keep sidebar open' : rail ? 'Expand sidebar' : 'Hide sidebar'
+  sidebarToggle.replaceChildren(icon(hidden || rail ? 'expand' : 'collapse'))
+  sidebarToggle.setAttribute('aria-label', label)
+  sidebarToggle.title = `${label} (${shortcutLabel('\\')})`
 }
 
 function buildSidebar() {
   if (!sidebar) return
+  linkEls = []
 
-  sidebarEl = sidebar
-  sidebarEl.innerHTML = ''
-
-  const brand = document.createElement('a')
-  brand.className = 'df-brand'
+  const brand = h('a', { class: 'df-brand', 'aria-label': 'Dumbify home' }, brandMark(), h('span', { class: 'df-brand-name', text: 'dumbify' }))
   linkTo(brand, '/')
-  const logo = document.createElement('img')
-  logo.className = 'df-brand-logo'
-  logo.src = chrome.runtime.getURL('icons/logo.png')
-  logo.alt = 'Dumbify'
-  brand.appendChild(logo)
-  sidebarEl.appendChild(brand)
-
-  const nav = document.createElement('nav')
-  nav.className = 'df-nav'
-
-  NAV.forEach((item) => {
-    const link = document.createElement('a')
-    link.className = 'df-nav-link'
-    const span = document.createElement('span')
-    span.textContent = item.label
-    link.appendChild(span)
-    linkTo(link, item.path)
-    linkEls.push(link)
-    nav.appendChild(link)
-  })
-
-  sidebarEl.appendChild(nav)
-
-  const footer = document.createElement('div')
-  footer.className = 'df-sidebar-footer'
-
-  const toggle = document.createElement('button')
-  toggle.className = 'df-theme-toggle'
-  toggle.setAttribute('aria-label', 'Toggle dark mode')
-
-  const track = document.createElement('span')
-  track.className = 'df-theme-track'
-
-  const knob = document.createElement('span')
-  knob.className = 'df-theme-knob'
-
-  const label = document.createElement('span')
-  label.className = 'df-theme-label'
-
-  toggle.appendChild(track)
-  track.appendChild(knob)
-  toggle.appendChild(label)
-
-  const paintTheme = (theme: DumbifySettings['theme']) => {
-    knob.className = `df-theme-knob ${theme === 'dark' ? 'dark' : 'light'}`
-    label.textContent = theme === 'dark' ? 'Night' : 'Day'
-  }
-
-  getSettings().then((s) => paintTheme(s.theme))
-
-  // Paints optimistically, then puts the label back if the write actually failed -
-  // setSettings now rejects rather than resolving regardless.
-  toggle.onclick = async () => {
-    const s = await getSettings()
-    const next = s.theme === 'dark' ? 'light' : 'dark'
-    paintTheme(next)
-    try {
-      await setSettings({ theme: next })
-    } catch (err) {
-      console.warn('[Dumbify] could not save theme:', err)
-      paintTheme(s.theme)
+  sidebarToggle = h('button', { class: 'df-icon-btn df-sidebar-toggle', type: 'button' })
+  sidebarToggle.addEventListener('click', () => {
+    if (sidebarMode === 'expanded') save({ sidebar: 'hidden' })
+    else {
+      save({ sidebar: 'expanded' })
+      closeDrawer()
     }
-  }
+  })
+  paintSidebarToggle()
 
-  footer.appendChild(toggle)
+  const search = h('button', { class: 'df-nav-link', type: 'button', title: 'Search', onclick: focusSearch },
+    icon('search'), h('span', { class: 'df-nav-label', text: 'Search' }), h('span', { class: 'df-kbd', text: shortcutLabel('K') }))
 
-  const settingsBtn = document.createElement('button')
-  settingsBtn.className = 'df-settings-btn'
-  settingsBtn.setAttribute('aria-label', 'Settings')
-  const settingsIcon = document.createElement('span')
-  settingsIcon.className = 'df-settings-icon'
-  settingsIcon.textContent = '\u2699'
-  const settingsLabel = document.createElement('span')
-  settingsLabel.className = 'df-settings-label'
-  settingsLabel.textContent = 'Settings'
-  settingsBtn.appendChild(settingsIcon)
-  settingsBtn.appendChild(settingsLabel)
-  settingsBtn.onclick = () => chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' })
-  footer.appendChild(settingsBtn)
+  const mainNav = h('nav', { class: 'df-nav', 'aria-label': 'Main' }, search, ...NAV_MAIN.map(navLink))
+  const library = h('nav', { class: 'df-nav', 'aria-label': 'Library' },
+    h('div', { class: 'df-nav-heading', text: 'Library' }), ...NAV_LIBRARY.map(navLink))
 
-  const bottomTagline = document.createElement('p')
-  bottomTagline.className = 'df-sidebar-tagline'
-  // A plain textContent newline collapses in HTML - an explicit <br> is what actually
-  // breaks the line.
-  bottomTagline.append('NO THUMBNAILS', document.createElement('br'), 'NO DISTRACTIONS')
-  footer.appendChild(bottomTagline)
+  darkSwitch = h('button', {
+    class: 'df-nav-link', type: 'button', role: 'switch', 'aria-checked': 'false',
+    title: `Dark mode (${shortcutLabel('L', true)})`, onclick: toggleDarkMode,
+  }, icon('moon'), h('span', { class: 'df-nav-label', text: 'Dark mode' }), h('span', { class: 'df-switch' }))
 
-  sidebarEl.appendChild(footer)
+  const settingsBtn = h('button', { class: 'df-nav-link', type: 'button', title: 'Settings', onclick: () => openOptions() },
+    icon('sliders'), h('span', { class: 'df-nav-label', text: 'Settings' }))
 
+  const foot = h('div', { class: 'df-sidebar-foot' }, darkSwitch, settingsBtn,
+    h('p', { class: 'df-tagline', text: 'No thumbnails. No distractions.' }))
+
+  sidebar.replaceChildren(h('div', { class: 'df-sidebar-head' }, brand, sidebarToggle), mainNav, library, foot)
   updateActiveLink()
-  document.addEventListener('keydown', onKeyDown)
 }
 
-function removeSidebar() {
-  if (sidebarEl) sidebarEl.innerHTML = ''
-  linkEls = []
-  document.removeEventListener('keydown', onKeyDown)
+function buildTopbar() {
+  if (!topbar) return
+  const drawerBtn = h('button', { class: 'df-icon-btn df-drawer-btn', type: 'button', 'aria-label': 'Open navigation', onclick: () => openDrawer() }, icon('menu'))
+
+  crumbIcon = h('span', null, icon('home'))
+  crumbLabel = h('span', { class: 'df-crumbs-label' })
+  const crumbs = h('div', { class: 'df-crumbs' }, crumbIcon, crumbLabel)
+
+  const input = h('input', {
+    class: 'df-search-input', type: 'search', placeholder: 'Search YouTube',
+    'aria-label': 'Search YouTube', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search',
+  })
+  searchInput = input
+  const form = h('form', { class: 'df-search', role: 'search' }, icon('search'), input, h('span', { class: 'df-kbd', text: shortcutLabel('K') }))
+  form.addEventListener('submit', (e) => { e.preventDefault(); submitSearch() })
+
+  const viewBtn = h('button', {
+    class: 'df-icon-btn', type: 'button', 'aria-label': 'View options', title: 'View options',
+    'aria-haspopup': 'dialog', 'aria-expanded': 'false',
+  }, icon('more'))
+  viewBtn.addEventListener('click', () => toggleViewMenu(viewBtn))
+
+  topbar.replaceChildren(drawerBtn, crumbs, form, h('div', { class: 'df-popover-anchor' }, viewBtn))
 }
 
 export const shellFeature: Feature = {
@@ -214,41 +193,36 @@ export const shellFeature: Feature = {
 
   mount(nav: NavigationState) {
     injectFonts()
-    currentRoute = nav.route
     buildSidebar()
     buildTopbar()
+    paintRoute(nav)
+    document.addEventListener('keydown', onKeyDown)
 
-    if (searchInput) {
-      searchInput.value = nav.route === 'search' ? (nav.searchQuery ?? '') : ''
-    }
-
-    const pageName = ROUTE_NAMES[nav.route] ?? 'YouTube'
-    document.title = `${pageName} · Dumbify`
-
-    unsubNav = onNavigate((s) => {
-      currentRoute = s.route
-      updateActiveLink()
-      const name = ROUTE_NAMES[s.route] ?? 'YouTube'
-      document.title = `${name} · Dumbify`
+    unsubAppearance = onAppearance((s, a) => {
+      scheme = a.scheme
+      setSwitch(darkSwitch, a.scheme === 'dark')
+      if (s.sidebar !== sidebarMode) {
+        sidebarMode = s.sidebar
+        paintSidebarToggle()
+      }
     })
+    // The first paint before settings arrive reads the stored mode directly.
+    getSettings().then((s) => { sidebarMode = s.sidebar; paintSidebarToggle() })
   },
 
   unmount() {
-    removeSidebar()
-    removeTopbar()
-    if (unsubNav) {
-      unsubNav()
-      unsubNav = null
-    }
+    closeViewMenu()
+    document.removeEventListener('keydown', onKeyDown)
+    sidebar?.replaceChildren()
+    topbar?.replaceChildren()
+    linkEls = []
+    searchInput = null
+    unsubAppearance?.()
+    unsubAppearance = null
   },
 
   update(nav: NavigationState) {
-    currentRoute = nav.route
-    updateActiveLink()
-    if (searchInput) {
-      searchInput.value = nav.route === 'search' ? (nav.searchQuery ?? '') : ''
-    }
-    const name = ROUTE_NAMES[nav.route] ?? 'YouTube'
-    document.title = `${name} · Dumbify`
+    closeViewMenu()
+    paintRoute(nav)
   },
 }
