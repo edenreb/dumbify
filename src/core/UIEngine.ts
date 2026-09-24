@@ -103,6 +103,8 @@ export function paintEarly() {
 // ---- Applying settings ----
 
 function apply() {
+  // A drawer left open when the sidebar stops being one would leave the page inert.
+  if (isDrawerOpen() && !drawerLayout()) closeDrawer()
   appearance = computeAppearance(settings, systemPrefersDark())
   if (root) applyAppearance(root, appearance)
   document.documentElement.style.setProperty('--df-paint', appearance.paint)
@@ -179,6 +181,9 @@ export function mountUI() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && root.classList.contains('df-drawer-open')) closeDrawer()
   })
+  window.matchMedia('(max-width: 860px)').addEventListener('change', () => {
+    if (isDrawerOpen() && !drawerLayout()) closeDrawer()
+  })
 }
 
 // Full teardown, used as the failure path in content.ts: mountUI locks scrolling and
@@ -203,9 +208,17 @@ function drawerButton(): HTMLElement | null {
   return topbar?.querySelector<HTMLElement>('.df-drawer-btn') ?? null
 }
 
+/** Whether the sidebar is a drawer at all: hidden, or a window too narrow for it. */
+function drawerLayout(): boolean {
+  return settings.sidebar === 'hidden' || window.matchMedia('(max-width: 860px)').matches
+}
+
 export function openDrawer() {
   if (!root) return
   root.classList.add('df-drawer-open')
+  // Modal while open, like the scrim says: Tab stays in the drawer, and nothing behind it
+  // can be reached until it closes.
+  if (main) main.inert = true
   drawerButton()?.setAttribute('aria-expanded', 'true')
   // After the visibility flip, or the link is not yet focusable.
   requestAnimationFrame(() => sidebar?.querySelector<HTMLElement>('.df-nav-link')?.focus())
@@ -214,6 +227,7 @@ export function openDrawer() {
 export function closeDrawer() {
   if (!root?.classList.contains('df-drawer-open')) return
   root.classList.remove('df-drawer-open')
+  if (main) main.inert = false
   const btn = drawerButton()
   btn?.setAttribute('aria-expanded', 'false')
   // Focus inside a drawer that is sliding away would be lost with it.

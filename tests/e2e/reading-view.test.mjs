@@ -145,6 +145,19 @@ describe('reading view', { skip }, () => {
     await h.until(async () => (await h.getSettings())?.sidebar === 'expanded', { what: 'sidebar back' })
   })
 
+  test('keyboard: hiding the icons-only sidebar and showing it again brings back the icons', async () => {
+    await h.setSettings({ ...V2, sidebar: 'rail' })
+    const p = await h.youtube('/')
+    await p.waitForSelector('#dumbify-root[data-sidebar="rail"]')
+    await p.keyboard.press('Control+Backslash')
+    await h.until(async () => (await h.getSettings())?.sidebar === 'hidden', { what: 'hidden' })
+    // Even across a reload while it is hidden.
+    await p.reload()
+    await p.waitForSelector('#dumbify-root[data-sidebar="hidden"]')
+    await p.keyboard.press('Control+Backslash')
+    await h.until(async () => (await h.getSettings())?.sidebar === 'rail', { what: 'the rail, not the full sidebar' })
+  })
+
   // A real click, with hit-testing: the scrim once sat above the drawer and swallowed
   // every click on its links, which a geometry check alone never noticed.
   for (const [label, viewport, settings] of [
@@ -179,6 +192,22 @@ describe('reading view', { skip }, () => {
     await p.keyboard.press('Escape')
     await h.until(async () => (await p.evaluate(() => document.activeElement?.classList.contains('df-drawer-btn'))), { what: 'focus back' })
     assert.equal(await p.locator('.df-drawer-btn').getAttribute('aria-expanded'), 'false')
+  })
+
+  test('the open drawer keeps Tab to itself, and lets go when the window widens', async () => {
+    await h.setSettings(V2)
+    const p = await h.youtube('/')
+    await p.setViewportSize({ width: 390, height: 800 })
+    await p.click('.df-drawer-btn')
+    await h.until(async () => (await p.evaluate(() => !!document.activeElement?.closest('.df-sidebar'))), { what: 'focus in drawer' })
+    for (let i = 0; i < 20; i++) {
+      await p.keyboard.press('Tab')
+      assert.equal(await p.evaluate(() => !!document.activeElement?.closest('.df-main')), false, `Tab ${i} left the drawer`)
+    }
+    // Widened past the drawer, the page must not stay out of reach.
+    await p.setViewportSize({ width: 1280, height: 800 })
+    await h.until(async () => !(await p.evaluate(() => document.querySelector('.df-main').inert)), { what: 'page usable again' })
+    assert.equal(await p.evaluate(() => document.getElementById('dumbify-root').classList.contains('df-drawer-open')), false)
   })
 
   test('Tab never walks into the closed drawer', async () => {
@@ -298,6 +327,15 @@ describe('reading view', { skip }, () => {
     assert.equal(await p.locator('.df-comments-btn').isVisible(), false)
     const video = await p.locator('.df-player').boundingBox()
     assert.ok(video.width >= 600, `video is ${video.width}px wide at 1280`)
+  })
+
+  test('watch page: in split, the comments keep their distance from the playlist', async () => {
+    await h.setSettings({ ...V2, watchLayout: 'split' })
+    const p = await h.youtube('/watch?v=vid00000000&list=PLe2e00000', { waitFor: '.df-watch-title' })
+    await p.waitForSelector('.df-watch-side .df-playlist-panel + .df-comments')
+    const [panel, comments] = await p.evaluate(() => ['.df-playlist-panel', '.df-watch-side .df-comments']
+      .map((sel) => document.querySelector(sel).getBoundingClientRect()).map((r) => ({ top: r.top, bottom: r.bottom })))
+    assert.ok(comments.top - panel.bottom >= 16, `gap is ${comments.top - panel.bottom}px`)
   })
 
   test('watch page: widening a narrow window into split fills the side column', async () => {
@@ -497,6 +535,17 @@ describe('reading view', { skip }, () => {
     assert.ok(lum(bar) < 0.1, `top bar ${bar}`)
   })
 
+  test('panels: a pattern under clear panels keeps a dark theme dark', async () => {
+    await h.setSettings({ ...V2, mode: 'dark', darkTheme: 'ink', wallpaper: { source: 'preset', presetId: 'dots' }, surface: 'clear' })
+    const p = await h.youtube('/')
+    await p.waitForSelector('#dumbify-root[data-surface="clear"] .df-backdrop .df-wall.df-ready')
+    assert.equal(await rootAttr(p, 'tone'), 'dark')
+    assert.equal(await rootVar(p, '--df-bg'), '#1d1d1d')
+    // The dots sit on the theme's own page.
+    const ground = await p.locator('.df-backdrop .df-wall').evaluate((el) => getComputedStyle(el).backgroundColor)
+    assert.equal(ground, 'rgb(29, 29, 29)')
+  })
+
   test('panels: clear panels give text a glow against the picture', async () => {
     await h.setSettings({ ...V2, wallpaper: { source: 'preset', presetId: 'aurora' }, surface: 'clear' })
     const p = await h.youtube('/')
@@ -504,6 +553,11 @@ describe('reading view', { skip }, () => {
     const shadow = await p.locator('.df-item-title').first().evaluate((el) => getComputedStyle(el).textShadow)
     assert.match(shadow, /rgba?\(/)
     assert.ok(shadow.split('rgba').length >= 3, `a layered glow: ${shadow}`)
+    // An invisible underline would still cast that glow, as a dark bar under the name.
+    const channel = p.locator('.df-item-channel-link').first()
+    assert.equal(await channel.evaluate((el) => getComputedStyle(el).textDecorationLine), 'none')
+    await channel.hover()
+    await h.until(async () => (await channel.evaluate((el) => getComputedStyle(el).textDecorationLine)) === 'underline', { what: 'underline on hover' })
   })
 
   test('a v1 background image still shows before anything has migrated it', async () => {
@@ -534,3 +588,31 @@ describe('reading view in another language', { skip }, () => {
   })
 })
 
+
+describe('reduced motion', { skip }, () => {
+  let h
+  before(async () => { h = await launch({ reducedMotion: 'reduce' }) })
+  after(async () => { await h?.close() })
+
+  test('nothing moves: live wallpapers hold still, a GIF shows its poster, settings tiles stop', async () => {
+    await h.setSettings({ ...V2, wallpaper: { source: 'preset', presetId: 'aurora-live' } })
+    const p = await h.youtube('/')
+    await p.waitForSelector('.df-backdrop .df-wall.df-live.df-ready')
+    assert.equal(await p.locator('.df-backdrop .df-wall').evaluate((el) => getComputedStyle(el).animationName), 'none')
+
+    await h.putUpload(GIF_RECORD)
+    await h.setSettings({ ...V2, wallpaper: GIF_REF })
+    // The still poster is blue where the animation's first frame is red.
+    await h.until(async () => {
+      const bytes = await p.locator('.df-backdrop .df-wall.df-ready').last().evaluate(async (el) => {
+        const url = /url\("([^"]+)"\)/.exec(el.style.backgroundImage)?.[1] ?? ''
+        return [...new Uint8Array(await (await (await fetch(url)).blob()).arrayBuffer())].slice(13, 16)
+      })
+      return bytes[2] === 255
+    }, { what: 'the poster' })
+
+    const o = await h.options('#wallpaper')
+    const tile = o.locator('.preset-art.is-live').first()
+    assert.equal(await tile.evaluate((el) => getComputedStyle(el).animationName), 'none')
+  })
+})

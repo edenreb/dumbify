@@ -76,7 +76,7 @@ describe('settings page', { skip }, () => {
   test('the live preview stays in view at every width, floating - and tuckable - when narrow', async () => {
     const o = await h.options('#typography')
     const viewport = o.locator('.app-preview .preview-viewport')
-    for (const width of [1440, 1280, 1100, 1024]) {
+    for (const width of [1440, 1280, 1100, 1024, 900]) {
       await o.setViewportSize({ width, height: 860 })
       await o.evaluate(() => document.getElementById('layout').scrollIntoView())
       await o.waitForTimeout(150)
@@ -88,21 +88,26 @@ describe('settings page', { skip }, () => {
     assert.ok(label.width <= 1, 'section names hidden visually at 1024px')
     assert.equal(await o.locator('.nav-item').first().getAttribute('title'), 'Appearance')
 
-    await o.setViewportSize({ width: 900, height: 860 })
-    await o.evaluate(() => document.getElementById('layout').scrollIntoView())
+    // Beside the settings, it covers none of them.
+    const controls = await o.locator('#typography .row').evaluateAll((rows) => rows.map((r) => r.getBoundingClientRect().right))
+    const left = (await viewport.boundingBox()).x
+    assert.ok(controls.every((right) => right <= left), 'no setting under the preview at 900px')
+
+    // On a tablet it floats - tucked away until asked for, so it covers nothing either.
+    await o.setViewportSize({ width: 800, height: 860 })
     const toggle = o.locator('.preview-toggle')
     await toggle.waitFor()
-    const r = await viewport.boundingBox()
-    assert.ok(r && r.y + r.height <= 860 && r.x + r.width <= 900, `floating at ${JSON.stringify(r)}`)
-    await toggle.click()
     assert.equal(await viewport.isVisible(), false)
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false')
+    await toggle.click()
+    const r = await viewport.boundingBox()
+    assert.ok(r && r.y + r.height <= 860 && r.x + r.width <= 800, `floating at ${JSON.stringify(r)}`)
     // Remembered next time.
     await o.reload()
     await o.waitForSelector('.app-body')
-    assert.equal(await viewport.isVisible(), false)
+    assert.equal(await o.locator('.app-preview .preview-viewport').isVisible(), true)
     await o.locator('.preview-toggle').click()
-    assert.equal(await viewport.isVisible(), true)
+    assert.equal(await o.locator('.app-preview .preview-viewport').isVisible(), false)
   })
 
   test('a look applies in one click, is marked while it holds, and undoes', async () => {
@@ -127,6 +132,17 @@ describe('settings page', { skip }, () => {
       return s?.font === 'sans' && s.layout === 'list' && s.mode === 'light'
     }, { what: 'undone' })
     assert.equal(await paper.getAttribute('aria-pressed'), 'true')
+  })
+
+  test('the Layout thumbnails keep their shapes - the Looks art can’t reach them', async () => {
+    const o = await h.options('#layout')
+    const tiles = await o.locator('.layout-art.la-cards i').evaluateAll((els) => els.map((el) => {
+      const r = el.getBoundingClientRect()
+      return { top: Math.round(r.top), height: r.height }
+    }))
+    assert.equal(tiles.length, 6)
+    assert.equal(new Set(tiles.map((t) => t.top)).size, 2, 'two rows of three cards')
+    assert.ok(tiles.every((t) => t.height > 24), `cards are ${tiles.map((t) => t.height).join(', ')}px tall`)
   })
 
   test('choosing a theme saves it, and the page itself wears it', async () => {
@@ -301,6 +317,26 @@ describe('settings page', { skip }, () => {
     await h.until(async () => (await settings())?.wallpaper.uploadId === id, { what: 'restored as the wallpaper' })
     assert.equal((await h.getStored(uploadKey(id)))?.id, id)
     await o.waitForSelector('.upload-tile input:checked')
+  })
+
+  test('keyboard only: delete an upload, apply a look, and Ctrl+Z undoes each', async () => {
+    const o = await h.options('#wallpaper')
+    await upload(o, 'loop.gif', 'image/gif', tinyAnimatedGif(640, 360))
+    await o.waitForSelector('.upload-tile')
+    const id = (await settings()).wallpaper.uploadId
+    await o.locator('.upload-tile .tile-delete').focus()
+    await o.keyboard.press('Enter')
+    await h.until(async () => (await h.getUploads()).length === 0, { what: 'deleted' })
+    assert.equal(await o.locator('.toast .toast-action').getAttribute('aria-keyshortcuts'), 'Control+Z')
+    await o.keyboard.press('Control+z')
+    await h.until(async () => (await settings())?.wallpaper.uploadId === id, { what: 'restored' })
+    await o.waitForSelector('.upload-tile')
+
+    await o.locator('.look', { hasText: 'Library' }).focus()
+    await o.keyboard.press('Enter')
+    await h.until(async () => (await settings())?.font === 'serif', { what: 'look applied' })
+    await o.keyboard.press('Control+z')
+    await h.until(async () => (await settings())?.font === 'sans' && (await settings())?.wallpaper.uploadId === id, { what: 'look undone' })
   })
 
   test('deleting an upload that is not in use keeps the wallpaper', async () => {

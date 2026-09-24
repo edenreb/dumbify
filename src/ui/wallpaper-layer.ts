@@ -216,7 +216,8 @@ export class WallpaperLayer {
   }
 
   private violation(e: SecurityPolicyViolationEvent) {
-    if (this.blobBlocked || this.urls.size === 0 || e.disposition !== 'enforce') return
+    // Only the browser's own reports: a page script could otherwise send its own.
+    if (!e.isTrusted || this.blobBlocked || this.urls.size === 0 || e.disposition !== 'enforce') return
     if (e.blockedURI !== 'blob' && !e.blockedURI.startsWith('blob:')) return
     if (!/^(img|media|default)-src/.test(e.effectiveDirective)) return
     // data: is what v1 always used, so it is what a page that allows images at all

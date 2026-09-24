@@ -300,15 +300,15 @@ export const WALLPAPER_PRESETS: WallpaperPreset[] = [
   },
   {
     id: 'dots', name: 'Dot grid', kind: 'pattern', average: '#808080', vibrant: '#808080',
-    css: 'radial-gradient(var(--df-pattern) 1.1px, transparent 1.4px) 0 0 / 22px 22px, var(--df-bg)',
+    css: 'radial-gradient(var(--df-pattern) 1.1px, transparent 1.4px) 0 0 / 22px 22px, var(--df-wall-base)',
   },
   {
     id: 'grid', name: 'Blueprint', kind: 'pattern', average: '#808080', vibrant: '#808080',
-    css: 'linear-gradient(var(--df-pattern) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(90deg, var(--df-pattern) 1px, transparent 1px) 0 0 / 32px 32px, var(--df-bg)',
+    css: 'linear-gradient(var(--df-pattern) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(90deg, var(--df-pattern) 1px, transparent 1px) 0 0 / 32px 32px, var(--df-wall-base)',
   },
   {
     id: 'ruled', name: 'Ruled', kind: 'pattern', average: '#808080', vibrant: '#808080',
-    css: 'repeating-linear-gradient(180deg, transparent 0 35px, var(--df-pattern) 35px 36px), var(--df-bg)',
+    css: 'repeating-linear-gradient(180deg, transparent 0 35px, var(--df-pattern) 35px 36px), var(--df-wall-base)',
   },
   {
     id: 'aurora-live', name: 'Aurora Live', kind: 'animated', average: '#1b3050', vibrant: '#6d28d9',

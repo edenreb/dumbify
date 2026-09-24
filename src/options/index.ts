@@ -6,7 +6,8 @@ import { followSystem, paintFromCache, themePage } from '../ui/page-theme'
 import { h } from '../ui/dom'
 import { brandMark, icon, type IconName } from '../ui/icons'
 import { toggle } from '../ui/controls'
-import { saveStatus } from './feedback'
+import { runToastAction, saveStatus } from './feedback'
+import { isModKey } from '../ui/routes'
 import {
   aboutSection, appearanceSection, backupSection, layoutSection, shortcutsSection,
   typographySection, watchSection,
@@ -110,6 +111,15 @@ async function main() {
     requestAnimationFrame(spy)
   }, { passive: true })
   spy()
+
+  // Ctrl/Cmd+Z takes what a toast offers - undoing a deleted upload or a look - from
+  // anywhere on the page but a text field, which keeps its own undo.
+  document.addEventListener('keydown', (e) => {
+    if (!isModKey(e) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return
+    const target = e.target as HTMLElement | null
+    if (target?.closest('textarea, [contenteditable], input:not([type]), input[type="text"], input[type="search"]')) return
+    if (runToastAction()) e.preventDefault()
+  })
 
   // Deep links from the reading view ("Settings" on the wallpaper menu and so on).
   const goToHash = () => {

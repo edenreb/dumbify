@@ -41,7 +41,7 @@ export const LOOKS: Look[] = [
     darkTheme: 'mocha',
     patch: {
       accent: ACCENT_THEME, font: 'serif', layout: 'list', density: 'spacious', corners: 'soft',
-      pageWidth: 'narrow', wallpaper: preset('ruled'), wallpaperEnabled: true, wallpaperPlacement: 'cover',
+      pageWidth: 'narrow', wallpaper: preset('peach'), wallpaperEnabled: true, wallpaperPlacement: 'cover',
     },
   },
   {

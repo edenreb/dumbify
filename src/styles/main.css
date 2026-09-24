@@ -59,6 +59,7 @@ html.df-failed #dumbify-root {
   --df-live: #dc3e42;
   --df-pattern: rgba(42, 41, 38, 0.13);
   --df-halo: rgba(255, 255, 255, 0.78);
+  --df-wall-base: #f7f5ee;
   --df-panel: var(--df-bg);
   --df-panel-side: var(--df-sidebar);
   --df-panel-blur: 0px;
@@ -1410,17 +1411,19 @@ video.df-wall {
   display: none !important;
 }
 
+/* No underline at all until hover: even a transparent one casts the clear panels' glow,
+   which drew a dark bar under every channel name. */
 .df-item-channel-link {
   cursor: pointer;
   border-radius: 3px;
-  text-decoration: underline 1px transparent;
+  text-decoration: none;
   text-underline-offset: 3px;
-  transition: color 120ms, text-decoration-color 120ms;
+  transition: color 120ms;
 }
 
 .df-item-channel-link:hover {
   color: var(--df-text);
-  text-decoration-color: currentColor;
+  text-decoration: underline 1px currentColor;
 }
 
 .df-item-duration {
@@ -2109,6 +2112,11 @@ video.df-wall {
     margin-top: 0;
     padding-top: 0;
     border-top: 0;
+  }
+
+  /* After the playlist, say - and more specific than the reset just above. */
+  #dumbify-root[data-watch="split"] .df-watch-side > .df-comments:not(:first-child) {
+    margin-top: 20px;
   }
 }
 

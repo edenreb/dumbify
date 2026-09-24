@@ -101,10 +101,10 @@ purposes.
 ## 8. Retention, deletion, and your rights
 
 Preferences stored under Section 4 are retained on your device until you delete
-them. You may remove them at any time by using the reset control on the
-extension's options page, by clearing the extension's storage through your
-browser's settings, or by uninstalling the extension, which deletes them
-permanently.
+them. You may return your preferences to their defaults at any time with the reset
+control on the extension's options page, and delete any uploaded wallpaper from the
+wallpaper gallery on the same page. Clearing the extension's storage through your
+browser's settings, or uninstalling the extension, deletes all of it permanently.
 
 Because we hold no personal data concerning you, there is no data against which
 rights of access, rectification, erasure, portability, restriction, or objection

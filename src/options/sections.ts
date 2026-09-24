@@ -118,23 +118,23 @@ function lookArt(look: Look): HTMLElement {
     : accentPreset(p.accent ?? '')?.color ?? theme.accent
   const font = getFont(p.font ?? 'sans')
 
-  const line = (cls = '') => h('i', { class: `la-line ${cls}` })
+  const line = (cls = '') => h('i', { class: `lk-line ${cls}` })
   const rows = p.layout === 'cards'
-    ? h('span', { class: 'la-cards' }, h('i'), h('i'), h('i'))
-    : h('span', { class: `la-rows${p.layout === 'table' ? ' is-table' : ''}` }, line(), line(), line())
-  const aa = h('span', { class: 'la-aa', text: 'Aa' })
+    ? h('span', { class: 'lk-cards' }, h('i'), h('i'), h('i'))
+    : h('span', { class: `lk-rows${p.layout === 'table' ? ' is-table' : ''}` }, line(), line(), line())
+  const aa = h('span', { class: 'lk-aa', text: 'Aa' })
   aa.style.fontFamily = font.stack
   aa.style.fontWeight = String(font.titleWeight)
 
   const art = h('span', { class: `art look-art is-${placement}`, 'aria-hidden': 'true' },
-    placement === 'cover' ? h('span', { class: 'la-cover' }) : null,
-    h('span', { class: 'la-page' }, aa, line('la-accent'), rows),
+    placement === 'cover' ? h('span', { class: 'lk-cover' }) : null,
+    h('span', { class: 'lk-page' }, aa, line('lk-accent'), rows),
   )
   const vars: Record<string, string> = {
     '--t-bg': theme.bg, '--t-text': theme.text, '--t-accent': accent,
     '--t-panel': rgba(theme.bg, p.surfaceOpacity ?? 0.85),
     // Pattern wallpapers draw in the page's own colours.
-    '--df-bg': theme.bg, '--df-pattern': rgba(theme.text, theme.scheme === 'dark' ? 0.16 : 0.13),
+    '--df-wall-base': theme.bg, '--df-pattern': rgba(theme.text, theme.scheme === 'dark' ? 0.16 : 0.13),
   }
   if (preset) {
     vars['--t-wall'] = preset.css

@@ -521,7 +521,7 @@ body {
   background-size: var(--t-wall-size, auto);
 }
 
-.la-cover {
+.look-art .lk-cover {
   position: absolute;
   inset: 0 0 auto;
   height: 34%;
@@ -529,7 +529,7 @@ body {
   background-size: var(--t-wall-size, auto);
 }
 
-.la-page {
+.look-art .lk-page {
   position: absolute;
   inset: 0;
   display: flex;
@@ -539,7 +539,7 @@ body {
   color: var(--t-text);
 }
 
-.look-art.is-window .la-page {
+.look-art.is-window .lk-page {
   inset: 11% 9%;
   padding: 8% 10%;
   border-radius: 6px;
@@ -548,17 +548,17 @@ body {
   backdrop-filter: blur(6px);
 }
 
-.look-art.is-cover .la-page {
+.look-art.is-cover .lk-page {
   top: 26%;
   padding-top: 0;
 }
 
-.la-aa {
+.look-art .lk-aa {
   font-size: 19px;
   line-height: 1.15;
 }
 
-.look-art.is-cover .la-aa {
+.look-art.is-cover .lk-aa {
   display: grid;
   place-items: center;
   width: 26px;
@@ -568,35 +568,35 @@ body {
   font-size: 14px;
 }
 
-.la-line {
+.look-art .lk-line {
   display: block;
   height: 4px;
   border-radius: 2px;
   background: color-mix(in srgb, var(--t-text) 22%, transparent);
 }
 
-.la-line.la-accent {
+.look-art .lk-line.lk-accent {
   width: 32%;
   background: var(--t-accent);
 }
 
-.la-rows {
+.look-art .lk-rows {
   display: flex;
   flex-direction: column;
   gap: 5px;
   margin-top: 2px;
 }
 
-.la-rows .la-line:nth-child(2) {
+.look-art .lk-rows .lk-line:nth-child(2) {
   width: 82%;
 }
 
-.la-rows .la-line:nth-child(3) {
+.look-art .lk-rows .lk-line:nth-child(3) {
   width: 64%;
 }
 
 /* A table: each row cut into columns. */
-.la-rows.is-table .la-line {
+.look-art .lk-rows.is-table .lk-line {
   width: 100%;
   background: linear-gradient(90deg,
     color-mix(in srgb, var(--t-text) 26%, transparent) 0 52%, transparent 52% 58%,
@@ -604,14 +604,14 @@ body {
     color-mix(in srgb, var(--t-text) 16%, transparent) 84% 100%);
 }
 
-.la-cards {
+.look-art .lk-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   margin-top: 2px;
 }
 
-.la-cards i {
+.look-art .lk-cards i {
   height: 18px;
   border-radius: 3px;
   background: color-mix(in srgb, var(--t-text) 12%, transparent);
@@ -1173,8 +1173,8 @@ dialog.confirm p {
 /* ---- Narrower windows ---- */
 
 /* The preview stays beside the settings, and in view, as the window narrows: first the
-   columns tighten, then the section list goes to icons, and below that the preview
-   floats in a corner - where it can be tucked away - rather than scrolling off. */
+   columns tighten, then the section list goes to icons, and only on a tablet or phone
+   does it float in a corner - tucked away until asked for, so it covers nothing. */
 @media (max-width: 1320px) {
   .app-body {
     grid-template-columns: 180px minmax(0, 1fr) clamp(290px, 27vw, 360px);
@@ -1193,8 +1193,8 @@ dialog.confirm p {
 
 @media (min-width: 781px) and (max-width: 1100px) {
   .app-body {
-    grid-template-columns: 44px minmax(0, 1fr) clamp(250px, 28vw, 300px);
-    gap: 0 28px;
+    grid-template-columns: 44px minmax(0, 1fr) clamp(220px, 26vw, 300px);
+    gap: 0 24px;
     padding: 0 20px;
   }
 
@@ -1214,7 +1214,7 @@ dialog.confirm p {
   }
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 860px) {
   .app-body {
     grid-template-columns: 44px minmax(0, 1fr);
     grid-template-areas: "nav main";

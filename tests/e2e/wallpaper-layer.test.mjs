@@ -284,26 +284,43 @@ describe('wallpaper layer', () => {
     await page.close()
   })
 
-  test('a CSP report about blob: switches a shown wallpaper to data:', async () => {
-    // The content script's decode check isn't bound by the page's policy, so it passes -
-    // then the page refuses the CSS background. Only the violation report says so.
+  test('a real refusal of blob: switches a shown wallpaper to data:', async () => {
+    // In a content script the decode check isn't bound by the page's policy, so it
+    // passes - then the page refuses the CSS background. Make the check pass here the
+    // same way, and let the page's policy do the refusing for real.
+    const page = await open({ csp: "img-src 'self' data:" })
+    const img = await images(page, [['a', '#c00']])
+    await page.evaluate(() => {
+      window.reports = []
+      document.addEventListener('securitypolicyviolation', (e) => window.reports.push([e.blockedURI, e.effectiveDirective, e.isTrusted]))
+      HTMLImageElement.prototype.decode = () => Promise.resolve()
+    })
+    await page.evaluate((rec) => t.setAuto(() => rec), record('up-a', img.a))
+    await page.evaluate(() => t.layer.sync(t.upload('up-a'), 'window', false))
+    await until(page, () => t.walls().length === 1 && t.walls()[0].ready && t.walls()[0].bg.startsWith('url("data:'), null, 'data: wallpaper')
+    const reports = await page.evaluate(() => window.reports)
+    assert.ok(reports.some(([uri, directive, trusted]) => uri.startsWith('blob') && directive === 'img-src' && trusted), JSON.stringify(reports))
+    assert.equal(await page.evaluate(() => t.live.size), 0, 'the refused blob: URL was let go')
+    await page.close()
+  })
+
+  test('a made-up CSP report changes nothing', async () => {
     const page = await open()
     const img = await images(page, [['a', '#c00']])
     await page.evaluate((rec) => t.setAuto(() => rec), record('up-a', img.a))
     await page.evaluate(() => t.layer.sync(t.upload('up-a'), 'window', false))
     await until(page, () => t.walls()[0]?.bg.startsWith('url("blob:'), null, 'blob wallpaper')
-    // A report-only policy is not a refusal.
-    await page.evaluate(() => document.dispatchEvent(new SecurityPolicyViolationEvent('securitypolicyviolation', {
-      blockedURI: 'blob', effectiveDirective: 'img-src', violatedDirective: 'img-src', originalPolicy: '',
-      disposition: 'report', statusCode: 200,
-    })))
-    await page.waitForTimeout(100)
-    assert.match((await page.evaluate(() => t.walls()))[0].bg, /^url\("blob:/)
-    await page.evaluate(() => document.dispatchEvent(new SecurityPolicyViolationEvent('securitypolicyviolation', {
-      blockedURI: 'blob', effectiveDirective: 'img-src', violatedDirective: 'img-src', originalPolicy: '',
-      disposition: 'enforce', statusCode: 200,
-    })))
-    await until(page, () => t.walls().length === 1 && t.walls()[0].bg.startsWith('url("data:') && t.walls()[0].ready, null, 'data: wallpaper')
+    // A report-only policy is not a refusal, and a page script can't fake one either.
+    for (const disposition of ['report', 'enforce']) {
+      await page.evaluate((disposition) => document.dispatchEvent(new SecurityPolicyViolationEvent('securitypolicyviolation', {
+        blockedURI: 'blob', effectiveDirective: 'img-src', violatedDirective: 'img-src', originalPolicy: '',
+        disposition, statusCode: 200,
+      })), disposition)
+    }
+    await page.waitForTimeout(150)
+    const walls = await page.evaluate(() => t.walls())
+    assert.equal(walls.length, 1)
+    assert.match(walls[0].bg, /^url\("blob:/)
     await page.close()
   })
 

@@ -4,6 +4,7 @@
 
 :root {
   --df-bg: #f7f5ee;
+  --df-wall-base: var(--df-bg);
   --df-sidebar: #efece3;
   --df-surface: #fffdf8;
   --df-text: #2a2926;
@@ -841,6 +842,12 @@ textarea {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Live wallpaper tiles hold still, rather than snapping to their last frame. */
+  .preset-art.is-live {
+    animation: none !important;
   }
 }

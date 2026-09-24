@@ -130,6 +130,13 @@ test('no two font styles land on the same installed font', () => {
   }
 })
 
+test('patterns draw on the theme’s page, never on the panels’ tone', () => {
+  for (const p of WALLPAPER_PRESETS.filter((w) => w.kind === 'pattern')) {
+    assert.match(p.css, /var\(--df-wall-base\)$/, p.id)
+    assert.doesNotMatch(p.css, /var\(--df-bg\)/, p.id)
+  }
+})
+
 test('wallpaper presets are well formed', () => {
   assert.equal(new Set(WALLPAPER_PRESETS.map((p) => p.id)).size, WALLPAPER_PRESETS.length)
   for (const p of WALLPAPER_PRESETS) {

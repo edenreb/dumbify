@@ -79,8 +79,25 @@ function narrow(): boolean {
   return window.matchMedia('(max-width: 860px)').matches
 }
 
-// Ctrl/Cmd+\ works both ways, as in Notion: a wide window flips between the full
-// sidebar and hidden; a narrow one, which only has the drawer, opens and closes that.
+// The sidebar last shown - full or icons only - so hiding it and showing it again brings
+// back the same one. Kept with the page, where it survives a reload while hidden.
+const LAST_SHOWN = 'dumbify:sidebar-shown'
+
+function lastShown(): 'expanded' | 'rail' {
+  try {
+    return localStorage.getItem(LAST_SHOWN) === 'rail' ? 'rail' : 'expanded'
+  } catch {
+    return 'expanded'
+  }
+}
+
+function rememberShown(mode: DumbifySettings['sidebar']) {
+  if (mode === 'hidden') return
+  try { localStorage.setItem(LAST_SHOWN, mode) } catch { /* storage blocked */ }
+}
+
+// Ctrl/Cmd+\ works both ways, as in Notion: a wide window flips between the sidebar and
+// hidden; a narrow one, which only has the drawer, opens and closes that.
 function toggleSidebar() {
   if (narrow()) {
     if (isDrawerOpen()) closeDrawer()
@@ -89,7 +106,7 @@ function toggleSidebar() {
   }
   if (sidebarMode === 'hidden') {
     closeDrawer()
-    save({ sidebar: 'expanded' })
+    save({ sidebar: lastShown() })
     return
   }
   save({ sidebar: 'hidden' })
@@ -142,6 +159,7 @@ function buildSidebar() {
   sidebarToggle.addEventListener('click', () => {
     if (sidebarMode === 'expanded') save({ sidebar: 'hidden' })
     else {
+      // From the rail it widens; from hidden (the drawer) it pins the drawer open.
       save({ sidebar: 'expanded' })
       closeDrawer()
     }
@@ -213,11 +231,12 @@ export const shellFeature: Feature = {
       setSwitch(darkSwitch, a.scheme === 'dark')
       if (s.sidebar !== sidebarMode) {
         sidebarMode = s.sidebar
+        rememberShown(s.sidebar)
         paintSidebarToggle()
       }
     })
     // The first paint before settings arrive reads the stored mode directly.
-    getSettings().then((s) => { sidebarMode = s.sidebar; paintSidebarToggle() })
+    getSettings().then((s) => { sidebarMode = s.sidebar; rememberShown(s.sidebar); paintSidebarToggle() })
   },
 
   unmount() {

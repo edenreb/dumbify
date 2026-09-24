@@ -171,7 +171,9 @@ export function computeAppearance(s: DumbifySettings, systemDark = false, opts: 
   const onPanels = floating && !opts.plain
 
   const preset = s.wallpaper.source === 'preset' ? getPreset(s.wallpaper.presetId) : undefined
-  const average = s.wallpaper.average || preset?.average || theme.bg
+  // A pattern is drawn in the theme's own colours - a few faint marks on its page - so as
+  // far as the text is concerned, it is the page.
+  const average = preset?.kind === 'pattern' ? theme.bg : (s.wallpaper.average || preset?.average || theme.bg)
   const fade = s.wallpaperFade
   // Panels over a wallpaper: what they are made of, and how much of it there is. Solid
   // is opaque, glass lets the wallpaper through, clear is no panel at all.
@@ -246,8 +248,10 @@ export function computeAppearance(s: DumbifySettings, systemDark = false, opts: 
     '--df-focus': rgba(accent, 0.55),
     '--df-shadow': dark ? 'rgba(0, 0, 0, 0.55)' : 'rgba(15, 15, 15, 0.12)',
     '--df-live': dark ? '#ff6369' : '#dc3e42',
-    // Patterns are drawn on the wallpaper, under the panels: the theme's colours.
+    // Patterns are drawn on the wallpaper, under the panels, in the theme's colours - on
+    // the theme's page, not on --df-bg, which over a wallpaper is the panels' tone.
     '--df-pattern': rgba(theme.text, scheme === 'dark' ? 0.16 : 0.13),
+    '--df-wall-base': theme.bg,
     // Text straight on a clear panel gets a glow in the opposite of its ink.
     '--df-halo': isDark(ink) ? 'rgba(255, 255, 255, 0.78)' : 'rgba(0, 0, 0, 0.62)',
 

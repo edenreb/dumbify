@@ -166,6 +166,28 @@ test('text stays readable on every theme, tint, panel style and wallpaper', () =
   assert.ok(checked > 4000)
 })
 
+test('a pattern wallpaper is the theme’s own page: every theme keeps its colours, clear or glass', () => {
+  for (const theme of THEMES) {
+    for (const presetId of ['dots', 'grid', 'ruled']) {
+      for (const surface of ['clear', 'glass'] as const) {
+        const a = computeAppearance(settings({
+          mode: theme.scheme,
+          [theme.scheme === 'dark' ? 'darkTheme' : 'lightTheme']: theme.id,
+          wallpaper: { source: 'preset', presetId, kind: 'pattern', name: presetId } as any,
+          surface, wallpaperFade: 0.3,
+        }))
+        const where = `${theme.id} ${presetId} ${surface}`
+        assert.equal(a.vars['--df-bg'], theme.bg, `page: ${where}`)
+        assert.equal(a.vars['--df-wall-base'], theme.bg, `pattern ground: ${where}`)
+        assert.equal(a.vars['--df-wall-average'], theme.bg, `backdrop: ${where}`)
+        assert.equal(a.paint, theme.bg, `first paint: ${where}`)
+        assert.equal(a.attrs.tone, theme.scheme, `a dark theme stays dark: ${where}`)
+        assert.equal(a.panels?.inkChanged, false, `ink: ${where}`)
+      }
+    }
+  }
+})
+
 test('an extension page keeps the theme’s own colours whatever the panels do', () => {
   const s = settings({ mode: 'light', lightTheme: 'paper', wallpaper: gradient as any, surface: 'solid', surfaceTint: '#1e2a44' })
   const a = computeAppearance(s, false, { plain: true })

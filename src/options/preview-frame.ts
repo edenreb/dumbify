@@ -25,8 +25,8 @@ export function createPreview(store: SettingsStore): PreviewFrame {
     'aria-hidden': 'true',
   })
   const viewport = h('div', { class: 'preview-viewport' }, iframe)
-  // In a narrow window the preview floats in a corner, over the settings - so it can be
-  // tucked away. The choice is remembered.
+  // On a tablet or phone the preview floats in a corner, over the settings - so it can
+  // be tucked away, and starts that way. The choice is remembered.
   const toggle = h('button', { class: 'preview-toggle', type: 'button', 'aria-expanded': 'true' },
     h('span', { class: 'preview-toggle-label', text: 'Preview' }), icon('chevronDown'))
   const card = h('div', { class: 'preview-card' },
@@ -103,10 +103,10 @@ export function createPreview(store: SettingsStore): PreviewFrame {
   })
   let remembered: string | null = null
   try { remembered = localStorage.getItem(COLLAPSED) } catch { /* private window */ }
-  // Unless told otherwise, a phone-sized window keeps it tucked away.
-  const phone = window.matchMedia('(max-width: 560px)')
-  setCollapsed(remembered === null ? phone.matches : remembered === '1')
-  phone.addEventListener('change', (e) => {
+  // Floating, it would cover settings: unless told otherwise, it starts tucked away.
+  const floating = window.matchMedia('(max-width: 860px)')
+  setCollapsed(remembered === null ? floating.matches : remembered === '1')
+  floating.addEventListener('change', (e) => {
     let chosen: string | null = null
     try { chosen = localStorage.getItem(COLLAPSED) } catch { /* private window */ }
     if (chosen === null) setCollapsed(e.matches)

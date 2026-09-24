@@ -1,7 +1,9 @@
 import { h } from '../ui/dom'
 import { icon, type IconName } from '../ui/icons'
+import { shortcutLabel } from '../ui/routes'
 
 let toastTimer: number | null = null
+let offered: (() => void) | null = null
 
 export interface ToastAction {
   label: string
@@ -10,23 +12,54 @@ export interface ToastAction {
 
 /**
  * A short message at the bottom of the page. Errors, and messages that offer an action
- * such as Undo, stay longer.
+ * such as Undo, stay longer - and any toast stays while the pointer or focus is on it.
  */
 export function toast(message: string, kind: 'ok' | 'error' = 'ok', action?: ToastAction) {
   document.querySelector('.toast')?.remove()
+  offered = null
   const el = h('div', { class: kind === 'error' ? 'toast is-error' : 'toast', role: kind === 'error' ? 'alert' : 'status' },
     icon(kind === 'error' ? 'info' : 'check'), h('span', { class: 'toast-text', text: message }))
-  if (action) {
-    const btn = h('button', { class: 'toast-action', type: 'button', text: action.label })
-    btn.addEventListener('click', () => {
-      el.remove()
-      action.run()
-    })
-    el.appendChild(btn)
+  const stop = () => {
+    if (toastTimer !== null) window.clearTimeout(toastTimer)
+    toastTimer = null
   }
+  const dismiss = () => {
+    stop()
+    el.remove()
+    if (offered === run) offered = null
+  }
+  const run = () => {
+    dismiss()
+    action?.run()
+  }
+  if (action) {
+    const mac = shortcutLabel('Z').startsWith('⌘')
+    const btn = h('button', {
+      class: 'toast-action', type: 'button', text: action.label,
+      title: `${action.label} (${shortcutLabel('Z')})`, 'aria-keyshortcuts': mac ? 'Meta+Z' : 'Control+Z',
+    })
+    btn.addEventListener('click', run)
+    el.appendChild(btn)
+    offered = run
+  }
+  const ms = action ? 8000 : kind === 'error' ? 6000 : 2400
+  const start = () => {
+    stop()
+    toastTimer = window.setTimeout(dismiss, ms)
+  }
+  el.addEventListener('mouseenter', stop)
+  el.addEventListener('mouseleave', start)
+  el.addEventListener('focusin', stop)
+  el.addEventListener('focusout', start)
   document.body.appendChild(el)
-  if (toastTimer !== null) window.clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => el.remove(), kind === 'error' || action ? 6000 : 2400)
+  start()
+}
+
+/** Runs what the toast on screen offers - Undo, say - for Ctrl/Cmd+Z. False if nothing. */
+export function runToastAction(): boolean {
+  if (!offered) return false
+  offered()
+  return true
 }
 
 /** The "Saved" indicator in the header. */
