@@ -1215,6 +1215,11 @@ dialog.confirm p {
 }
 
 @media (max-width: 860px) {
+  /* Keyboard focus scrolls a control clear of the floating preview, not under it. */
+  html {
+    scroll-padding-bottom: 76px;
+  }
+
   .app-body {
     grid-template-columns: 44px minmax(0, 1fr);
     grid-template-areas: "nav main";

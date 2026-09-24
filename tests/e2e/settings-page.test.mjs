@@ -339,6 +339,21 @@ describe('settings page', { skip }, () => {
     await h.until(async () => (await settings())?.font === 'sans' && (await settings())?.wallpaper.uploadId === id, { what: 'look undone' })
   })
 
+  test('Ctrl+Z does nothing behind an open dialog', async () => {
+    const o = await h.options('#appearance')
+    await o.locator('.look', { hasText: 'Terminal' }).click()
+    await h.until(async () => (await settings())?.font === 'mono', { what: 'look applied' })
+    await o.locator('#backup button', { hasText: 'Reset' }).click()
+    await o.waitForSelector('dialog.confirm[open]')
+    await o.keyboard.press('Control+z')
+    await o.waitForTimeout(300)
+    assert.equal((await settings()).font, 'mono', 'the look behind the dialog stays')
+    await o.locator('dialog.confirm button', { hasText: 'Cancel' }).click()
+    // Once it is closed, the offer still stands.
+    await o.keyboard.press('Control+z')
+    await h.until(async () => (await settings())?.font === 'sans', { what: 'undone after the dialog' })
+  })
+
   test('deleting an upload that is not in use keeps the wallpaper', async () => {
     const o = await h.options('#wallpaper')
     await upload(o, 'first.gif', 'image/gif', tinyAnimatedGif(640, 360))

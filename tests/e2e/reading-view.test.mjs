@@ -145,6 +145,19 @@ describe('reading view', { skip }, () => {
     await h.until(async () => (await h.getSettings())?.sidebar === 'expanded', { what: 'sidebar back' })
   })
 
+  test('pinning the drawer open brings back the sidebar last shown, icons-only included', async () => {
+    await h.setSettings({ ...V2, sidebar: 'rail' })
+    const p = await h.youtube('/')
+    await p.waitForSelector('#dumbify-root[data-sidebar="rail"]')
+    await p.keyboard.press('Control+Backslash')
+    await p.waitForSelector('#dumbify-root[data-sidebar="hidden"]')
+    await p.click('.df-drawer-btn')
+    await p.waitForSelector('#dumbify-root.df-drawer-open')
+    await p.locator('.df-sidebar-toggle').click()
+    await h.until(async () => (await h.getSettings())?.sidebar === 'rail', { what: 'pinned as the rail' })
+    assert.equal(await p.evaluate(() => document.querySelector('.df-main').inert), false)
+  })
+
   test('keyboard: hiding the icons-only sidebar and showing it again brings back the icons', async () => {
     await h.setSettings({ ...V2, sidebar: 'rail' })
     const p = await h.youtube('/')

@@ -116,6 +116,8 @@ async function main() {
   // anywhere on the page but a text field, which keeps its own undo.
   document.addEventListener('keydown', (e) => {
     if (!isModKey(e) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return
+    // Not behind a question that's still open, such as Reset.
+    if (document.querySelector('dialog[open]')) return
     const target = e.target as HTMLElement | null
     if (target?.closest('textarea, [contenteditable], input:not([type]), input[type="text"], input[type="search"]')) return
     if (runToastAction()) e.preventDefault()

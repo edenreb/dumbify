@@ -104,7 +104,10 @@ Preferences stored under Section 4 are retained on your device until you delete
 them. You may return your preferences to their defaults at any time with the reset
 control on the extension's options page, and delete any uploaded wallpaper from the
 wallpaper gallery on the same page. Clearing the extension's storage through your
-browser's settings, or uninstalling the extension, deletes all of it permanently.
+browser's settings, or uninstalling the extension, deletes all of it permanently -
+except the small copy of colours and layout names kept in `youtube.com`'s own site
+storage (Section 4), which contains nothing about you and is cleared with that
+site's data.
 
 Because we hold no personal data concerning you, there is no data against which
 rights of access, rectification, erasure, portability, restriction, or objection

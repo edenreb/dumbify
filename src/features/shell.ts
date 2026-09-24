@@ -159,8 +159,9 @@ function buildSidebar() {
   sidebarToggle.addEventListener('click', () => {
     if (sidebarMode === 'expanded') save({ sidebar: 'hidden' })
     else {
-      // From the rail it widens; from hidden (the drawer) it pins the drawer open.
-      save({ sidebar: 'expanded' })
+      // From the rail it widens; from hidden (the drawer) it pins back the sidebar last
+      // shown, as Ctrl/Cmd+\ does.
+      save({ sidebar: sidebarMode === 'rail' ? 'expanded' : lastShown() })
       closeDrawer()
     }
   })
