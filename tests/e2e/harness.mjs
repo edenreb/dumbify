@@ -13,7 +13,8 @@ import { fixtureFor } from './fixtures.mjs'
 
 export const DIST = resolve('dist')
 export const SETTINGS_KEY = 'dumbify:settings'
-export const WALLPAPER_KEY = 'dumbify:wallpaper'
+export const UPLOADS_KEY = 'dumbify:uploads'
+export const uploadKey = (id) => `dumbify:upload:${id}`
 
 export function built() {
   return existsSync(join(DIST, 'manifest.json'))
@@ -30,7 +31,7 @@ async function until(check, { timeout = 10000, interval = 50, what = 'condition'
   }
 }
 
-export async function launch({ colorScheme = 'light', reducedMotion = 'no-preference', viewport = { width: 1280, height: 860 } } = {}) {
+export async function launch({ colorScheme = 'light', reducedMotion = 'no-preference', viewport = { width: 1280, height: 860 }, locale = 'en-US' } = {}) {
   if (!built()) throw new Error('Run `npm run build` before the end-to-end tests')
   const userDir = mkdtempSync(join(tmpdir(), 'dumbify-e2e-'))
   const context = await chromium.launchPersistentContext(userDir, {
@@ -40,6 +41,7 @@ export async function launch({ colorScheme = 'light', reducedMotion = 'no-prefer
     viewport,
     colorScheme,
     reducedMotion,
+    locale,
   })
   const errors = []
   context.on('weberror', (e) => errors.push(String(e.error())))
@@ -48,7 +50,7 @@ export async function launch({ colorScheme = 'light', reducedMotion = 'no-prefer
     const url = route.request().url()
     if (/^https:\/\/www\.youtube\.com\//.test(url)) {
       const f = fixtureFor(url)
-      await route.fulfill({ status: f.status, contentType: f.contentType, body: f.body })
+      await route.fulfill({ status: f.status, contentType: f.contentType, body: f.body, headers: f.headers })
     } else {
       await route.abort()
     }
@@ -84,6 +86,22 @@ export async function launch({ colorScheme = 'light', reducedMotion = 'no-prefer
     },
     async setStored(key, value) {
       await sw.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [key, value])
+    },
+    /** Files a wallpaper in the gallery the way the settings page does: bytes, then the list. */
+    async putUpload(record, summary = {}) {
+      await sw.evaluate(async ([rec, extra, listKey, key]) => {
+        await chrome.storage.local.set({ [key]: rec })
+        const res = await chrome.storage.local.get(listKey)
+        const list = (res[listKey] ?? []).filter((u) => u.id !== rec.id)
+        list.unshift({
+          id: rec.id, name: rec.name, kind: rec.kind, mime: rec.mime, width: rec.width, height: rec.height,
+          bytes: rec.bytes, addedAt: rec.addedAt, thumbUrl: '', average: '', vibrant: '', ...extra,
+        })
+        await chrome.storage.local.set({ [listKey]: list })
+      }, [record, summary, UPLOADS_KEY, uploadKey(record.id)])
+    },
+    async getUploads() {
+      return (await api.getStored(UPLOADS_KEY)) ?? []
     },
     /** Opens a youtube.com path and waits for the reading view to render. */
     async youtube(path = '/', { waitFor = '#dumbify-root .df-sidebar .df-nav-link' } = {}) {

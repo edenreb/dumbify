@@ -106,6 +106,30 @@ test('fonts: unique ids, the three featured faces, and a real default', () => {
   for (const f of FONTS) assert.match(f.stack, /(sans-serif|serif|monospace)$/, `${f.id} needs a generic fallback`)
 })
 
+// The fonts a stock install has, as Chrome sees them (it resolves system-ui, but not
+// ui-rounded or ui-serif, outside Safari).
+const INSTALLED: Record<string, string[]> = {
+  windows: ['system-ui', 'Segoe UI', 'Arial', 'Bahnschrift', 'Calibri', 'Cambria', 'Candara', 'Consolas',
+    'Constantia', 'Corbel', 'Courier New', 'Georgia', 'Lucida Console', 'Palatino Linotype', 'Sitka Small',
+    'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana'],
+  macos: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Helvetica Neue', 'Helvetica', 'Seravek',
+    'Hiragino Maru Gothic ProN', 'Arial Rounded MT Bold', 'Arial', 'Georgia', 'Times New Roman', 'Times',
+    'Iowan Old Style', 'Palatino', 'Rockwell', 'Verdana', 'Geneva', 'Tahoma', 'Courier', 'Courier New'],
+}
+
+test('no two font styles land on the same installed font', () => {
+  for (const [os, installed] of Object.entries(INSTALLED)) {
+    const seen = new Map<string, string>()
+    for (const f of FONTS.filter((font) => !font.featured)) {
+      const names = f.stack.split(',').map((n) => n.trim().replace(/^"|"$/g, ''))
+      const used = names.find((n) => installed.includes(n))
+      assert.ok(used, `${os}: ${f.id} finds nothing installed`)
+      assert.ok(!seen.has(used), `${os}: ${f.id} and ${seen.get(used)} are both ${used}`)
+      seen.set(used, f.id)
+    }
+  }
+})
+
 test('wallpaper presets are well formed', () => {
   assert.equal(new Set(WALLPAPER_PRESETS.map((p) => p.id)).size, WALLPAPER_PRESETS.length)
   for (const p of WALLPAPER_PRESETS) {

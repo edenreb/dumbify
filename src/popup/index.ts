@@ -4,7 +4,7 @@ import '../styles/fonts.css'
 import { ACCENTS, ACCENT_THEME, getPreset, getTheme, themesFor } from '../core/themes'
 import { resolveScheme, systemPrefersDark, wallpaperShowing } from '../core/appearance'
 import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../core/settings'
-import { getWallpaper } from '../core/storage'
+import { getUploads } from '../core/storage'
 import { SettingsStore } from '../ui/store'
 import { followSystem, paintFromCache, themePage } from '../ui/page-theme'
 import { h } from '../ui/dom'
@@ -26,12 +26,15 @@ function label(iconName: Parameters<typeof icon>[0], text: string, extra?: HTMLE
   return h('span', { class: 'pop-label' }, icon(iconName), text, extra ?? null)
 }
 
-function themeDots(store: SettingsStore): HTMLElement {
+/** The theme row: a dot per theme for the mode in use, and the chosen one's name. */
+function themeDots(store: SettingsStore): { dots: HTMLElement; name: HTMLElement } {
   const wrap = h('div', { class: 'theme-dots', role: 'radiogroup', 'aria-label': 'Theme' })
+  const name = h('span', { class: 'pop-label-value' })
   let scheme: 'light' | 'dark' | null = null
   const draw = () => {
     const s = store.value
     const next = resolveScheme(s, systemPrefersDark())
+    name.textContent = getTheme(next === 'dark' ? s.darkTheme : s.lightTheme, next).name
     if (next === scheme) {
       wrap.querySelectorAll<HTMLInputElement>('input').forEach((i) => { i.checked = i.value === (next === 'dark' ? s.darkTheme : s.lightTheme) })
       return
@@ -53,7 +56,7 @@ function themeDots(store: SettingsStore): HTMLElement {
     }
   }
   store.subscribe(draw)
-  return wrap
+  return { dots: wrap, name }
 }
 
 function accentDots(store: SettingsStore): HTMLElement {
@@ -114,10 +117,11 @@ function wallpaperRow(store: SettingsStore): HTMLElement {
       const p = getPreset(w.presetId)
       if (p) thumb.style.background = p.css
     } else if (w.source === 'upload') {
-      const rec = await getWallpaper(w)
-      // The poster, not the animation itself: a 10 MB GIF has no business in a popup.
-      const src = rec?.posterUrl || (rec?.kind === 'image' ? rec.dataUrl : '')
-      if (src && shownKey === key) thumb.style.backgroundImage = `url("${src}")`
+      if (w.average) thumb.style.background = w.average
+      // The gallery's thumbnail - a few KB - never the file: a 14 MB video read into a
+      // popup just to draw 28 pixels cost it tens of megabytes of memory.
+      const upload = (await getUploads()).find((u) => u.id === w.uploadId)
+      if (upload?.thumbUrl && shownKey === key) thumb.style.backgroundImage = `url("${upload.thumbUrl}")`
     }
   })
   return h('div', { class: 'pop-row' }, label('image', 'Wallpaper'),
@@ -154,9 +158,12 @@ async function main() {
       get: (s) => s.mode,
       set: (v) => ({ mode: v }),
     })),
-    h('div', { class: 'pop-row stacked' }, label('sparkles', 'Theme'), themeDots(store)),
+    (() => {
+      const themes = themeDots(store)
+      return h('div', { class: 'pop-row stacked' }, label('sparkles', 'Theme', themes.name), themes.dots)
+    })(),
     h('div', { class: 'pop-row stacked' }, label('drop', 'Accent'), accentDots(store)),
-    h('div', { class: 'pop-row' }, label('type', 'Text size'), sizeStepper(store)),
+    h('div', { class: 'pop-row' }, label('textSize', 'Text size'), sizeStepper(store)),
     h('div', { class: 'pop-row' }, label('type', 'Font'), segmented(store, {
       label: 'Font',
       compact: true,

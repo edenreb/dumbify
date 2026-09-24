@@ -1,4 +1,5 @@
-import { getSettings, migrateStorage, onSettingsChange } from './core/storage'
+import { completeUploads, getSettings, migrateStorage, onSettingsChange } from './core/storage'
+import { analyzeUpload } from './core/analyze'
 import { sameInjectedFiles } from './core/registration'
 
 // The reading view is registered at runtime rather than declared in the manifest, so
@@ -78,7 +79,12 @@ function sync(): Promise<boolean> {
 chrome.runtime.onInstalled.addListener(() => {
   void migrateStorage()
     .catch((err) => console.error('[Dumbify] settings migration failed:', err))
-    .finally(() => { void sync() })
+    .finally(() => {
+      void sync()
+      // A v1 background image arrives in the gallery without a thumbnail or colours -
+      // the colours are what "accent from wallpaper" and the first paint use.
+      void completeUploads(analyzeUpload).catch((err) => console.error('[Dumbify] wallpaper analysis failed:', err))
+    })
 })
 chrome.runtime.onStartup.addListener(() => { void sync() })
 

@@ -25,9 +25,15 @@ export function createPreview(store: SettingsStore): PreviewFrame {
     'aria-hidden': 'true',
   })
   const viewport = h('div', { class: 'preview-viewport' }, iframe)
+  // In a narrow window the preview floats in a corner, over the settings - so it can be
+  // tucked away. The choice is remembered.
+  const toggle = h('button', { class: 'preview-toggle', type: 'button', 'aria-expanded': 'true' },
+    h('span', { class: 'preview-toggle-label', text: 'Preview' }), icon('chevronDown'))
   const card = h('div', { class: 'preview-card' },
-    h('div', { class: 'preview-chrome', 'aria-hidden': 'true' }, h('i'), h('i'), h('i'),
-      h('span', { class: 'preview-url' }, icon('shield'), 'youtube.com')),
+    h('div', { class: 'preview-chrome' },
+      h('span', { class: 'preview-dots', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
+      h('span', { class: 'preview-url', 'aria-hidden': 'true' }, icon('shield'), 'youtube.com'),
+      toggle),
     viewport,
   )
 
@@ -78,9 +84,33 @@ export function createPreview(store: SettingsStore): PreviewFrame {
   const el = h('aside', { class: 'app-preview', 'aria-label': 'Live preview' },
     card,
     h('div', { class: 'preview-caption' },
-      h('span', { text: 'Live preview · open YouTube tabs update instantly' }),
+      h('span', { class: 'preview-note', text: 'Live preview · open YouTube tabs update instantly' }),
       tabs,
     ),
   )
+
+  const COLLAPSED = 'dumbify:preview-collapsed'
+  const setCollapsed = (collapsed: boolean) => {
+    el.classList.toggle('is-collapsed', collapsed)
+    toggle.setAttribute('aria-expanded', String(!collapsed))
+    toggle.setAttribute('aria-label', collapsed ? 'Show the live preview' : 'Hide the live preview')
+    if (!collapsed) requestAnimationFrame(fit)
+  }
+  toggle.addEventListener('click', () => {
+    const collapsed = !el.classList.contains('is-collapsed')
+    setCollapsed(collapsed)
+    try { localStorage.setItem(COLLAPSED, collapsed ? '1' : '0') } catch { /* private window */ }
+  })
+  let remembered: string | null = null
+  try { remembered = localStorage.getItem(COLLAPSED) } catch { /* private window */ }
+  // Unless told otherwise, a phone-sized window keeps it tucked away.
+  const phone = window.matchMedia('(max-width: 560px)')
+  setCollapsed(remembered === null ? phone.matches : remembered === '1')
+  phone.addEventListener('change', (e) => {
+    let chosen: string | null = null
+    try { chosen = localStorage.getItem(COLLAPSED) } catch { /* private window */ }
+    if (chosen === null) setCollapsed(e.matches)
+  })
+
   return { el, showPage: setPage }
 }

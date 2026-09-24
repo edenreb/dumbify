@@ -1,7 +1,7 @@
 // Captures the main screens for review:  node tests/e2e/screenshots.mjs [outDir]
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { launch, tinyAnimatedGif, WALLPAPER_KEY } from './harness.mjs'
+import { launch, tinyAnimatedGif } from './harness.mjs'
 
 const out = resolve(process.argv[2] ?? 'screenshots')
 mkdirSync(out, { recursive: true })
@@ -99,6 +99,36 @@ try {
   await h.setSettings({ ...base })
   await settle(pop, 500)
   await shot(pop, '17-popup-light', { fullPage: true })
+
+  // Tinted and clear panels (issue #52): text follows what it sits on.
+  await h.setSettings({ ...base, mode: 'light', lightTheme: 'paper', wallpaper: { source: 'preset', presetId: 'dusk' }, surface: 'solid', surfaceTint: '#1e2a44' })
+  p = await h.youtube('/')
+  await settle(p, 900)
+  await shot(p, '18-home-paper-navy-tint')
+  await h.setSettings({ ...base, mode: 'light', lightTheme: 'paper', wallpaper: { source: 'preset', presetId: 'aurora' }, surface: 'clear' })
+  await settle(p, 900)
+  await shot(p, '19-home-clear-aurora')
+  await p.close()
+
+  // Looks, and the uploads gallery
+  await h.setSettings({ ...base })
+  await o.setViewportSize({ width: 1440, height: 900 })
+  await o.goto(h.url('src/options/index.html#appearance'))
+  await o.waitForSelector('.looks')
+  await settle(o, 900)
+  await shot(o, '20-options-looks')
+  await input.setInputFiles({ name: 'second.gif', mimeType: 'image/gif', buffer: tinyAnimatedGif(480, 320) })
+  await o.goto(h.url('src/options/index.html#wallpaper'))
+  await o.waitForSelector('.upload-tile')
+  await settle(o, 900)
+  await shot(o, '21-options-uploads')
+
+  // Narrow settings: the floating preview
+  await o.setViewportSize({ width: 900, height: 860 })
+  await o.goto(h.url('src/options/index.html#typography'))
+  await o.waitForSelector('.app-body')
+  await settle(o, 900)
+  await shot(o, '22-options-900')
 
   console.log('page errors:', h.errors)
 } finally {

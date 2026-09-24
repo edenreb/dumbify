@@ -216,7 +216,9 @@ export const FONTS: FontChoice[] = [
   { id: 'humanist', name: 'Humanist', titleWeight: 700, note: 'Warm and friendly sans',
     stack: 'Seravek, "Gill Sans Nova", Ubuntu, Calibri, "DejaVu Sans", source-sans-pro, sans-serif' },
   { id: 'rounded', name: 'Rounded', titleWeight: 700, note: 'Soft, rounded letterforms',
-    stack: 'ui-rounded, "Hiragino Maru Gothic ProN", Quicksand, Comfortaa, Manjari, "Arial Rounded MT", "Arial Rounded MT Bold", Calibri, source-sans-pro, sans-serif' },
+    // Candara rather than Calibri on Windows: Humanist ends there too, and the two
+    // styles were the same font.
+    stack: 'ui-rounded, "Hiragino Maru Gothic ProN", Quicksand, Comfortaa, Manjari, "Arial Rounded MT", "Arial Rounded MT Bold", Candara, source-sans-pro, sans-serif' },
   { id: 'grotesk', name: 'Grotesk', titleWeight: 700, note: 'Helvetica and friends',
     stack: '"Helvetica Neue", Helvetica, Arial, "Nimbus Sans", "Liberation Sans", sans-serif' },
   { id: 'verdana', name: 'Verdana', titleWeight: 700, note: 'Wide and very legible',

@@ -1,9 +1,13 @@
-import { ACCENTS, ACCENT_THEME, ACCENT_WALLPAPER, FONTS, THEMES, getTheme, themesFor, type Theme } from '../core/themes'
-import { resolveScheme, textColorWarning, wallpaperShowing } from '../core/appearance'
+import {
+  ACCENTS, ACCENT_THEME, ACCENT_WALLPAPER, FONTS, THEMES, accentPreset, getFont, getPreset, getTheme,
+  themesFor, type Theme,
+} from '../core/themes'
+import { resolveScheme, systemPrefersDark, textColorWarning, wallpaperShowing } from '../core/appearance'
+import { LOOKS, lookPatch, matchesLook, type Look } from '../core/looks'
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, type DumbifySettings } from '../core/settings'
 import { getWallpaper, replaceSettings, resetSettings } from '../core/storage'
 import { backupFileName, parseBackup, serializeBackup } from '../core/backup'
-import { isHex } from '../core/color'
+import { isHex, rgba } from '../core/color'
 import type { SettingsStore } from '../ui/store'
 import { h } from '../ui/dom'
 import { icon } from '../ui/icons'
@@ -46,9 +50,9 @@ function themePicker(store: SettingsStore, scheme: 'light' | 'dark'): HTMLElemen
 }
 
 function schemeNote(store: SettingsStore, scheme: 'light' | 'dark'): HTMLElement {
-  const note = h('span', { class: 'hint', style: 'margin-left: 8px; text-transform: none; letter-spacing: 0; font-weight: 500' })
+  const note = h('span', { class: 'group-note' })
   store.subscribe((s) => {
-    const active = resolveScheme(s, window.matchMedia('(prefers-color-scheme: dark)').matches) === scheme
+    const active = resolveScheme(s, systemPrefersDark()) === scheme
     note.textContent = s.mode === 'auto'
       ? (scheme === 'dark' ? '· when your system is dark' : '· when your system is light')
       : active ? '· in use' : ''
@@ -84,8 +88,8 @@ function accentPicker(store: SettingsStore): HTMLElement {
   wrap.appendChild(custom)
 
   store.subscribe((s) => {
-    const theme = getTheme(resolveScheme(s, window.matchMedia('(prefers-color-scheme: dark)').matches) === 'dark' ? s.darkTheme : s.lightTheme,
-      resolveScheme(s, window.matchMedia('(prefers-color-scheme: dark)').matches))
+    const scheme = resolveScheme(s, systemPrefersDark())
+    const theme = getTheme(scheme === 'dark' ? s.darkTheme : s.lightTheme, scheme)
     themeSwatch.style.setProperty('--swatch', theme.accent)
     themeSwatch.style.setProperty('--swatch-2', theme.bg)
     const wallInput = wallSwatch.querySelector('input')!
@@ -96,7 +100,6 @@ function accentPicker(store: SettingsStore): HTMLElement {
     for (const r of radios) r.input.checked = r.value === s.accent
     const isCustom = isHex(s.accent)
     custom.classList.toggle('is-set', isCustom)
-    custom.querySelector('.df-icon')?.setAttribute('style', isCustom ? 'opacity: 1' : '')
     if (isCustom) {
       custom.style.setProperty('--swatch', s.accent)
       picker.value = s.accent
@@ -105,8 +108,78 @@ function accentPicker(store: SettingsStore): HTMLElement {
   return wrap
 }
 
+/** A look, drawn small: its wallpaper, its page, its type and its layout. */
+function lookArt(look: Look): HTMLElement {
+  const theme = getTheme(look.mode === 'dark' ? look.darkTheme : look.lightTheme, look.mode)
+  const p = look.patch
+  const preset = p.wallpaper?.source === 'preset' ? getPreset(p.wallpaper.presetId) : undefined
+  const placement = preset ? (p.wallpaperPlacement ?? 'window') : 'none'
+  const accent = p.accent === ACCENT_WALLPAPER ? (preset?.vibrant ?? theme.accent)
+    : accentPreset(p.accent ?? '')?.color ?? theme.accent
+  const font = getFont(p.font ?? 'sans')
+
+  const line = (cls = '') => h('i', { class: `la-line ${cls}` })
+  const rows = p.layout === 'cards'
+    ? h('span', { class: 'la-cards' }, h('i'), h('i'), h('i'))
+    : h('span', { class: `la-rows${p.layout === 'table' ? ' is-table' : ''}` }, line(), line(), line())
+  const aa = h('span', { class: 'la-aa', text: 'Aa' })
+  aa.style.fontFamily = font.stack
+  aa.style.fontWeight = String(font.titleWeight)
+
+  const art = h('span', { class: `art look-art is-${placement}`, 'aria-hidden': 'true' },
+    placement === 'cover' ? h('span', { class: 'la-cover' }) : null,
+    h('span', { class: 'la-page' }, aa, line('la-accent'), rows),
+  )
+  const vars: Record<string, string> = {
+    '--t-bg': theme.bg, '--t-text': theme.text, '--t-accent': accent,
+    '--t-panel': rgba(theme.bg, p.surfaceOpacity ?? 0.85),
+    // Pattern wallpapers draw in the page's own colours.
+    '--df-bg': theme.bg, '--df-pattern': rgba(theme.text, theme.scheme === 'dark' ? 0.16 : 0.13),
+  }
+  if (preset) {
+    vars['--t-wall'] = preset.css
+    if (preset.size) vars['--t-wall-size'] = preset.size
+  }
+  for (const [k, v] of Object.entries(vars)) art.style.setProperty(k, v)
+  return art
+}
+
+/**
+ * Finished combinations to start from. Each applies in one click and can be undone for a
+ * few seconds; the look that still matches the settings is marked.
+ */
+function looksGallery(store: SettingsStore): HTMLElement {
+  const grid = h('div', { class: 'looks', role: 'group', 'aria-label': 'Looks' })
+  const buttons = LOOKS.map((look) => {
+    const btn = h('button', { class: 'look', type: 'button', 'aria-pressed': 'false' },
+      lookArt(look),
+      h('span', { class: 'look-text' },
+        h('span', { class: 'look-name', text: look.name }),
+        h('span', { class: 'look-note', text: look.note })))
+    btn.addEventListener('click', async () => {
+      const before = store.value
+      if (matchesLook(before, look)) return
+      const patch = lookPatch(look, before)
+      if (!(await store.commit(patch))) return
+      // Undo puts back just what the look changed.
+      const undo: Partial<S> = {}
+      for (const key of Object.keys(patch) as (keyof S)[]) (undo as Record<string, unknown>)[key] = before[key]
+      toast(`${look.name} applied`, 'ok', { label: 'Undo', run: () => void store.commit(undo) })
+    })
+    grid.appendChild(btn)
+    return { btn, look }
+  })
+  store.subscribe((s) => {
+    for (const { btn, look } of buttons) btn.setAttribute('aria-pressed', String(matchesLook(s, look)))
+  })
+  return grid
+}
+
 export function appearanceSection(store: SettingsStore): HTMLElement {
   return section('appearance', 'palette', 'Appearance', 'Themes, colour and the overall feel.',
+    groupTitle('Looks', h('span', { class: 'group-note', text: '· start from one, then make it yours' })),
+    looksGallery(store),
+    groupTitle('Mode and themes'),
     row('Mode', 'Auto follows your system’s light and dark setting.', segmented(store, {
       label: 'Mode',
       options: [
@@ -288,7 +361,7 @@ export function layoutSection(store: SettingsStore): HTMLElement {
 
 function watchArt(kind: 'classic' | 'theater' | 'split'): HTMLElement {
   return h('span', { class: `art watch-art wa-${kind}`, 'aria-hidden': 'true' },
-    h('span', { class: 'wa-player' }), h('span', { class: 'wa-line' }), h('span', { class: 'wa-line', style: 'width: 60%' }),
+    h('span', { class: 'wa-player' }), h('span', { class: 'wa-line' }), h('span', { class: 'wa-line wa-line-short' }),
     kind === 'split' ? h('span', { class: 'wa-side' }) : null,
   )
 }
@@ -366,7 +439,7 @@ export function backupSection(store: SettingsStore): HTMLElement {
       const backup = parseBackup(await f.text())
       const ok = await confirmDialog({
         title: 'Replace your settings?',
-        body: `Everything will be set from “${f.name}”${backup.wallpaper ? ', including its wallpaper' : ''}.`,
+        body: `Your settings will be replaced with the ones in “${f.name}”${backup.wallpaper ? ', and its wallpaper added to your uploads' : ''}. Dumbify stays switched ${store.value.enabled ? 'on' : 'off'}.`,
         confirm: 'Import',
       })
       if (!ok) return
@@ -381,7 +454,7 @@ export function backupSection(store: SettingsStore): HTMLElement {
   resetBtn.addEventListener('click', async () => {
     const ok = await confirmDialog({
       title: 'Reset all settings?',
-      body: 'Themes, fonts and layout go back to their defaults and your wallpaper is removed. This can’t be undone.',
+      body: 'Themes, fonts, layout and wallpaper go back to their defaults. Your uploads stay in the wallpaper gallery. This can’t be undone.',
       confirm: 'Reset',
       danger: true,
     })
@@ -395,7 +468,7 @@ export function backupSection(store: SettingsStore): HTMLElement {
   })
 
   return section('backup', 'download', 'Backup & reset', 'Move your setup to another browser, or start over.',
-    row('Export settings', 'Saves everything to a file, wallpaper included.', exportBtn),
+    row('Export settings', 'Saves your settings to a file, with the wallpaper you’re using.', exportBtn),
     row('Import settings', 'Loads a file you exported earlier.', importBtn),
     row('Reset everything', 'Back to the defaults. Your On/Off switch is kept.', resetBtn),
   )
@@ -409,7 +482,7 @@ export function aboutSection(): HTMLElement {
     h('a', { class: 'btn', href, target: '_blank', rel: 'noopener noreferrer' }, icon(iconName), text)
   const credits = [...new Set(THEMES.map((t) => t.credit).filter(Boolean))].join(', ')
   return section('about', 'info', 'About', `Dumbify ${version} - a calm, text-first YouTube.`,
-    h('div', { class: 'links', style: 'margin-top: 16px' },
+    h('div', { class: 'links about-links' },
       link(`${STORE_URL}/reviews`, 'star', 'Rate Dumbify'),
       link(REPO_URL, 'code', 'Source code'),
       link(`${REPO_URL}/blob/main/PRIVACY.md`, 'shield', 'Privacy'),

@@ -9,6 +9,7 @@ import { getSettings, getWallpaper } from '../core/storage'
 import { normalizeSettings, type DumbifySettings } from '../core/settings'
 import { WallpaperLayer } from '../ui/wallpaper-layer'
 import { h, avatar, switchButton } from '../ui/dom'
+import { UI_LOCALE, shortcutLabel } from '../ui/routes'
 import { brandMark, icon, type IconName } from '../ui/icons'
 
 interface Sample {
@@ -55,7 +56,7 @@ function sidebar(): HTMLElement {
       h('button', { class: 'df-icon-btn df-sidebar-toggle', type: 'button' }, icon('collapse')),
     ),
     h('nav', { class: 'df-nav' },
-      h('button', { class: 'df-nav-link', type: 'button' }, icon('search'), h('span', { class: 'df-nav-label', text: 'Search' }), h('span', { class: 'df-kbd', text: '⌘K' })),
+      h('button', { class: 'df-nav-link', type: 'button' }, icon('search'), h('span', { class: 'df-nav-label', text: 'Search' }), h('span', { class: 'df-kbd', text: shortcutLabel('K') })),
       navLink('home', 'Home', true),
       navLink('subscriptions', 'Subscriptions'),
     ),
@@ -81,7 +82,7 @@ function topbar(page: 'feed' | 'watch'): HTMLElement {
       h('span', { class: 'df-crumbs-label', text: page === 'watch' ? VIDEOS[0].title : 'Home' })),
     h('form', { class: 'df-search' }, icon('search'),
       h('input', { class: 'df-search-input', type: 'search', placeholder: 'Search YouTube', tabindex: '-1' }),
-      h('span', { class: 'df-kbd', text: '⌘K' })),
+      h('span', { class: 'df-kbd', text: shortcutLabel('K') })),
     h('div', { class: 'df-popover-anchor' }, h('button', { class: 'df-icon-btn', type: 'button' }, icon('more'))),
   )
 }
@@ -104,7 +105,7 @@ function row(v: Sample): HTMLElement {
 function feedPage(): HTMLElement[] {
   const hour = new Date().getHours()
   const greeting = hour >= 5 && hour < 12 ? 'Good morning' : hour >= 12 && hour < 18 ? 'Good afternoon' : 'Good evening'
-  const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+  const date = new Date().toLocaleDateString(UI_LOCALE, { weekday: 'long', month: 'long', day: 'numeric' })
   return [
     h('header', { class: 'df-page-head' }, h('div', { class: 'df-page-head-body' },
       h('div', { class: 'df-page-icon' }, icon('home')),

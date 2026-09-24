@@ -1,7 +1,7 @@
 // The reading view on (fixture) youtube.com, driven through the real built extension.
 import { describe, test, before, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { built, launch, WALLPAPER_KEY } from './harness.mjs'
+import { built, launch, uploadKey } from './harness.mjs'
 
 const skip = !built() && 'run `npm run build` first'
 const V2 = { version: 2 }
@@ -140,6 +140,58 @@ describe('reading view', { skip }, () => {
 
     await p.keyboard.press('Control+Backslash')
     await h.until(async () => (await h.getSettings())?.sidebar === 'hidden', { what: 'sidebar hidden' })
+    // ...and back again, the way Notion's does.
+    await p.keyboard.press('Control+Backslash')
+    await h.until(async () => (await h.getSettings())?.sidebar === 'expanded', { what: 'sidebar back' })
+  })
+
+  // A real click, with hit-testing: the scrim once sat above the drawer and swallowed
+  // every click on its links, which a geometry check alone never noticed.
+  for (const [label, viewport, settings] of [
+    ['hidden sidebar, wide window', { width: 1280, height: 860 }, { sidebar: 'hidden' }],
+    ['narrow window', { width: 390, height: 800 }, {}],
+    ['hidden sidebar over a wallpaper', { width: 1280, height: 860 }, { sidebar: 'hidden', wallpaper: { source: 'preset', presetId: 'aurora' }, surface: 'glass' }],
+  ]) {
+    test(`drawer links can be clicked: ${label}`, async () => {
+      await h.setSettings({ ...V2, ...settings })
+      const p = await h.context.newPage()
+      await p.setViewportSize(viewport)
+      await p.goto('https://www.youtube.com/')
+      await p.waitForSelector('.df-drawer-btn')
+      if (settings.sidebar) await p.waitForSelector(`#dumbify-root[data-sidebar="${settings.sidebar}"]`)
+      const sidebar = p.locator('.df-sidebar')
+      // Closed: out of sight and out of the tab order (once any slide-out has finished).
+      await h.until(async () => (await sidebar.evaluate((el) => getComputedStyle(el).visibility)) === 'hidden', { what: 'drawer closed' })
+      await p.click('.df-drawer-btn')
+      await h.until(async () => (await sidebar.evaluate((el) => getComputedStyle(el).visibility)) === 'visible', { what: 'drawer open' })
+      await Promise.all([
+        p.waitForURL(/\/feed\/history/),
+        p.locator('.df-sidebar .df-nav-link', { hasText: 'History' }).click({ timeout: 5000 }),
+      ])
+    })
+  }
+
+  test('closing the drawer with Escape hands focus back to the menu button', async () => {
+    await h.setSettings({ ...V2, sidebar: 'hidden' })
+    const p = await h.youtube('/', { waitFor: '.df-drawer-btn' })
+    await p.click('.df-drawer-btn')
+    await h.until(async () => (await p.evaluate(() => !!document.activeElement?.closest('.df-sidebar'))), { what: 'focus in drawer' })
+    await p.keyboard.press('Escape')
+    await h.until(async () => (await p.evaluate(() => document.activeElement?.classList.contains('df-drawer-btn'))), { what: 'focus back' })
+    assert.equal(await p.locator('.df-drawer-btn').getAttribute('aria-expanded'), 'false')
+  })
+
+  test('Tab never walks into the closed drawer', async () => {
+    await h.setSettings(V2)
+    const p = await h.youtube('/')
+    await p.setViewportSize({ width: 390, height: 800 })
+    await p.waitForSelector('.df-drawer-btn')
+    await h.until(async () => (await p.locator('.df-sidebar').evaluate((el) => getComputedStyle(el).visibility)) === 'hidden', { what: 'drawer closed' })
+    await p.locator('.df-drawer-btn').focus()
+    for (let i = 0; i < 12; i++) {
+      await p.keyboard.press('Shift+Tab')
+      assert.equal(await p.evaluate(() => !!document.activeElement?.closest('.df-sidebar')), false, `step ${i}`)
+    }
   })
 
   test('the sidebar dark mode switch follows changes made elsewhere', async () => {
@@ -165,6 +217,20 @@ describe('reading view', { skip }, () => {
     await h.until(async () => (await rootVar(p, '--df-font-size')) === '21px')
     await p.keyboard.press('Escape')
     assert.equal(await menu.count(), 0)
+  })
+
+  test('view menu: quick clicks on the size stepper are each a step', async () => {
+    await h.setSettings({ ...V2, fontSize: 20 })
+    const p = await h.youtube('/')
+    await p.click('.df-topbar [aria-label="View options"]')
+    const larger = p.locator('.df-menu [aria-label="Larger text"]')
+    await larger.click()
+    await larger.click()
+    await larger.click()
+    assert.equal(await p.locator('.df-stepper-value').textContent(), '23px', 'shown at once')
+    await h.until(async () => (await h.getSettings())?.fontSize === 23, { what: 'three steps saved' })
+    await h.until(async () => (await rootVar(p, '--df-font-size')) === '23px')
+    assert.equal(await p.locator('.df-stepper-value').textContent(), '23px')
   })
 
   test('"All settings" opens one settings tab, reuses it, and leaves YouTube alone', async () => {
@@ -228,6 +294,23 @@ describe('reading view', { skip }, () => {
     const cols = await p.locator('.df-watch-layout').evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)
     assert.equal(cols, 2)
     assert.equal(await p.locator('.df-watch-title').textContent(), 'The quiet genius of Japanese joinery')
+    // No switch that could only empty the column; the video gets the room.
+    assert.equal(await p.locator('.df-comments-btn').isVisible(), false)
+    const video = await p.locator('.df-player').boundingBox()
+    assert.ok(video.width >= 600, `video is ${video.width}px wide at 1280`)
+  })
+
+  test('watch page: widening a narrow window into split fills the side column', async () => {
+    await h.setSettings({ ...V2, watchLayout: 'split' })
+    const p = await h.youtube('/watch?v=vid00000000', { waitFor: '.df-watch-title' })
+    await p.setViewportSize({ width: 900, height: 860 })
+    await p.goto('https://www.youtube.com/watch?v=vid00000000')
+    await p.waitForSelector('.df-watch-title')
+    // Too narrow to sit side by side: the switch is there, and comments wait for it.
+    await p.waitForSelector('.df-comments-btn', { state: 'visible' })
+    assert.equal(await p.locator('.df-comments').count(), 0)
+    await p.setViewportSize({ width: 1280, height: 860 })
+    await p.waitForSelector('.df-watch-side .df-comments')
   })
 
   test('watch page: the description opens automatically when asked', async () => {
@@ -247,7 +330,7 @@ describe('reading view', { skip }, () => {
   })
 
   test('wallpaper: an animated GIF plays, and "Play animation" off swaps in its still poster', async () => {
-    await h.setStored(WALLPAPER_KEY, GIF_RECORD)
+    await h.putUpload(GIF_RECORD)
     await h.setSettings({ ...V2, wallpaper: GIF_REF })
     const p = await h.youtube('/')
     await p.waitForSelector('.df-backdrop .df-wall.df-upload.df-ready')
@@ -274,6 +357,155 @@ describe('reading view', { skip }, () => {
     assert.equal((await h.getSettings()).wallpaper.presetId, 'dusk')
   })
 
+  test('wallpaper: changing settings while a wallpaper loads never blanks it', async () => {
+    // A poster big enough that decoding it takes a moment, as a real one does.
+    const o = await h.options()
+    const poster = await o.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 2400
+      c.height = 1400
+      const x = c.getContext('2d')
+      const d = x.createImageData(c.width, c.height)
+      for (let i = 0; i < d.data.length; i += 4) {
+        d.data[i + 1] = (i * 7919) % 97
+        d.data[i + 2] = 200
+        d.data[i + 3] = 255
+      }
+      x.putImageData(d, 0, 0)
+      return c.toDataURL('image/png')
+    })
+    await o.close()
+    await h.putUpload({ ...GIF_RECORD, posterUrl: poster })
+    await h.setSettings({ ...V2, wallpaper: GIF_REF })
+    const p = await h.youtube('/')
+    await p.waitForSelector('.df-backdrop .df-wall.df-upload.df-ready')
+    // "Play animation" off, and the text size straight after - two writes back to back.
+    await h.sw.evaluate(async (key) => {
+      const { [key]: s } = await chrome.storage.local.get(key)
+      await chrome.storage.local.set({ [key]: { ...s, wallpaperAnimate: false } })
+      await chrome.storage.local.set({ [key]: { ...s, wallpaperAnimate: false, fontSize: 24 } })
+    }, 'dumbify:settings')
+    await h.until(async () => (await rootAttr(p, 'animate')) === 'off' &&
+      (await p.evaluate(() => getComputedStyle(document.getElementById('dumbify-root')).getPropertyValue('--df-font-size').trim())) === '24px',
+    { what: 'both settings applied' })
+    // One wallpaper, ready - the poster - once the crossfade has settled.
+    await h.until(async () => {
+      const walls = await p.locator('.df-backdrop .df-wall').evaluateAll((els) => els.map((el) => el.classList.contains('df-ready')))
+      return walls.length === 1 && walls[0]
+    }, { what: 'the poster, alone and ready', timeout: 6000 })
+  })
+
+  test('wallpaper: a v1 image migrated while its tab is open stays on screen', async () => {
+    await h.sw.evaluate(() => chrome.storage.local.clear())
+    await h.setSettings({
+      enabled: true, fontSize: 20, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+      fontColor: '#1d1d1d', fontColorDark: '#f3f0e8', backgroundImage: GIF_RECORD.posterUrl, bgOpacity: 0.85, theme: 'light',
+    })
+    const p = await h.youtube('/')
+    await p.waitForSelector('.df-backdrop .df-wall.df-ready')
+    // Watch for any moment with no ready wallpaper at all.
+    await p.evaluate(() => {
+      window.blank = 0
+      const check = () => { if (!document.querySelector('.df-backdrop .df-wall.df-ready')) window.blank++ }
+      new MutationObserver(check).observe(document.querySelector('.df-backdrop'), { subtree: true, childList: true, attributes: true })
+    })
+    // Any settings change from the settings page migrates: the image moves into the
+    // gallery, the settings are rewritten without it, and the page makes a thumbnail.
+    const o = await h.options('#layout')
+    await o.locator('.layout-cards .pick-card', { hasText: 'Cards' }).click()
+    await h.until(async () => (await h.getSettings())?.version === 2, { what: 'migrated' })
+    await h.until(async () => (await h.getUploads())[0]?.thumbUrl, { what: 'thumbnail' })
+    await h.until(async () => /^#[0-9a-f]{6}$/.test((await h.getSettings()).wallpaper.average), { what: 'colours' })
+    await h.until(async () => (await rootAttr(p, 'layout')) === 'cards', { what: 'tab updated' })
+    await p.waitForTimeout(600)
+    assert.equal(await p.evaluate(() => window.blank), 0, 'the wallpaper never went away')
+    assert.equal(await p.locator('.df-backdrop .df-wall.df-ready').count(), 1)
+  })
+
+  test('wallpaper: a site that refuses blob: images still shows it', async () => {
+    await h.putUpload(GIF_RECORD)
+    // A blue average, so a wallpaper that failed to load would show as blue, not red.
+    await h.setSettings({ ...V2, wallpaper: { ...GIF_REF, average: '#0000ff' }, wallpaperFade: 0 })
+    const p = await h.context.newPage()
+    const refused = []
+    p.on('console', (m) => { if (/Refused to load/.test(m.text())) refused.push(m.text()) })
+    await p.goto('https://www.youtube.com/?csp=strict')
+    await p.waitForSelector('.df-backdrop .df-wall.df-ready')
+    await p.waitForTimeout(600)
+    // The frame around the panels, where the wallpaper shows: red, from the GIF itself.
+    const png = await p.screenshot({ clip: { x: 2, y: 400, width: 4, height: 4 } })
+    const pixel = await p.evaluate(async (b64) => {
+      const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob())
+      const c = new OffscreenCanvas(1, 1).getContext('2d')
+      c.drawImage(bmp, 0, 0)
+      return [...c.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+    }, png.toString('base64'))
+    assert.ok(pixel[0] > 200 && pixel[2] < 60, `wallpaper pixel ${pixel}`)
+    assert.deepEqual(refused, [])
+  })
+
+  test('wallpaper: a video loop plays on a site that refuses blob: media', async () => {
+    const o = await h.options()
+    const video = await o.evaluate(async () => {
+      const c = document.createElement('canvas')
+      c.width = 320
+      c.height = 180
+      const x = c.getContext('2d')
+      const rec = new MediaRecorder(c.captureStream(20), { mimeType: 'video/webm;codecs=vp8' })
+      const chunks = []
+      rec.ondataavailable = (e) => chunks.push(e.data)
+      let n = 0
+      const tick = setInterval(() => { x.fillStyle = `hsl(${(n++ * 30) % 360} 70% 50%)`; x.fillRect(0, 0, 320, 180) }, 50)
+      rec.start(100)
+      await new Promise((r) => setTimeout(r, 1000))
+      const stopped = new Promise((r) => { rec.onstop = r })
+      rec.stop()
+      await stopped
+      clearInterval(tick)
+      const blob = new Blob(chunks, { type: 'video/webm' })
+      return await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob) })
+    })
+    await o.close()
+    await h.putUpload({ ...GIF_RECORD, id: 'up-e2e-video', kind: 'video', mime: 'video/webm', dataUrl: video, posterUrl: GIF_RECORD.posterUrl })
+    await h.setSettings({ ...V2, wallpaper: { ...GIF_REF, uploadId: 'up-e2e-video', kind: 'video' } })
+    const p = await h.youtube('/?csp=strict')
+    await h.until(async () => p.locator('.df-backdrop video.df-wall.df-ready').evaluate((v) => !v.paused && v.readyState >= 2), { what: 'video playing' })
+  })
+
+  test('panels: a dark tint under a light theme keeps the text readable', async () => {
+    await h.setSettings({
+      ...V2, mode: 'light', lightTheme: 'paper', wallpaper: { source: 'preset', presetId: 'aurora' },
+      surface: 'solid', surfaceTint: '#1e2a44',
+    })
+    const p = await h.youtube('/')
+    await p.waitForSelector('#dumbify-root[data-tone="dark"] .df-item-row')
+    const [title, sheet] = await p.evaluate(() => [
+      getComputedStyle(document.querySelector('.df-item-title')).color,
+      getComputedStyle(document.querySelector('.df-sheet')).backgroundColor,
+    ])
+    const lum = (rgb) => {
+      const [r, g, b] = rgb.match(/[\d.]+/g).slice(0, 3).map((v) => {
+        const c = Number(v) / 255
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const ratio = (lum(title) + 0.05) / (lum(sheet) + 0.05)
+    assert.ok(ratio >= 7, `title ${title} on ${sheet} is ${ratio.toFixed(1)}:1`)
+    // The top bar follows the panels rather than staying paper-cream over navy.
+    const bar = await p.locator('.df-topbar').evaluate((el) => getComputedStyle(el).backgroundColor)
+    assert.ok(lum(bar) < 0.1, `top bar ${bar}`)
+  })
+
+  test('panels: clear panels give text a glow against the picture', async () => {
+    await h.setSettings({ ...V2, wallpaper: { source: 'preset', presetId: 'aurora' }, surface: 'clear' })
+    const p = await h.youtube('/')
+    await p.waitForSelector('#dumbify-root[data-surface="clear"] .df-item-row')
+    const shadow = await p.locator('.df-item-title').first().evaluate((el) => getComputedStyle(el).textShadow)
+    assert.match(shadow, /rgba?\(/)
+    assert.ok(shadow.split('rgba').length >= 3, `a layered glow: ${shadow}`)
+  })
+
   test('a v1 background image still shows before anything has migrated it', async () => {
     await h.sw.evaluate(() => chrome.storage.local.clear())
     await h.sw.evaluate((img) => chrome.storage.local.set({ 'dumbify:settings': {
@@ -285,3 +517,20 @@ describe('reading view', { skip }, () => {
     assert.equal(await rootAttr(p, 'scheme'), 'dark')
   })
 })
+
+describe('reading view in another language', { skip }, () => {
+  let h
+  before(async () => { h = await launch({ locale: 'de-DE' }) })
+  after(async () => { await h?.close() })
+
+  test('dates and counts are written in English, like every other word', async () => {
+    await h.setSettings(V2)
+    const p = await h.youtube('/')
+    const sub = await p.locator('.df-page-sub').first().textContent()
+    assert.match(sub, /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), (January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2} · /)
+    const w = await h.youtube('/watch?v=vid00000000', { waitFor: '.df-watch-title' })
+    const meta = await w.locator('.df-watch-meta-bar').textContent()
+    assert.doesNotMatch(meta, /Aufrufe|Jan\.|Okt\.|Dez\./)
+  })
+})
+

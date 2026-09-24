@@ -261,11 +261,51 @@ body {
   background: color-mix(in srgb, var(--df-surface) 70%, var(--df-sidebar));
 }
 
+.preview-dots {
+  display: flex;
+  gap: 6px;
+}
+
 .preview-chrome i {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--df-text) 18%, transparent);
+}
+
+/* Only a floating preview can be tucked away; see the narrow-window rules. */
+.preview-toggle {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  margin-left: auto;
+  margin-right: -6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--df-text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.preview-toggle:hover {
+  background: var(--df-hover);
+  color: var(--df-text);
+}
+
+.preview-toggle:focus-visible {
+  outline: 2px solid var(--df-focus);
+  outline-offset: 1px;
+}
+
+.preview-toggle .df-icon {
+  width: 15px;
+  height: 15px;
+  transition: transform 160ms ease;
 }
 
 .preview-url {
@@ -407,8 +447,211 @@ body {
 }
 
 .contrast-warning .df-icon {
+  flex: none;
   width: 14px;
   height: 14px;
+}
+
+/* Not a problem, just what changed: said quietly. */
+.contrast-warning.is-info {
+  align-items: flex-start;
+  margin: 10px 0 2px;
+  color: var(--df-text-2);
+}
+
+.contrast-warning.is-info .df-icon {
+  margin-top: 2px;
+}
+
+/* ---- Looks ---- */
+
+.looks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 12px;
+  margin: 12px 0 8px;
+}
+
+.look {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.look-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--t-bg);
+  box-shadow: 0 0 0 1px var(--df-border), 0 1px 3px color-mix(in srgb, var(--df-shadow) 50%, transparent);
+  transition: box-shadow 140ms, transform 140ms;
+}
+
+.look:hover .look-art {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px var(--df-border-strong), 0 8px 20px -8px var(--df-shadow);
+}
+
+.look[aria-pressed="true"] .look-art {
+  box-shadow: 0 0 0 2px var(--df-accent), 0 8px 20px -10px var(--df-shadow);
+}
+
+.look:focus-visible {
+  outline: none;
+}
+
+.look:focus-visible .look-art {
+  outline: 2px solid var(--df-focus);
+  outline-offset: 3px;
+}
+
+.look-art.is-window {
+  background: var(--t-wall);
+  background-size: var(--t-wall-size, auto);
+}
+
+.la-cover {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 34%;
+  background: var(--t-wall);
+  background-size: var(--t-wall-size, auto);
+}
+
+.la-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10% 12%;
+  color: var(--t-text);
+}
+
+.look-art.is-window .la-page {
+  inset: 11% 9%;
+  padding: 8% 10%;
+  border-radius: 6px;
+  background: var(--t-panel);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.look-art.is-cover .la-page {
+  top: 26%;
+  padding-top: 0;
+}
+
+.la-aa {
+  font-size: 19px;
+  line-height: 1.15;
+}
+
+.look-art.is-cover .la-aa {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--t-bg);
+  font-size: 14px;
+}
+
+.la-line {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--t-text) 22%, transparent);
+}
+
+.la-line.la-accent {
+  width: 32%;
+  background: var(--t-accent);
+}
+
+.la-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.la-rows .la-line:nth-child(2) {
+  width: 82%;
+}
+
+.la-rows .la-line:nth-child(3) {
+  width: 64%;
+}
+
+/* A table: each row cut into columns. */
+.la-rows.is-table .la-line {
+  width: 100%;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--t-text) 26%, transparent) 0 52%, transparent 52% 58%,
+    color-mix(in srgb, var(--t-text) 16%, transparent) 58% 78%, transparent 78% 84%,
+    color-mix(in srgb, var(--t-text) 16%, transparent) 84% 100%);
+}
+
+.la-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.la-cards i {
+  height: 18px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--t-text) 12%, transparent);
+}
+
+.look-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.look-name {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.look-note {
+  overflow: hidden;
+  color: var(--df-text-3);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .looks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Four across: eight light themes make two even rows, eleven dark ones never leave one
+   stranded on a row of its own. */
+.theme-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 560px) {
+  .theme-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* ---- Layout cards ---- */
@@ -491,6 +734,10 @@ body {
   height: 4px;
   border-radius: 2px;
   background: color-mix(in srgb, var(--df-text) 30%, transparent);
+}
+
+.watch-art .wa-line-short {
+  width: 60%;
 }
 
 .watch-art .wa-side {
@@ -756,6 +1003,93 @@ body.is-dragging .wall-drop {
   letter-spacing: 0.04em;
 }
 
+/* Your uploads: a tile per file, its delete button in the corner. */
+.uploads {
+  margin-bottom: 4px;
+}
+
+.uploads .group-title {
+  margin-top: 22px;
+}
+
+.group-note {
+  margin-left: 6px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.upload-grid {
+  margin-bottom: 8px;
+}
+
+.upload-tile {
+  position: relative;
+  min-width: 0;
+}
+
+.upload-art {
+  display: grid !important;
+  place-items: center;
+  background: var(--df-surface) center / cover no-repeat;
+  color: var(--df-text-3);
+}
+
+.upload-art .df-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.upload-tile .live-dot {
+  right: auto;
+  left: 7px;
+}
+
+.tile-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(20, 20, 20, 0.62);
+  color: #fff;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.tile-delete .df-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.upload-tile:hover .tile-delete,
+.upload-tile:focus-within .tile-delete {
+  opacity: 1;
+}
+
+.tile-delete:hover {
+  background: #c9303a;
+}
+
+.tile-delete:focus-visible {
+  outline: 2px solid var(--df-focus);
+  outline-offset: 2px;
+}
+
+/* Touch screens have no hover to reveal it. */
+@media (hover: none) {
+  .tile-delete {
+    opacity: 1;
+  }
+}
+
 @keyframes preset-drift {
   from { background-position: 0% 50%; }
   to { background-position: 100% 50%; }
@@ -788,6 +1122,10 @@ kbd {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.about-links {
+  margin-top: 16px;
 }
 
 .credits {
@@ -834,21 +1172,100 @@ dialog.confirm p {
 
 /* ---- Narrower windows ---- */
 
+/* The preview stays beside the settings, and in view, as the window narrows: first the
+   columns tighten, then the section list goes to icons, and below that the preview
+   floats in a corner - where it can be tucked away - rather than scrolling off. */
 @media (max-width: 1320px) {
   .app-body {
-    grid-template-columns: 200px minmax(0, 1fr);
-    grid-template-areas: "nav preview" "nav main";
-    gap: 0 36px;
+    grid-template-columns: 180px minmax(0, 1fr) clamp(290px, 27vw, 360px);
+    gap: 0 32px;
+    padding: 0 24px;
+  }
+
+  .preview-note {
+    display: none;
+  }
+
+  .preview-caption {
+    justify-content: flex-end;
+  }
+}
+
+@media (min-width: 781px) and (max-width: 1100px) {
+  .app-body {
+    grid-template-columns: 44px minmax(0, 1fr) clamp(250px, 28vw, 300px);
+    gap: 0 28px;
+    padding: 0 20px;
+  }
+
+  .nav-item {
+    justify-content: center;
+    width: 40px;
+    padding: 0;
+  }
+
+  .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 1000px) {
+  .app-body {
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-areas: "nav main";
   }
 
   .app-preview {
-    position: static;
-    max-width: 700px;
-    padding-bottom: 0;
+    position: fixed;
+    top: auto;
+    right: 16px;
+    bottom: 16px;
+    z-index: 30;
+    width: min(296px, calc(100vw - 32px));
+    padding: 0;
   }
 
-  .app-main {
-    max-width: 700px;
+  .preview-card {
+    box-shadow: 0 22px 60px -14px rgba(0, 0, 0, 0.38), 0 4px 14px -6px rgba(0, 0, 0, 0.2);
+  }
+
+  .preview-url,
+  .preview-caption {
+    display: none;
+  }
+
+  .preview-toggle {
+    display: inline-flex;
+  }
+
+  .app-preview.is-collapsed {
+    width: auto;
+  }
+
+  .app-preview.is-collapsed .preview-card {
+    border-radius: 999px;
+  }
+
+  .app-preview.is-collapsed .preview-chrome {
+    border-bottom: 0;
+  }
+
+  .app-preview.is-collapsed .preview-viewport,
+  .app-preview.is-collapsed .preview-dots {
+    display: none;
+  }
+
+  .app-preview.is-collapsed .preview-toggle {
+    margin: 0 -4px;
+  }
+
+  .app-preview.is-collapsed .preview-toggle .df-icon {
+    transform: rotate(180deg);
   }
 }
 
@@ -865,8 +1282,13 @@ dialog.confirm p {
 
   .app-body {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "nav" "preview" "main";
+    grid-template-areas: "nav" "main";
     padding: 0 16px;
+  }
+
+  /* Header and the section strip together: land a jumped-to section below both. */
+  .section {
+    scroll-margin-top: 120px;
   }
 
   .app-nav {
@@ -899,5 +1321,12 @@ dialog.confirm p {
   .layout-cards {
     grid-template-columns: 1fr 1fr 1fr;
     gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .font-featured .pick-card-sub,
+  .layout-cards .pick-card-sub {
+    display: none;
   }
 }

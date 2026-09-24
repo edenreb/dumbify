@@ -3,14 +3,30 @@ import { icon, type IconName } from '../ui/icons'
 
 let toastTimer: number | null = null
 
-/** A short message at the bottom of the page. Errors stay a little longer. */
-export function toast(message: string, kind: 'ok' | 'error' = 'ok') {
+export interface ToastAction {
+  label: string
+  run: () => void
+}
+
+/**
+ * A short message at the bottom of the page. Errors, and messages that offer an action
+ * such as Undo, stay longer.
+ */
+export function toast(message: string, kind: 'ok' | 'error' = 'ok', action?: ToastAction) {
   document.querySelector('.toast')?.remove()
   const el = h('div', { class: kind === 'error' ? 'toast is-error' : 'toast', role: kind === 'error' ? 'alert' : 'status' },
-    icon(kind === 'error' ? 'info' : 'check'), message)
+    icon(kind === 'error' ? 'info' : 'check'), h('span', { class: 'toast-text', text: message }))
+  if (action) {
+    const btn = h('button', { class: 'toast-action', type: 'button', text: action.label })
+    btn.addEventListener('click', () => {
+      el.remove()
+      action.run()
+    })
+    el.appendChild(btn)
+  }
   document.body.appendChild(el)
   if (toastTimer !== null) window.clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => el.remove(), kind === 'error' ? 6000 : 2400)
+  toastTimer = window.setTimeout(() => el.remove(), kind === 'error' || action ? 6000 : 2400)
 }
 
 /** The "Saved" indicator in the header. */

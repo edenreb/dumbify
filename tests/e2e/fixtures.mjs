@@ -182,7 +182,19 @@ export function searchPage(query = 'joinery', videos = sampleVideos(10)) {
 }
 
 /** Serves a youtube.com URL from the fixtures above. */
+// ?csp=strict serves the page under a policy that allows images and media from the
+// network and data: URLs - but not blob:, the way a stricter site than YouTube might.
+const STRICT_CSP = "img-src 'self' https: data:; media-src 'self' https: data:"
+
 export function fixtureFor(url) {
+  const f = route(url)
+  if (new URL(url).searchParams.get('csp') === 'strict' && f.contentType === 'text/html') {
+    return { ...f, headers: { 'Content-Security-Policy': STRICT_CSP } }
+  }
+  return f
+}
+
+function route(url) {
   const u = new URL(url)
   if (u.pathname.startsWith('/youtubei/')) return { status: 200, contentType: 'application/json', body: '{}' }
   if (u.pathname === '/' || u.pathname === '') return { status: 200, contentType: 'text/html', body: homePage() }

@@ -160,3 +160,77 @@ test('dataUrlToBlob decodes base64 and keeps the type', async () => {
   assert.equal(dataUrlToBlob('https://example.com/x.gif'), null)
   assert.equal(dataUrlToBlob('data:image/png;base64,***not base64***'), null)
 })
+
+// ---- The gallery of uploads ----
+
+const summaryOf = (id: string, fields: Record<string, unknown> = {}) => ({
+  id, name: `${id}.gif`, kind: 'animated', mime: 'image/gif', width: 800, height: 600,
+  bytes: 1000, addedAt: 1, thumbUrl: 'data:image/webp;base64,UklGRg==', average: '#112233', vibrant: '#AA3344',
+  ...fields,
+})
+
+test('normalizeUploads keeps well-formed entries and drops the rest', async () => {
+  const { normalizeUploads } = await import('../src/core/wallpaper.ts')
+  const list = normalizeUploads([
+    summaryOf('up-a'),
+    summaryOf('up-a', { name: 'duplicate' }),
+    null,
+    { name: 'no id' },
+    summaryOf('up-b', { kind: 'exe', mime: 'text/html<script>', width: -5, average: 'red' }),
+  ])
+  assert.deepEqual(list.map((u) => u.id), ['up-a', 'up-b'])
+  assert.equal(list[0].name, 'up-a.gif', 'the first entry for an id wins')
+  assert.equal(list[0].vibrant, '#aa3344')
+  assert.equal(list[1].kind, 'image')
+  assert.equal(list[1].mime, '')
+  assert.equal(list[1].width, 0)
+  assert.equal(list[1].average, '')
+  assert.deepEqual(normalizeUploads('nope'), [])
+})
+
+test('normalizeUploads only accepts thumbnails that are safe to put in CSS', async () => {
+  const { normalizeUploads } = await import('../src/core/wallpaper.ts')
+  const thumb = (thumbUrl: string) => normalizeUploads([summaryOf('up-a', { thumbUrl })])[0].thumbUrl
+  assert.equal(thumb('data:image/webp;base64,UklGRg=='), 'data:image/webp;base64,UklGRg==')
+  assert.equal(thumb('data:image/jpeg;base64,/9j/4A=='), 'data:image/jpeg;base64,/9j/4A==')
+  assert.equal(thumb('https://example.com/t.webp'), '')
+  assert.equal(thumb('data:image/webp;base64,AAAA") ; background: url("https://x'), '')
+  assert.equal(thumb('data:image/svg+xml;base64,PHN2Zz4='), '')
+  assert.equal(thumb(`data:image/webp;base64,${'A'.repeat(200_000)}`), '', 'nothing that big is a thumbnail')
+})
+
+test('withUpload puts an upload first, once', async () => {
+  const { normalizeUploads, withUpload } = await import('../src/core/wallpaper.ts')
+  const list = normalizeUploads([summaryOf('up-a'), summaryOf('up-b')])
+  assert.deepEqual(withUpload(list, list[1]).map((u) => u.id), ['up-b', 'up-a'])
+  assert.deepEqual(withUpload(list, normalizeUploads([summaryOf('up-c')])[0]).map((u) => u.id), ['up-c', 'up-a', 'up-b'])
+})
+
+test('pruneUploads drops the oldest, sparing the ones to keep', async () => {
+  const { MAX_UPLOADS, normalizeUploads, pruneUploads } = await import('../src/core/wallpaper.ts')
+  const list = normalizeUploads(Array.from({ length: MAX_UPLOADS + 2 }, (_, i) => summaryOf(`up-${i}`)))
+  const last = `up-${MAX_UPLOADS + 1}`
+  const { kept, removed } = pruneUploads(list, new Set([last]))
+  assert.equal(kept.length, MAX_UPLOADS)
+  assert.ok(kept.some((u) => u.id === last), 'kept although oldest')
+  assert.deepEqual(removed.map((u) => u.id), [`up-${MAX_UPLOADS}`, `up-${MAX_UPLOADS - 1}`])
+  assert.deepEqual(pruneUploads(list.slice(0, 2), new Set()).removed, [])
+})
+
+test('uploadBadge names what moves', async () => {
+  const { uploadBadge } = await import('../src/core/wallpaper.ts')
+  assert.equal(uploadBadge({ kind: 'animated', mime: 'image/gif' }), 'GIF')
+  assert.equal(uploadBadge({ kind: 'animated', mime: 'image/webp' }), 'Animated')
+  assert.equal(uploadBadge({ kind: 'video', mime: 'video/mp4' }), 'Video')
+  assert.equal(uploadBadge({ kind: 'image', mime: 'image/webp' }), '')
+})
+
+test('refFromUpload points the settings at an upload, colours and all', async () => {
+  const { normalizeUploads, refFromUpload } = await import('../src/core/wallpaper.ts')
+  const { normalizeWallpaper } = await import('../src/core/settings.ts')
+  const ref = refFromUpload(normalizeUploads([summaryOf('up-a')])[0])
+  assert.deepEqual(normalizeWallpaper(ref), ref, 'already valid as settings')
+  assert.equal(ref.source, 'upload')
+  assert.equal(ref.uploadId, 'up-a')
+  assert.equal(ref.average, '#112233')
+})

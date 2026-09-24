@@ -39,9 +39,12 @@ Dumbify stores your display preferences locally on your device using Chrome's
 extension storage API (`chrome.storage.local`). These preferences comprise: the
 on/off switch; theme, mode and accent colour; font, text size, line spacing and
 text colours; layout choices (feed layout, page width, sidebar, density, corners,
-which video details are shown, watch-page layout); and wallpaper settings,
-including any wallpaper image, animation or video you choose, which is stored as
-you picked it (still images are resized and re-compressed first).
+which video details are shown, watch-page layout); wallpaper settings; and the
+wallpapers you upload - up to six images, animations or videos, each kept as you
+picked it (still images are resized and re-compressed first) with a small
+thumbnail and its main colours. Deleting an upload from the wallpaper gallery
+removes it from storage; resetting your settings leaves your uploads in the
+gallery until you delete them.
 
 So that pages open in your theme without a flash of the default one, Dumbify also
 keeps a small copy of the resulting colours and layout names in the browser's

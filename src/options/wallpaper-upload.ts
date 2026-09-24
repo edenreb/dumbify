@@ -7,14 +7,14 @@
 
 import {
   MAX_EDGE, classifyUpload, dimensionProblem, fitScale, mimeOfDataUrl, newUploadId,
-  type WallpaperRecord,
+  type StillInfo, type WallpaperRecord,
 } from '../core/wallpaper'
-import { paletteFromPixels } from '../core/color'
-import type { WallpaperRef } from '../core/settings'
+import { analyzeUpload } from '../core/analyze'
 
 export interface ProcessedUpload {
   record: WallpaperRecord
-  ref: WallpaperRef
+  /** Its thumbnail and colours, or null if they could not be made. */
+  info: StillInfo | null
   /** The image is too small to fill the window; it has been set up to tile instead. */
   tiled: boolean
 }
@@ -74,16 +74,6 @@ function encodeStill(canvas: HTMLCanvasElement, quality = 0.88): string {
   return hasTransparency(canvas) ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', quality)
 }
 
-function paletteOf(source: CanvasImageSource): { average: string; vibrant: string } {
-  const c = document.createElement('canvas')
-  c.width = 48
-  c.height = 48
-  const ctx = c.getContext('2d', { willReadFrequently: true })
-  if (!ctx) return { average: '', vibrant: '' }
-  ctx.drawImage(source, 0, 0, 48, 48)
-  return paletteFromPixels(ctx.getImageData(0, 0, 48, 48).data)
-}
-
 function once(target: EventTarget, ok: string, fail: string, ms: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')) }, ms)
@@ -115,20 +105,6 @@ function baseRecord(file: File, fields: Partial<WallpaperRecord>): WallpaperReco
   }
 }
 
-function refFor(record: WallpaperRecord, palette: { average: string; vibrant: string }): WallpaperRef {
-  return {
-    source: 'upload',
-    presetId: '',
-    uploadId: record.id,
-    kind: record.kind,
-    name: record.name,
-    width: record.width,
-    height: record.height,
-    average: palette.average,
-    vibrant: palette.vibrant,
-  }
-}
-
 async function processStill(file: File, blob: Blob): Promise<ProcessedUpload> {
   const img = await decodeImage(blob)
   const width = img.naturalWidth
@@ -141,7 +117,7 @@ async function processStill(file: File, blob: Blob): Promise<ProcessedUpload> {
   const record = baseRecord(file, {
     kind: 'image', mime: mimeOfDataUrl(dataUrl), dataUrl, width: canvas.width, height: canvas.height,
   })
-  return { record, ref: refFor(record, paletteOf(canvas)), tiled }
+  return { record, info: await analyzeUpload(record), tiled }
 }
 
 async function processAnimated(file: File, blob: Blob, mime: string): Promise<ProcessedUpload> {
@@ -161,7 +137,7 @@ async function processAnimated(file: File, blob: Blob, mime: string): Promise<Pr
     width,
     height,
   })
-  return { record, ref: refFor(record, paletteOf(poster)), tiled }
+  return { record, info: await analyzeUpload(record), tiled }
 }
 
 async function processVideo(file: File, blob: Blob, mime: string): Promise<ProcessedUpload> {
@@ -195,7 +171,7 @@ async function processVideo(file: File, blob: Blob, mime: string): Promise<Proce
       width,
       height,
     })
-    return { record, ref: refFor(record, paletteOf(poster)), tiled: false }
+    return { record, info: await analyzeUpload(record), tiled: false }
   } finally {
     video.removeAttribute('src')
     video.load()

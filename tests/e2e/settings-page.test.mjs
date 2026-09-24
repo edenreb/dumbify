@@ -2,7 +2,7 @@
 import { describe, test, before, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { built, launch, tinyAnimatedGif, WALLPAPER_KEY } from './harness.mjs'
+import { built, launch, tinyAnimatedGif, uploadKey } from './harness.mjs'
 
 const skip = !built() && 'run `npm run build` first'
 const V2 = { version: 2 }
@@ -73,6 +73,62 @@ describe('settings page', { skip }, () => {
     await h.until(async () => (await o.locator('.nav-item.is-active').textContent()) === 'Wallpaper', { what: 'Wallpaper active' })
   })
 
+  test('the live preview stays in view at every width, floating - and tuckable - when narrow', async () => {
+    const o = await h.options('#typography')
+    const viewport = o.locator('.app-preview .preview-viewport')
+    for (const width of [1440, 1280, 1100, 1024]) {
+      await o.setViewportSize({ width, height: 860 })
+      await o.evaluate(() => document.getElementById('layout').scrollIntoView())
+      await o.waitForTimeout(150)
+      const r = await viewport.boundingBox()
+      assert.ok(r && r.y >= 58 && r.y + r.height <= 860 && r.height > 120, `${width}px: preview at ${JSON.stringify(r)}`)
+    }
+    // Icons only, with the names still there for screen readers and tooltips.
+    const label = await o.locator('.nav-item .nav-label').first().boundingBox()
+    assert.ok(label.width <= 1, 'section names hidden visually at 1024px')
+    assert.equal(await o.locator('.nav-item').first().getAttribute('title'), 'Appearance')
+
+    await o.setViewportSize({ width: 900, height: 860 })
+    await o.evaluate(() => document.getElementById('layout').scrollIntoView())
+    const toggle = o.locator('.preview-toggle')
+    await toggle.waitFor()
+    const r = await viewport.boundingBox()
+    assert.ok(r && r.y + r.height <= 860 && r.x + r.width <= 900, `floating at ${JSON.stringify(r)}`)
+    await toggle.click()
+    assert.equal(await viewport.isVisible(), false)
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false')
+    // Remembered next time.
+    await o.reload()
+    await o.waitForSelector('.app-body')
+    assert.equal(await viewport.isVisible(), false)
+    await o.locator('.preview-toggle').click()
+    assert.equal(await viewport.isVisible(), true)
+  })
+
+  test('a look applies in one click, is marked while it holds, and undoes', async () => {
+    const o = await h.options('#appearance')
+    const paper = o.locator('.look', { hasText: 'Paper' })
+    const terminal = o.locator('.look', { hasText: 'Terminal' })
+    assert.equal(await paper.getAttribute('aria-pressed'), 'true', 'the defaults are the Paper look')
+    await terminal.click()
+    await h.until(async () => {
+      const s = await settings()
+      return s?.font === 'mono' && s.layout === 'table' && s.darkTheme === 'gruvbox' && s.mode === 'dark'
+    }, { what: 'Terminal applied' })
+    assert.equal(await terminal.getAttribute('aria-pressed'), 'true')
+    assert.equal(await paper.getAttribute('aria-pressed'), 'false')
+    // The preview wears it too.
+    const frame = o.frameLocator('.preview-viewport iframe')
+    await h.until(async () => (await frame.locator('#dumbify-root').getAttribute('data-layout')) === 'table', { what: 'preview' })
+
+    await o.locator('.toast .toast-action', { hasText: 'Undo' }).click()
+    await h.until(async () => {
+      const s = await settings()
+      return s?.font === 'sans' && s.layout === 'list' && s.mode === 'light'
+    }, { what: 'undone' })
+    assert.equal(await paper.getAttribute('aria-pressed'), 'true')
+  })
+
   test('choosing a theme saves it, and the page itself wears it', async () => {
     const o = await h.options()
     await o.locator('.seg-opt', { hasText: 'Dark' }).first().click()
@@ -118,23 +174,30 @@ describe('settings page', { skip }, () => {
     const o = await h.options('#wallpaper')
     await upload(o, 'loop.gif', 'image/gif', tinyAnimatedGif(640, 360))
     await o.waitForSelector('.wall-badges .badge-live')
-    const rec = await h.getStored(WALLPAPER_KEY)
+    const s = await settings()
+    const rec = await h.getStored(uploadKey(s.wallpaper.uploadId))
     assert.equal(rec.kind, 'animated')
     assert.equal(rec.mime, 'image/gif')
     assert.match(rec.dataUrl, /^data:image\/gif;base64,R0lGODlh/)
     assert.match(rec.posterUrl, /^data:image\/(webp|png|jpeg)/)
-    const s = await settings()
-    assert.equal(s.wallpaper.uploadId, rec.id)
     assert.equal(s.wallpaper.kind, 'animated')
     assert.match(s.wallpaper.average, /^#[0-9a-f]{6}$/)
     assert.equal(await o.locator('.row', { hasText: 'Play animation' }).isVisible(), true)
+    // Filed in the gallery with a small thumbnail - the popup reads that, never the file.
+    const [summary] = await h.getUploads()
+    assert.equal(summary.id, rec.id)
+    assert.match(summary.thumbUrl, /^data:image\/(webp|jpeg);base64,/)
+    assert.ok(summary.thumbUrl.length < 30000, `thumbnail is ${summary.thumbUrl.length} chars`)
+    await o.waitForSelector('.upload-tile .upload-art[style*="background-image"]')
+    assert.equal(await o.locator('.upload-tile input').isChecked(), true)
+    assert.equal(await o.locator('.upload-tile .live-dot').textContent(), 'GIF')
   })
 
   test('a still image is re-encoded smaller, and has no animation toggle', async () => {
     const o = await h.options('#wallpaper')
     await upload(o, 'photo.png', 'image/png', await png(o, 1600, 900))
     await o.waitForSelector('.wall-badges .badge')
-    const rec = await h.getStored(WALLPAPER_KEY)
+    const rec = await h.getStored(uploadKey((await settings()).wallpaper.uploadId))
     assert.equal(rec.kind, 'image')
     assert.equal(rec.mime, 'image/webp')
     assert.equal(rec.width, 1600)
@@ -160,7 +223,7 @@ describe('settings page', { skip }, () => {
     const o = await h.options('#wallpaper')
     await upload(o, 'loop.webm', 'video/webm', await webm(o))
     await o.waitForSelector('.wall-badges .badge-live', { timeout: 20000 })
-    const rec = await h.getStored(WALLPAPER_KEY)
+    const rec = await h.getStored(uploadKey((await settings()).wallpaper.uploadId))
     assert.equal(rec.kind, 'video')
     assert.equal(rec.mime, 'video/webm')
     assert.match(rec.posterUrl, /^data:image\//)
@@ -203,7 +266,7 @@ describe('settings page', { skip }, () => {
     }, { what: 'focal point' })
   })
 
-  test('built-in wallpapers, None, and Remove', async () => {
+  test('built-in wallpapers and None leave your upload one click away', async () => {
     const o = await h.options('#wallpaper')
     await o.locator('.preset-grid .pick-card', { hasText: 'Aurora Live' }).click()
     await h.until(async () => (await settings())?.wallpaper.presetId === 'aurora-live')
@@ -213,9 +276,77 @@ describe('settings page', { skip }, () => {
 
     await upload(o, 'loop.gif', 'image/gif', tinyAnimatedGif(640, 360))
     await o.waitForSelector('.wall-badges .badge-live')
-    await o.locator('#wallpaper button', { hasText: 'Remove' }).click()
-    await h.until(async () => (await settings())?.wallpaper.source === 'none', { what: 'removed' })
-    await h.until(async () => (await h.getStored(WALLPAPER_KEY)) === null, { what: 'bytes freed' })
+    const id = (await settings()).wallpaper.uploadId
+    await o.locator('.preset-grid .pick-card', { hasText: 'Dusk' }).click()
+    await h.until(async () => (await settings())?.wallpaper.presetId === 'dusk')
+    // Still there, and one click brings it back.
+    assert.equal(await o.locator('.upload-tile input').isChecked(), false)
+    await o.locator('.upload-tile .pick-card').click()
+    await h.until(async () => (await settings())?.wallpaper.uploadId === id, { what: 'upload chosen again' })
+  })
+
+  test('deleting an upload frees its bytes, and Undo brings it back', async () => {
+    const o = await h.options('#wallpaper')
+    await upload(o, 'loop.gif', 'image/gif', tinyAnimatedGif(640, 360))
+    await o.waitForSelector('.upload-tile')
+    const id = (await settings()).wallpaper.uploadId
+    await o.locator('.upload-tile').hover()
+    await o.locator('.upload-tile .tile-delete').click()
+    await h.until(async () => (await settings())?.wallpaper.source === 'none', { what: 'wallpaper gone with it' })
+    await h.until(async () => (await h.getStored(uploadKey(id))) === null, { what: 'bytes freed' })
+    assert.deepEqual(await h.getUploads(), [])
+    await o.waitForSelector('.uploads', { state: 'hidden' })
+
+    await o.locator('.toast .toast-action', { hasText: 'Undo' }).click()
+    await h.until(async () => (await settings())?.wallpaper.uploadId === id, { what: 'restored as the wallpaper' })
+    assert.equal((await h.getStored(uploadKey(id)))?.id, id)
+    await o.waitForSelector('.upload-tile input:checked')
+  })
+
+  test('deleting an upload that is not in use keeps the wallpaper', async () => {
+    const o = await h.options('#wallpaper')
+    await upload(o, 'first.gif', 'image/gif', tinyAnimatedGif(640, 360))
+    await h.until(async () => (await h.getUploads()).length === 1)
+    await upload(o, 'second.gif', 'image/gif', tinyAnimatedGif(480, 320))
+    await h.until(async () => (await h.getUploads()).length === 2)
+    const current = (await settings()).wallpaper.uploadId
+    const tile = o.locator('.upload-tile', { hasText: 'first.gif' })
+    await tile.hover()
+    await tile.locator('.tile-delete').click()
+    await h.until(async () => (await h.getUploads()).length === 1, { what: 'one left' })
+    assert.equal((await settings()).wallpaper.uploadId, current)
+    assert.equal(await o.locator('.upload-tile').count(), 1)
+  })
+
+  test('panels: solid, glass and clear - and a note when text has to change to stay readable', async () => {
+    await h.setSettings({ ...V2, mode: 'light', lightTheme: 'paper', wallpaper: { source: 'preset', presetId: 'aurora' } })
+    const o = await h.options('#wallpaper')
+    const panels = o.locator('#wallpaper')
+    const opacity = panels.locator('.row', { hasText: 'Opacity' })
+    // Frosted glass is the default, and the only style with an opacity.
+    assert.equal(await opacity.isVisible(), true)
+    await panels.locator('.seg-opt', { hasText: 'Solid' }).click()
+    await h.until(async () => (await settings())?.surface === 'solid')
+    assert.equal(await opacity.isVisible(), false, 'solid is opaque')
+    const note = panels.locator('.contrast-warning.is-info')
+    assert.equal(await note.isVisible(), false)
+
+    // A navy tint under a light theme: the text turns light, and the page says so.
+    await panels.locator('.row', { hasText: 'Tint' }).locator('input[type="color"]').evaluate((el) => {
+      el.value = '#1e2a44'
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await h.until(async () => (await settings())?.surfaceTint === '#1e2a44', { what: 'tint saved' })
+    await note.waitFor()
+    assert.match(await note.textContent(), /light ink/)
+    // The preview wears it too.
+    const frame = o.frameLocator('.preview-viewport iframe')
+    await h.until(async () => (await frame.locator('#dumbify-root').getAttribute('data-tone')) === 'dark', { what: 'preview on dark panels' })
+
+    await panels.locator('.seg-opt', { hasText: 'Clear' }).click()
+    await h.until(async () => (await settings())?.surface === 'clear')
+    assert.match(await note.textContent(), /right on the wallpaper/)
   })
 
   test('export and import bring everything back, wallpaper included', async () => {
@@ -229,17 +360,28 @@ describe('settings page', { skip }, () => {
     const file = readFileSync(await download.path(), 'utf8')
     assert.equal(JSON.parse(file).wallpaper.mime, 'image/gif')
 
+    // A fresh browser, where Dumbify happens to be switched off.
     await h.sw.evaluate(() => chrome.storage.local.clear())
+    await h.setSettings({ version: 2, enabled: false })
+    await o.reload()
     await o.locator('#backup input[type="file"]').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(file) })
     await o.locator('dialog.confirm button', { hasText: 'Import' }).click()
     await h.until(async () => (await settings())?.layout === 'table', { what: 'imported' })
     const after = await settings()
-    assert.deepEqual(after, before)
-    assert.equal((await h.getStored(WALLPAPER_KEY)).id, before.wallpaper.uploadId)
+    assert.equal(after.enabled, false, 'importing a look does not flip the switch')
+    assert.deepEqual({ ...after, enabled: true }, before)
+    assert.equal((await h.getStored(uploadKey(before.wallpaper.uploadId))).id, before.wallpaper.uploadId)
+    // The backup carries no thumbnail; the page makes one for the gallery.
+    await h.until(async () => (await h.getUploads())[0]?.thumbUrl?.startsWith('data:image/'), { what: 'thumbnail made' })
   })
 
-  test('reset asks first, then restores defaults but keeps the switch', async () => {
+  test('reset asks first, then restores defaults but keeps the switch and your uploads', async () => {
     await h.patchSettings({ layout: 'cards', mode: 'dark', enabled: false })
+    await h.putUpload({
+      id: 'up-kept', name: 'kept.gif', mime: 'image/gif', kind: 'animated',
+      dataUrl: `data:image/gif;base64,${tinyAnimatedGif(320, 240).toString('base64')}`, posterUrl: '',
+      width: 320, height: 240, bytes: 100, addedAt: 1,
+    })
     const o = await h.options('#backup')
     await o.locator('#backup button', { hasText: 'Reset' }).click()
     await o.locator('dialog.confirm button', { hasText: 'Cancel' }).click()
@@ -250,6 +392,7 @@ describe('settings page', { skip }, () => {
     const s = await settings()
     assert.equal(s.mode, 'light')
     assert.equal(s.enabled, false)
+    assert.deepEqual((await h.getUploads()).map((u) => u.id), ['up-kept'])
   })
 
   test('the master switch turns the reading view off and back on', async () => {

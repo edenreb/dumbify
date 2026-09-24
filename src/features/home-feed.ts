@@ -6,6 +6,7 @@ import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
 import { navigateTo, linkTo } from '../core/PageManager'
 import { wantsNewTab } from '../core/links'
 import { h, avatar } from '../ui/dom'
+import { UI_LOCALE } from '../ui/routes'
 import { icon, type IconName } from '../ui/icons'
 import { setCrumbs } from './shell'
 
@@ -95,7 +96,7 @@ function pageInfo(nav: NavigationState): PageInfo | null {
       return {
         icon: 'home',
         title: greeting(),
-        sub: `${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} · Recommended for you`,
+        sub: `${new Date().toLocaleDateString(UI_LOCALE, { weekday: 'long', month: 'long', day: 'numeric' })} · Recommended for you`,
       }
     case 'subscriptions':
       return { icon: 'subscriptions', title: 'Subscriptions', sub: 'The latest from channels you follow' }

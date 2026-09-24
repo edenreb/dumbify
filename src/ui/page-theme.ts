@@ -23,7 +23,8 @@ export function paintFromCache() {
 }
 
 export function themePage(s: DumbifySettings): Appearance {
-  const a = computeAppearance(s, systemPrefersDark())
+  // The page itself floats over no wallpaper: the theme's own colours, never a panel's.
+  const a = computeAppearance(s, systemPrefersDark(), { plain: true })
   applyAppearance(document.documentElement, a)
   try {
     localStorage.setItem(CACHE, JSON.stringify({ vars: a.vars, attrs: a.attrs }))

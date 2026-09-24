@@ -79,10 +79,17 @@ function narrow(): boolean {
   return window.matchMedia('(max-width: 860px)').matches
 }
 
+// Ctrl/Cmd+\ works both ways, as in Notion: a wide window flips between the full
+// sidebar and hidden; a narrow one, which only has the drawer, opens and closes that.
 function toggleSidebar() {
-  if (narrow() || sidebarMode === 'hidden') {
+  if (narrow()) {
     if (isDrawerOpen()) closeDrawer()
     else openDrawer()
+    return
+  }
+  if (sidebarMode === 'hidden') {
+    closeDrawer()
+    save({ sidebar: 'expanded' })
     return
   }
   save({ sidebar: 'hidden' })
@@ -165,7 +172,10 @@ function buildSidebar() {
 
 function buildTopbar() {
   if (!topbar) return
-  const drawerBtn = h('button', { class: 'df-icon-btn df-drawer-btn', type: 'button', 'aria-label': 'Open navigation', onclick: () => openDrawer() }, icon('menu'))
+  const drawerBtn = h('button', {
+    class: 'df-icon-btn df-drawer-btn', type: 'button', 'aria-label': 'Open navigation',
+    'aria-expanded': 'false', onclick: () => openDrawer(),
+  }, icon('menu'))
 
   crumbIcon = h('span', null, icon('home'))
   crumbLabel = h('span', { class: 'df-crumbs-label' })

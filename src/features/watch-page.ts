@@ -27,6 +27,7 @@ import {
 import type { Video } from '../types'
 import { navigateTo, linkTo } from '../core/PageManager'
 import { h, avatar } from '../ui/dom'
+import { UI_LOCALE } from '../ui/routes'
 import { icon } from '../ui/icons'
 import { setCrumbs } from './shell'
 
@@ -1232,7 +1233,7 @@ function formatPublished(published: string): string {
   const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(published)
   const d = ymd ? new Date(+ymd[1], +ymd[2] - 1, +ymd[3]) : new Date(published)
   if (isNaN(d.getTime())) return published
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString(UI_LOCALE, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function buildWatchPage(nav: NavigationState) {
@@ -1333,7 +1334,7 @@ function buildWatchPage(nav: NavigationState) {
   const parts: string[] = []
   if (data.video.views) {
     const num = parseInt(data.video.views.replace(/[^0-9]/g, ''), 10)
-    parts.push(isNaN(num) ? data.video.views : `${num.toLocaleString()} views`)
+    parts.push(isNaN(num) ? data.video.views : `${num.toLocaleString(UI_LOCALE)} views`)
   }
   if (data.video.published) parts.push(formatPublished(data.video.published))
   if (parts.length) metaBar.appendChild(h('span', { class: 'df-watch-meta-item', text: parts.join(' · ') }))
@@ -1350,7 +1351,7 @@ function buildWatchPage(nav: NavigationState) {
   saveBtn.onclick = () => toggleSavePicker(saveBtn, data.video.id)
   actions.appendChild(saveBtn)
 
-  const commentsBtn = h('button', { class: 'df-btn df-watch-action', type: 'button', 'aria-expanded': 'false' })
+  const commentsBtn = h('button', { class: 'df-btn df-watch-action df-comments-btn', type: 'button', 'aria-expanded': 'false' })
   commentsBtnEl = commentsBtn
   commentsBtn.onclick = () => toggleComments()
   actions.appendChild(commentsBtn)
@@ -1384,7 +1385,7 @@ function buildWatchPage(nav: NavigationState) {
   // the page opens in it or is switched to it - not on every later change, which would
   // reopen comments the reader had just closed.
   let prevLayout: string | null = null
-  unsubWatchAppearance = onAppearance((s) => {
+  const offAppearance = onAppearance((s) => {
     const first = prevLayout === null
     const becameSplit = s.watchLayout === 'split' && prevLayout !== 'split'
     prevLayout = s.watchLayout
@@ -1394,6 +1395,15 @@ function buildWatchPage(nav: NavigationState) {
     }
     if (becameSplit && !commentsOpen && sideBySide()) toggleComments()
   })
+  // Beside the video the comments have no switch (it would only empty the column), so a
+  // window widened into split's range fills the column the same way.
+  const wide = window.matchMedia('(min-width: 1100px)')
+  const onWide = () => { if (sideBySide() && !commentsOpen) toggleComments() }
+  wide.addEventListener('change', onWide)
+  unsubWatchAppearance = () => {
+    offAppearance()
+    wide.removeEventListener('change', onWide)
+  }
 
   if (DEBUG) logLikeDiagnostics()
 }

@@ -53,12 +53,12 @@ async function main() {
   const navLinks = new Map<string, HTMLAnchorElement>()
   const nav = h('nav', { class: 'app-nav', 'aria-label': 'Settings sections' })
   for (const s of SECTIONS) {
-    const a = h('a', { class: 'nav-item', href: `#${s.id}` }, icon(s.icon), s.label)
+    const a = h('a', { class: 'nav-item', href: `#${s.id}`, title: s.label }, icon(s.icon), h('span', { class: 'nav-label', text: s.label }))
     navLinks.set(s.id, a)
     nav.appendChild(a)
   }
   nav.appendChild(h('div', { class: 'nav-foot' },
-    h('a', { class: 'nav-item', href: 'https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf/reviews', target: '_blank', rel: 'noopener noreferrer' }, icon('star'), 'Rate Dumbify'),
+    h('a', { class: 'nav-item', href: 'https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf/reviews', target: '_blank', rel: 'noopener noreferrer', title: 'Rate Dumbify' }, icon('star'), h('span', { class: 'nav-label', text: 'Rate Dumbify' })),
   ))
 
   const preview = createPreview(store)

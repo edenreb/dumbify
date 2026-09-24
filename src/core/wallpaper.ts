@@ -1,6 +1,9 @@
 // Wallpaper file handling that needs no DOM: recognising what a file really is, whether
-// an image is animated, and the size rules. The canvas work (resizing, posters, palette)
-// lives with the settings page, which is the only place files are ever read.
+// an image is animated, the size rules, and the gallery of uploads. The canvas work
+// (resizing, posters) lives with the settings page, which is the only place files are
+// ever read; thumbnails and colours are made in analyze.ts.
+
+import type { WallpaperRef } from './settings.ts'
 
 /** An uploaded wallpaper, stored under its own key - see storage.ts for why. */
 export interface WallpaperRecord {
@@ -261,5 +264,137 @@ export function dataUrlToBlob(dataUrl: string): Blob | null {
     return new Blob([bytes as BlobPart], { type: mime })
   } catch {
     return null
+  }
+}
+
+// ---- The gallery of uploads ----
+
+/** Uploads kept at once. A new one past this makes room by dropping the oldest. */
+export const MAX_UPLOADS = 6
+/** A thumbnail is a few KB; anything this big is not one. */
+const MAX_THUMB_CHARS = 150_000
+const THUMB_URL = /^data:image\/(?:webp|png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/
+const HEX = /^#[0-9a-f]{6}$/i
+
+/** "GIF", "Video" and so on: what a gallery tile says an upload is. */
+export function uploadBadge(u: { kind: UploadKind; mime: string }): string {
+  if (u.kind === 'video') return 'Video'
+  if (u.kind === 'animated') return u.mime === 'image/gif' ? 'GIF' : 'Animated'
+  return ''
+}
+
+/**
+ * What the gallery, the popup and a page's first paint need to know about an upload,
+ * without its bytes. All of them live in one small list, so reading it is cheap anywhere.
+ */
+export interface UploadSummary {
+  id: string
+  name: string
+  kind: UploadKind
+  mime: string
+  width: number
+  height: number
+  /** Size of the file as picked. */
+  bytes: number
+  addedAt: number
+  /** A small still for galleries and the popup. '' until one has been made. */
+  thumbUrl: string
+  average: string
+  vibrant: string
+}
+
+/** What analysing an upload's still frame gives: see analyze.ts. */
+export interface StillInfo {
+  thumbUrl: string
+  average: string
+  vibrant: string
+  width: number
+  height: number
+}
+
+export function summarize(record: WallpaperRecord, info: Partial<StillInfo> | null = null): UploadSummary {
+  return normalizeUploads([{
+    id: record.id,
+    name: record.name,
+    kind: record.kind,
+    mime: record.mime,
+    width: record.width || info?.width || 0,
+    height: record.height || info?.height || 0,
+    bytes: record.bytes,
+    addedAt: record.addedAt,
+    thumbUrl: info?.thumbUrl ?? '',
+    average: info?.average ?? '',
+    vibrant: info?.vibrant ?? '',
+  }])[0]
+}
+
+function count(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0
+}
+
+function color(v: unknown): string {
+  return typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : ''
+}
+
+/** The stored list, validated: every entry well formed, no id twice. */
+export function normalizeUploads(value: unknown): UploadSummary[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const out: UploadSummary[] = []
+  for (const v of value) {
+    if (typeof v !== 'object' || v === null) continue
+    const r = v as Record<string, unknown>
+    const id = typeof r.id === 'string' ? r.id.trim().slice(0, 80) : ''
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const thumb = typeof r.thumbUrl === 'string' && r.thumbUrl.length <= MAX_THUMB_CHARS && THUMB_URL.test(r.thumbUrl) ? r.thumbUrl : ''
+    out.push({
+      id,
+      name: typeof r.name === 'string' ? r.name.slice(0, 120) : '',
+      kind: r.kind === 'animated' || r.kind === 'video' ? r.kind : 'image',
+      mime: typeof r.mime === 'string' && /^[a-z]+\/[a-z0-9.+-]{1,40}$/.test(r.mime) ? r.mime : '',
+      width: count(r.width),
+      height: count(r.height),
+      bytes: count(r.bytes),
+      addedAt: count(r.addedAt),
+      thumbUrl: thumb,
+      average: color(r.average),
+      vibrant: color(r.vibrant),
+    })
+  }
+  return out
+}
+
+/** Adds an upload at the front of the list (newest first), replacing any older entry for it. */
+export function withUpload(list: UploadSummary[], upload: UploadSummary): UploadSummary[] {
+  return [upload, ...list.filter((u) => u.id !== upload.id)]
+}
+
+/**
+ * Trims a list to MAX_UPLOADS by dropping the oldest entries - never one in `keep`, such
+ * as the wallpaper in use.
+ */
+export function pruneUploads(list: UploadSummary[], keep: ReadonlySet<string>): { kept: UploadSummary[]; removed: UploadSummary[] } {
+  const kept = [...list]
+  const removed: UploadSummary[] = []
+  for (let i = kept.length - 1; i >= 0 && kept.length > MAX_UPLOADS; i--) {
+    if (keep.has(kept[i].id)) continue
+    removed.push(...kept.splice(i, 1))
+  }
+  return { kept, removed }
+}
+
+/** The settings' reference to an upload in the gallery. */
+export function refFromUpload(u: UploadSummary): WallpaperRef {
+  return {
+    source: 'upload',
+    presetId: '',
+    uploadId: u.id,
+    kind: u.kind,
+    name: u.name,
+    width: u.width,
+    height: u.height,
+    average: u.average,
+    vibrant: u.vibrant,
   }
 }

@@ -1,8 +1,17 @@
 import { WALLPAPER_PRESETS, getPreset, type WallpaperPreset } from '../core/themes'
 import { NO_WALLPAPER, type DumbifySettings, type WallpaperRef } from '../core/settings'
-import { clearStoredWallpaper, getWallpaper, onWallpaperChange, saveWallpaper } from '../core/storage'
-import { wallpaperMoves, wallpaperShowing, prefersReducedMotion } from '../core/appearance'
-import { dataUrlToBlob, formatBytes, type WallpaperRecord } from '../core/wallpaper'
+import {
+  addUpload, completeUploads, deleteUpload, getUploads, getWallpaper, onUploadChange, onUploadsChange,
+} from '../core/storage'
+import { analyzeUpload } from '../core/analyze'
+import {
+  computeAppearance, prefersReducedMotion, systemPrefersDark, wallpaperMoves, wallpaperShowing,
+} from '../core/appearance'
+import {
+  dataUrlToBlob, dimensionProblem, formatBytes, refFromUpload, uploadBadge,
+  type UploadSummary, type WallpaperRecord,
+} from '../core/wallpaper'
+import { isDark } from '../core/color'
 import type { SettingsStore } from '../ui/store'
 import { h } from '../ui/dom'
 import { icon } from '../ui/icons'
@@ -42,6 +51,12 @@ class Stage {
       h('div', { class: 'wall-drop', 'aria-hidden': 'true' }, icon('upload'), 'Drop to use as your wallpaper'))
     this.el.addEventListener('click', (e) => this.pick(e))
     this.el.addEventListener('keydown', (e) => this.nudge(e))
+  }
+
+  /** The stored bytes changed under the same id: read them again on the next render. */
+  forget() {
+    this.record = null
+    this.mediaKey = ''
   }
 
   setBusy(text: string | null) {
@@ -111,7 +126,7 @@ class Stage {
     const rec = this.record
     if (!rec) {
       this.setMedia(null, '')
-      this.badges.replaceChildren(h('span', { class: 'badge', text: 'Wallpaper file missing - upload it again' }))
+      this.badges.replaceChildren(h('span', { class: 'badge', text: 'This file is no longer stored - upload it again' }))
       return
     }
     const still = !s.wallpaperAnimate && !!rec.posterUrl
@@ -166,6 +181,112 @@ class Stage {
   }
 }
 
+/** Fit for a wallpaper switched to: a small image tiles, and a video can't. */
+function fitFor(u: { kind: string; width: number; height: number }, s: S): S['wallpaperFit'] {
+  if (u.kind !== 'video' && u.width && u.height && dimensionProblem(u.width, u.height, false)) return 'tile'
+  return s.wallpaperFit === 'tile' ? 'fill' : s.wallpaperFit
+}
+
+/**
+ * Your own uploads, newest first: pick one again, or delete it for good. Choosing a
+ * built-in wallpaper no longer strands an upload - it waits here, one click away, until
+ * you delete it.
+ */
+function uploadGallery(store: SettingsStore, focusAfterDelete: () => HTMLElement | null): HTMLElement {
+  const grid = h('div', { class: 'card-group preset-grid upload-grid', role: 'radiogroup', 'aria-label': 'Your uploads' })
+  const usage = h('span', { class: 'group-note' })
+  const wrap = h('div', { class: 'uploads', hidden: true }, groupTitle('Your uploads', usage), grid)
+  let uploads: UploadSummary[] = []
+  const inputs = new Map<string, HTMLInputElement>()
+
+  const pick = (u: UploadSummary) => void store.commit({
+    wallpaper: refFromUpload(u),
+    wallpaperEnabled: true,
+    wallpaperFit: fitFor(u, store.value),
+  })
+
+  const remove = async (u: UploadSummary) => {
+    const name = u.name || 'your upload'
+    const refocus = grid.contains(document.activeElement)
+    const record = await getWallpaper(refFromUpload(u)).catch(() => null)
+    const wasCurrent = store.value.wallpaper.source === 'upload' && store.value.wallpaper.uploadId === u.id
+    try {
+      store.replace(await deleteUpload(u.id))
+    } catch (err) {
+      toast(err instanceof Error ? err.message : `Couldn’t delete ${name}`, 'error')
+      return
+    }
+    if (refocus) focusAfterDelete()?.focus()
+    // Deleting is instant and final in storage, so it is undoable here instead of asking
+    // first: the bytes are still in hand for a few seconds.
+    toast(`Deleted “${name}”`, 'ok', record ? {
+      label: 'Undo',
+      run: () => {
+        addUpload(record, u, wasCurrent ? {} : undefined)
+          .then(({ settings }) => store.replace(settings))
+          .catch((err) => toast(err instanceof Error ? err.message : 'Couldn’t restore it', 'error'))
+      },
+    } : undefined)
+  }
+
+  const tile = (u: UploadSummary): HTMLElement => {
+    const name = u.name || 'Untitled'
+    const input = h('input', { type: 'radio', name: 'upload-pick', value: u.id, class: 'sr-only' })
+    input.addEventListener('change', () => { if (input.checked) pick(u) })
+    inputs.set(u.id, input)
+    const art = h('span', { class: 'art upload-art', 'aria-hidden': 'true' })
+    if (u.thumbUrl) art.style.backgroundImage = `url("${u.thumbUrl}")`
+    else {
+      if (u.average) art.style.backgroundColor = u.average
+      art.appendChild(icon(u.kind === 'video' ? 'film' : 'image'))
+    }
+    const badge = uploadBadge(u)
+    const details = [u.width && u.height ? `${u.width}×${u.height}` : '', u.bytes ? formatBytes(u.bytes) : ''].filter(Boolean).join(' · ')
+    const label = h('label', { class: 'pick-card', title: details ? `${name} · ${details}` : name },
+      input,
+      art,
+      badge ? h('span', { class: 'live-dot', text: badge.toUpperCase() }) : null,
+      h('span', { class: 'pick-card-label' },
+        h('span', { class: 'pick-card-name', text: name }),
+        h('span', { class: 'pick-card-check', 'aria-hidden': 'true' }, icon('check'))),
+    )
+    const del = h('button', { class: 'tile-delete', type: 'button', 'aria-label': `Delete ${name}`, title: 'Delete' }, icon('trash'))
+    del.addEventListener('click', () => void remove(u))
+    return h('div', { class: 'upload-tile' }, label, del)
+  }
+
+  const mark = (s: S) => {
+    const id = s.wallpaper.source === 'upload' ? s.wallpaper.uploadId : ''
+    for (const [key, input] of inputs) input.checked = key === id
+  }
+
+  // An upload can arrive without a thumbnail - migrated from v1 by a tab after this page
+  // opened, or restored from a backup. Make it here, once per upload.
+  const tried = new Set<string>()
+  const complete = (list: UploadSummary[]) => {
+    const missing = list.filter((u) => !u.thumbUrl && !tried.has(u.id))
+    if (!missing.length) return
+    for (const u of missing) tried.add(u.id)
+    void completeUploads(analyzeUpload).catch(() => {})
+  }
+
+  const draw = (list: UploadSummary[]) => {
+    uploads = list
+    complete(list)
+    inputs.clear()
+    wrap.hidden = uploads.length === 0
+    const total = uploads.reduce((n, u) => n + u.bytes, 0)
+    usage.textContent = uploads.length ? `${uploads.length} · ${formatBytes(total)}` : ''
+    grid.replaceChildren(...uploads.map(tile))
+    mark(store.value)
+  }
+
+  getUploads().then(draw).catch(() => {})
+  onUploadsChange(draw)
+  store.subscribe(mark)
+  return wrap
+}
+
 function presetArt(p: WallpaperPreset): HTMLElement {
   const art = h('span', { class: 'art preset-art', 'aria-hidden': 'true' })
   art.style.background = p.css
@@ -211,16 +332,18 @@ export function wallpaperSection(store: SettingsStore): HTMLElement {
     showError(null)
     stage.setBusy(/video/.test(file.type) ? 'Preparing your video…' : 'Preparing your wallpaper…')
     try {
-      const { record, ref, tiled } = await processUpload(file)
+      const { record, info, tiled } = await processUpload(file)
       const s = store.value
-      const saved = await saveWallpaper(record, ref, {
+      const { settings, removed } = await addUpload(record, info, {
         wallpaperEnabled: true,
         wallpaperFocusX: 50,
         wallpaperFocusY: 50,
         wallpaperFit: tiled ? 'tile' : s.wallpaperFit === 'tile' ? 'fill' : s.wallpaperFit,
       })
-      store.replace(saved)
-      toast(tiled ? 'Small image - set to tile so it fills the window' : `Wallpaper set${record.kind !== 'image' ? ' - it’s animated' : ''}`)
+      store.replace(settings)
+      const message = tiled ? 'Small image - set to tile so it fills the window' : `Wallpaper set${record.kind !== 'image' ? ' - it’s animated' : ''}`
+      // The gallery keeps a handful; say so when one had to go to make room.
+      toast(removed.length ? `${message}. Your oldest upload, “${removed[0].name || 'untitled'}”, made room for it.` : message)
     } catch (err) {
       showError(err instanceof Error ? err.message : 'That file couldn’t be used.')
     } finally {
@@ -236,15 +359,6 @@ export function wallpaperSection(store: SettingsStore): HTMLElement {
     if (f) void useFile(f)
   })
   const uploadBtn = h('label', { class: 'btn btn-primary upload-btn' }, icon('upload'), 'Upload…', file)
-  const removeBtn = h('button', { class: 'btn', type: 'button' }, icon('trash'), 'Remove')
-  removeBtn.addEventListener('click', async () => {
-    const hadUpload = store.value.wallpaper.source === 'upload'
-    if (await store.commit({ wallpaper: { ...NO_WALLPAPER } })) {
-      if (hadUpload) await clearStoredWallpaper().catch(() => {})
-      toast('Wallpaper removed')
-    }
-  })
-  store.subscribe((s) => { removeBtn.hidden = s.wallpaper.source === 'none' })
 
   // Drop anywhere on the page, paste anywhere on the page.
   let depth = 0
@@ -282,8 +396,13 @@ export function wallpaperSection(store: SettingsStore): HTMLElement {
   })
 
   store.subscribe((s) => void stage.render(s))
-  // Another tab replacing the upload keeps the same kind of reference; redraw anyway.
-  onWallpaperChange(() => void stage.render(store.value))
+  // The bytes behind the current upload stored again (an import) or deleted elsewhere.
+  onUploadChange((id) => {
+    const ref = store.value.wallpaper
+    if (ref.source !== 'upload' || ref.uploadId !== id) return
+    stage.forget()
+    void stage.render(store.value)
+  })
 
   const moving = (s: S) => wallpaperMoves(s)
   const windowed = (s: S) => s.wallpaper.source !== 'none' && s.wallpaperPlacement === 'window'
@@ -313,25 +432,39 @@ export function wallpaperSection(store: SettingsStore): HTMLElement {
     if (tile) tile.disabled = s.wallpaper.kind === 'video'
   })
 
+  // What text on the panels will sit on, and what had to change to keep it readable.
+  const legibility = h('div', { class: 'contrast-warning is-info', role: 'status' })
+  store.subscribe((s) => {
+    const p = computeAppearance(s, systemPrefersDark()).panels
+    let msg = ''
+    if (p && s.surface === 'clear') {
+      msg = 'Text sits right on the wallpaper, with a soft glow. If parts of it are hard to read, raise Fade or use Frosted glass.'
+    } else if (p?.inkChanged) {
+      msg = `Text switches to a ${isDark(p.ink) ? 'dark' : 'light'} ink here, to stay readable on these panels.`
+    }
+    legibility.replaceChildren(...(msg ? [icon('info'), h('span', { text: msg })] : []))
+    legibility.hidden = !msg
+  })
+
   const panels = h('div', null,
     groupTitle('Panels over the wallpaper'),
-    row('Style', 'Clear lets the wallpaper show straight through behind the text.', segmented(store, {
+    row('Style', 'Frosted glass shows the wallpaper through, softly. Clear takes the panels away entirely.', segmented(store, {
       label: 'Panel style',
       options: [
-        { value: 'solid', label: 'Solid' },
-        { value: 'glass', label: 'Frosted glass' },
-        { value: 'clear', label: 'Clear' },
+        { value: 'solid', label: 'Solid', hint: 'Opaque panels' },
+        { value: 'glass', label: 'Frosted glass', hint: 'See-through, blurred' },
+        { value: 'clear', label: 'Clear', hint: 'No panels' },
       ],
       get: (s) => s.surface,
       set: (v) => ({ surface: v }),
     })),
     (() => {
-      const r = row('Opacity', 'How much of the wallpaper shows through.', slider(store, {
-        label: 'Panel opacity', min: 0, max: 1, step: 0.05,
+      const r = row('Opacity', 'Lower lets more of the wallpaper through.', slider(store, {
+        label: 'Panel opacity', min: 0.2, max: 1, step: 0.05,
         get: (s) => s.surfaceOpacity, set: (v) => ({ surfaceOpacity: v }),
         format: (v) => `${Math.round(v * 100)}%`,
       }))
-      showWhen(r, store, (s) => s.surface !== 'clear')
+      showWhen(r, store, (s) => s.surface === 'glass')
       return r
     })(),
     (() => {
@@ -344,7 +477,7 @@ export function wallpaperSection(store: SettingsStore): HTMLElement {
       return r
     })(),
     (() => {
-      const r = row('Tint', 'Colour the panels. Theme uses the page colour.', colorChoice(store, {
+      const r = row('Tint', 'Colour the panels. Theme uses the page colour; text adjusts to stay readable.', colorChoice(store, {
         label: 'Panel tint',
         get: (s) => s.surfaceTint,
         set: (v) => ({ surfaceTint: v }),
@@ -353,6 +486,7 @@ export function wallpaperSection(store: SettingsStore): HTMLElement {
       showWhen(r, store, (s) => s.surface !== 'clear')
       return r
     })(),
+    legibility,
   )
   showWhen(panels, store, windowed)
 
@@ -389,12 +523,19 @@ export function wallpaperSection(store: SettingsStore): HTMLElement {
     status.textContent = s.wallpaper.source !== 'none' && !wallpaperShowing(s) ? 'Hidden - switch Show wallpaper back on below.' : 'JPG, PNG, WebP, GIF, MP4 or WebM'
   })
 
+  const builtIn = presetGallery(store)
+  const uploads = uploadGallery(store, () =>
+    uploads.querySelector<HTMLInputElement>('input:checked') ??
+    uploads.querySelector<HTMLInputElement>('.upload-tile input') ??
+    builtIn.querySelector<HTMLInputElement>('input:checked'))
+
   return section('wallpaper', 'image', 'Wallpaper', 'A picture, an animated GIF or a video loop behind your reading.',
     stage.el,
     errorBox,
-    h('div', { class: 'wall-actions' }, uploadBtn, removeBtn, status),
+    h('div', { class: 'wall-actions' }, uploadBtn, status),
+    uploads,
     groupTitle('Built-in'),
-    presetGallery(store),
+    builtIn,
     adjust,
   )
 }

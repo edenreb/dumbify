@@ -682,6 +682,11 @@ textarea {
 
 .swatch-custom.is-set .swatch-face {
   background: var(--swatch);
+  box-shadow: 0 0 0 2px var(--df-bg), 0 0 0 4px var(--swatch);
+}
+
+.swatch-custom.is-set .swatch-face .df-icon {
+  opacity: 1;
 }
 
 .swatch-custom input[type="color"] {
@@ -793,8 +798,37 @@ textarea {
 }
 
 .toast .df-icon {
+  flex: none;
   width: 16px;
   height: 16px;
+}
+
+.toast-text {
+  min-width: 0;
+}
+
+.toast-action {
+  flex: none;
+  margin: -4px -6px -4px 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--df-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.toast-action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
 }
 
 @keyframes toast-in {

@@ -1,5 +1,5 @@
 import '../styles/main.css'
-import { getSettings, getWallpaper, onSettingsChange, onWallpaperChange } from './storage'
+import { getSettings, getWallpaper, onSettingsChange, onUploadChange } from './storage'
 import {
   applyAppearance, computeAppearance, onSystemSchemeChange, prefersReducedMotion,
   systemPrefersDark, type Appearance,
@@ -145,8 +145,9 @@ export function mountUI() {
 
   sheet.append(topbar, cover, content)
   main.append(sheet)
-  layout.append(sidebar, main)
-  root.append(backdrop, layout, scrim)
+  // The scrim shares .df-layout's stacking context with the drawer, beneath it.
+  layout.append(scrim, sidebar, main)
+  root.append(backdrop, layout)
   document.body.appendChild(root)
 
   sheet.addEventListener('scroll', () => {
@@ -165,10 +166,10 @@ export function mountUI() {
     loaded = true
     apply()
   })
-  // A replaced upload keeps its settings reference shape but not its bytes.
-  onWallpaperChange(() => {
-    wallpaper?.clear()
-    apply()
+  // Bytes stored again under the id on screen (a restored backup) or deleted from under
+  // it: look again. A new upload has a new id, and arrives with the settings naming it.
+  onUploadChange((id) => {
+    if (settings.wallpaper.source === 'upload' && settings.wallpaper.uploadId === id) wallpaper?.reload()
   })
   onSystemSchemeChange(() => { if (settings.mode === 'auto') apply() })
   try {
@@ -198,13 +199,25 @@ export function unmountUI() {
 
 // ---- Drawer ----
 
+function drawerButton(): HTMLElement | null {
+  return topbar?.querySelector<HTMLElement>('.df-drawer-btn') ?? null
+}
+
 export function openDrawer() {
-  root?.classList.add('df-drawer-open')
-  sidebar?.querySelector<HTMLElement>('.df-nav-link')?.focus()
+  if (!root) return
+  root.classList.add('df-drawer-open')
+  drawerButton()?.setAttribute('aria-expanded', 'true')
+  // After the visibility flip, or the link is not yet focusable.
+  requestAnimationFrame(() => sidebar?.querySelector<HTMLElement>('.df-nav-link')?.focus())
 }
 
 export function closeDrawer() {
-  root?.classList.remove('df-drawer-open')
+  if (!root?.classList.contains('df-drawer-open')) return
+  root.classList.remove('df-drawer-open')
+  const btn = drawerButton()
+  btn?.setAttribute('aria-expanded', 'false')
+  // Focus inside a drawer that is sliding away would be lost with it.
+  if (sidebar?.contains(document.activeElement)) btn?.focus()
 }
 
 export function isDrawerOpen(): boolean {

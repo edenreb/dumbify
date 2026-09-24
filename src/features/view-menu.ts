@@ -90,9 +90,27 @@ function buildMenu(): { menu: HTMLElement; unsubscribe: () => void } {
   const value = h('span', { class: 'df-stepper-value', 'aria-live': 'polite' })
   const smaller = h('button', { class: 'df-icon-btn', type: 'button', 'aria-label': 'Smaller text' }, icon('minus'))
   const larger = h('button', { class: 'df-icon-btn', type: 'button', 'aria-label': 'Larger text' }, icon('plus'))
+  // Steps count from the size last asked for, not the last one stored: three quick
+  // clicks are three steps, though the first save hasn't come back yet.
   let size = 20
-  smaller.addEventListener('click', () => save({ fontSize: Math.max(FONT_SIZE_MIN, size - 1) }))
-  larger.addEventListener('click', () => save({ fontSize: Math.min(FONT_SIZE_MAX, size + 1) }))
+  let pending: number | null = null
+  const paintSize = (n: number) => {
+    value.textContent = `${n}px`
+    smaller.disabled = n <= FONT_SIZE_MIN
+    larger.disabled = n >= FONT_SIZE_MAX
+  }
+  const step = (d: number) => {
+    const next = Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, (pending ?? size) + d))
+    pending = next
+    paintSize(next)
+    setSettings({ fontSize: next }).catch((err) => {
+      pending = null
+      paintSize(size)
+      showToast(err instanceof Error ? err.message : 'Couldn’t save that change')
+    })
+  }
+  smaller.addEventListener('click', () => step(-1))
+  larger.addEventListener('click', () => step(1))
   menu.appendChild(row('type', 'Text size', h('div', { class: 'df-stepper' }, smaller, value, larger)))
 
   const layout = segmented<DumbifySettings['layout']>('Layout', [
@@ -138,9 +156,9 @@ function buildMenu(): { menu: HTMLElement; unsubscribe: () => void } {
 
   const unsubscribe = onAppearance((s) => {
     size = s.fontSize
-    value.textContent = `${s.fontSize}px`
-    smaller.disabled = s.fontSize <= FONT_SIZE_MIN
-    larger.disabled = s.fontSize >= FONT_SIZE_MAX
+    // An echo of an earlier step is not news; the one that matches the last ask settles it.
+    if (pending === s.fontSize) pending = null
+    if (pending === null) paintSize(s.fontSize)
     for (const b of tileButtons) b.setAttribute('aria-checked', String(b.dataset.font === s.font))
     layout.paint(s.layout)
     setSwitch(width, s.pageWidth === 'full')

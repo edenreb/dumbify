@@ -8,6 +8,11 @@ import { DEFAULT_SETTINGS, type DumbifySettings } from '../src/core/settings.ts'
 import { ACCENTS, THEMES, getTheme } from '../src/core/themes.ts'
 import { contrast } from '../src/core/color.ts'
 
+function hexRgb(hex: string): string {
+  const n = parseInt(hex.slice(1), 16)
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`
+}
+
 function settings(patch: Partial<DumbifySettings> = {}): DumbifySettings {
   return { ...DEFAULT_SETTINGS, ...patch, wallpaper: { ...DEFAULT_SETTINGS.wallpaper, ...(patch.wallpaper ?? {}) } }
 }
@@ -79,6 +84,104 @@ test('frosted glass: translucent tinted panels with a blur', () => {
 test('clear panels are fully transparent whatever the opacity slider says', () => {
   const a = computeAppearance(settings({ wallpaper: gradient as any, surface: 'clear', surfaceOpacity: 0.9 }))
   assert.match(a.vars['--df-panel'], /, 0\)$/)
+})
+
+test('solid panels are opaque; only frosted glass takes the opacity slider', () => {
+  const solid = computeAppearance(settings({ wallpaper: gradient as any, surface: 'solid', surfaceOpacity: 0.4 }))
+  assert.match(solid.vars['--df-panel'], /, 1\)$/)
+  assert.equal(solid.vars['--df-bg'], solid.theme.bg, 'nothing shows through, so the page is the theme')
+  const glass = computeAppearance(settings({ wallpaper: gradient as any, surface: 'glass', surfaceOpacity: 0.4 }))
+  assert.match(glass.vars['--df-panel'], /, 0\.4\)$/)
+})
+
+test('a dark tint under a light theme turns the text light - and says so', () => {
+  const a = computeAppearance(settings({
+    mode: 'light', lightTheme: 'paper', wallpaper: gradient as any, surface: 'solid', surfaceTint: '#1e2a44',
+  }))
+  assert.equal(a.panels?.inkChanged, true)
+  assert.equal(a.attrs.scheme, 'light', 'still the light theme...')
+  assert.equal(a.attrs.tone, 'dark', '...on dark panels')
+  const bg = a.vars['--df-bg']
+  assert.equal(bg, '#1e2a44')
+  assert.ok(contrast(a.vars['--df-text'], bg) >= 7, 'body text')
+  assert.ok(contrast(a.vars['--df-text-2'], bg) >= 4.5, 'secondary text')
+  assert.ok(contrast(a.vars['--df-text-3'], bg) >= 3, 'tertiary marks')
+  // Menus and fields come from the panel too, rather than staying paper white under
+  // light text.
+  assert.ok(contrast(a.vars['--df-text'], a.vars['--df-menu']) >= 4.5, 'menus')
+  assert.ok(contrast(a.vars['--df-text'], a.vars['--df-surface']) >= 4.5, 'raised surfaces')
+})
+
+test('a tint the theme ink already reads on keeps the theme ink', () => {
+  const a = computeAppearance(settings({
+    mode: 'light', lightTheme: 'paper', wallpaper: gradient as any, surface: 'solid', surfaceTint: '#fdf6e3',
+  }))
+  assert.equal(a.panels?.inkChanged, false)
+  assert.equal(a.vars['--df-text'], a.theme.text)
+})
+
+test('clear panels over a dark picture get light text with a dark glow', () => {
+  const a = computeAppearance(settings({
+    mode: 'light', lightTheme: 'paper', wallpaper: { ...gradient, average: '#101418' } as any,
+    surface: 'clear', wallpaperFade: 0,
+  }))
+  assert.equal(a.panels?.inkChanged, true)
+  assert.ok(contrast(a.vars['--df-text'], '#101418') >= 4.5)
+  assert.match(a.vars['--df-halo'], /^rgba\(0, 0, 0,/)
+  const light = computeAppearance(settings({
+    mode: 'light', lightTheme: 'paper', wallpaper: { ...gradient, average: '#f4f1ea' } as any, surface: 'clear',
+  }))
+  assert.equal(light.panels?.inkChanged, false)
+  assert.match(light.vars['--df-halo'], /^rgba\(255, 255, 255,/)
+})
+
+test('text stays readable on every theme, tint, panel style and wallpaper', () => {
+  const tints = ['', '#000000', '#ffffff', '#1e2a44', '#e62d42', '#7f7f7f', '#fdf6e3', '#2d5a27']
+  const walls = ['#101418', '#f0f0f0', '#808080', '#6d28d9', '#f6c945']
+  let checked = 0
+  for (const theme of THEMES) {
+    for (const surfaceTint of tints) {
+      for (const surface of ['solid', 'glass', 'clear'] as const) {
+        for (const average of walls) {
+          for (const surfaceOpacity of [0.2, 0.85]) {
+            const a = computeAppearance(settings({
+              mode: theme.scheme,
+              [theme.scheme === 'dark' ? 'darkTheme' : 'lightTheme']: theme.id,
+              wallpaper: { ...gradient, average } as any,
+              surface, surfaceTint, surfaceOpacity, wallpaperFade: 0.2,
+            }))
+            const bg = a.vars['--df-bg']
+            const where = `${theme.id} ${surface} tint=${surfaceTint || 'theme'} wall=${average} opacity=${surfaceOpacity}`
+            assert.ok(contrast(a.vars['--df-text'], bg) >= 4.5, `text: ${where}`)
+            assert.ok(contrast(a.vars['--df-text-2'], bg) >= 4.5, `text-2: ${where}`)
+            assert.ok(contrast(a.vars['--df-text-3'], bg) >= 3, `text-3: ${where}`)
+            assert.ok(contrast(a.vars['--df-accent-text'], bg) >= 4.5, `accent: ${where}`)
+            assert.ok(contrast(a.vars['--df-text'], a.vars['--df-menu']) >= 4.5, `menu: ${where}`)
+            checked++
+          }
+        }
+      }
+    }
+  }
+  assert.ok(checked > 4000)
+})
+
+test('an extension page keeps the theme’s own colours whatever the panels do', () => {
+  const s = settings({ mode: 'light', lightTheme: 'paper', wallpaper: gradient as any, surface: 'solid', surfaceTint: '#1e2a44' })
+  const a = computeAppearance(s, false, { plain: true })
+  assert.equal(a.vars['--df-bg'], a.theme.bg)
+  assert.equal(a.vars['--df-text'], a.theme.text)
+  assert.equal(a.panels, null)
+  assert.equal(a.attrs.tone, 'light')
+  // Everything else - the accent, the layout - is the reader's.
+  assert.equal(a.attrs.wallpaper, 'window')
+})
+
+test('the wallpaper fades toward the tint, the panels’ own colour', () => {
+  const a = computeAppearance(settings({ wallpaper: gradient as any, surface: 'glass', surfaceTint: '#1e2a44', wallpaperFade: 0.5 }))
+  assert.equal(a.vars['--df-wall-fade'], 'rgba(30, 42, 68, 0.5)')
+  const clear = computeAppearance(settings({ wallpaper: gradient as any, surface: 'clear', surfaceTint: '#1e2a44', wallpaperFade: 0.5 }))
+  assert.equal(clear.vars['--df-wall-fade'], `rgba(${hexRgb(clear.theme.bg)}, 0.5)`, 'clear has no panels, so no tint')
 })
 
 test('a page cover keeps the panels solid', () => {

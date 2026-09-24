@@ -58,6 +58,7 @@ html.df-failed #dumbify-root {
   --df-shadow: rgba(15, 15, 15, 0.12);
   --df-live: #dc3e42;
   --df-pattern: rgba(42, 41, 38, 0.13);
+  --df-halo: rgba(255, 255, 255, 0.78);
   --df-panel: var(--df-bg);
   --df-panel-side: var(--df-sidebar);
   --df-panel-blur: 0px;
@@ -105,7 +106,8 @@ html.df-failed #dumbify-root {
   color-scheme: light;
 }
 
-#dumbify-root[data-scheme="dark"] {
+/* The tone, not the scheme: a dark tint under a light theme wants dark scrollbars. */
+#dumbify-root[data-tone="dark"] {
   color-scheme: dark;
 }
 
@@ -341,9 +343,10 @@ video.df-wall {
   box-shadow: none;
 }
 
-/* With nothing behind the text, a soft halo in the page colour keeps it legible. */
+/* With nothing behind the text, a glow in the opposite of the ink keeps it legible over
+   the busy and the uneven parts of a picture - where its average colour says little. */
 #dumbify-root[data-surface="clear"] .df-layout {
-  text-shadow: 0 1px 3px color-mix(in srgb, var(--df-bg) 75%, transparent);
+  text-shadow: 0 0 2px var(--df-halo), 0 0 7px var(--df-halo), 0 1px 14px var(--df-halo);
 }
 
 /* ---- Sidebar ---- */
@@ -598,7 +601,11 @@ video.df-wall {
   }
 }
 
-/* Hidden, and every narrow window: the sidebar becomes a drawer. */
+/* Hidden, and every narrow window: the sidebar becomes a drawer. The scrim is a
+   child of .df-layout like the drawer itself - .df-layout is a stacking context, so a
+   scrim outside it painted over the drawer and swallowed every click on its links.
+   A closed drawer is visibility:hidden (after its slide-out), which keeps its links
+   out of the tab order and its shadow off the edge of the window. */
 .df-scrim {
   display: none;
 }
@@ -614,7 +621,8 @@ video.df-wall {
     margin: 0;
     border-radius: 0;
     transform: translateX(-105%);
-    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    visibility: hidden;
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 220ms;
     box-shadow: 0 16px 48px var(--df-shadow);
     z-index: 60;
   }
@@ -634,7 +642,8 @@ video.df-wall {
     max-width: 86vw;
     border-radius: 0 !important;
     transform: translateX(-105%);
-    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    visibility: hidden;
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 220ms;
     box-shadow: 0 16px 48px var(--df-shadow);
     z-index: 60;
   }
@@ -655,6 +664,8 @@ video.df-wall {
 
 #dumbify-root.df-drawer-open .df-sidebar {
   transform: none;
+  visibility: visible;
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s;
   background: var(--df-sidebar);
 }
 
@@ -1355,6 +1366,43 @@ video.df-wall {
   color: var(--df-text-3);
 }
 
+/* A list row - and a table, which is a list on narrow screens - keeps its details on one
+   line: a long channel name gives way first, rather than the line wrapping and the next
+   one starting with a stray dot. */
+#dumbify-root:is([data-layout="list"], [data-layout="table"]) .df-item-meta {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+#dumbify-root:is([data-layout="list"], [data-layout="table"]) .df-item-meta > * {
+  flex: none;
+  white-space: nowrap;
+}
+
+#dumbify-root:is([data-layout="list"], [data-layout="table"]) .df-item-meta > .df-item-channel {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* On a phone the channel takes a line of its own, as in a card. */
+@media (max-width: 560px) {
+  #dumbify-root:is([data-layout="list"], [data-layout="table"]) .df-item-meta {
+    flex-wrap: wrap;
+  }
+
+  #dumbify-root:is([data-layout="list"], [data-layout="table"]) .df-item-meta > .df-item-channel {
+    flex-basis: 100%;
+  }
+
+  #dumbify-root:is([data-layout="list"], [data-layout="table"]):not([data-hide~="channel"]) .df-item-channel ~ .df-item-views::before,
+  #dumbify-root:is([data-layout="list"], [data-layout="table"])[data-hide~="views"] .df-item-channel ~ .df-item-date::before,
+  #dumbify-root:is([data-layout="list"], [data-layout="table"]) .df-item-channel + .df-item-date::before {
+    content: none;
+  }
+}
+
 #dumbify-root[data-hide~="channel"] .df-item-channel,
 #dumbify-root[data-hide~="views"] .df-item-views,
 #dumbify-root[data-hide~="date"] .df-item-date,
@@ -1602,7 +1650,6 @@ video.df-wall {
     display: grid;
     margin: 0 -10px;
     padding: 8px 10px;
-    border-bottom: 1px solid var(--df-border);
     background: var(--df-bar);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
@@ -1610,6 +1657,17 @@ video.df-wall {
     font-size: calc(var(--df-ui-size) * 0.86);
     font-weight: 500;
     color: var(--df-text-3);
+  }
+
+  /* The bar bleeds to the rows' hover edges; its rule stops where their separators do. */
+  #dumbify-root[data-layout="table"] .df-table-head::after {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 0;
+    height: 1px;
+    background: var(--df-border);
   }
 
   #dumbify-root[data-layout="table"] .df-table-head > span {
@@ -2019,13 +2077,24 @@ video.df-wall {
 @media (min-width: 1100px) {
   #dumbify-root[data-route="watch"][data-watch="split"] #dumbify-content {
     max-width: 1560px;
+    padding-left: 24px;
+    padding-right: 24px;
   }
 
   #dumbify-root[data-watch="split"] .df-watch-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 430px);
-    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 26vw, 400px);
+    gap: 24px;
     align-items: start;
+  }
+
+  /* Beside the video the comments are simply there. */
+  #dumbify-root[data-watch="split"] .df-comments-btn {
+    display: none;
+  }
+
+  #dumbify-root[data-watch="split"] .df-watch-side > * + * {
+    margin-top: 20px;
   }
 
   #dumbify-root[data-watch="split"] .df-watch-side {

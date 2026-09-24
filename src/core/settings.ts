@@ -145,7 +145,7 @@ export const DEFAULT_SETTINGS: DumbifySettings = {
   wallpaperFocusY: 50,
   wallpaperBlur: 0,
   wallpaperFade: 0,
-  surface: 'solid',
+  surface: 'glass',
   surfaceOpacity: 0.85,
   surfaceTint: '',
   surfaceBlur: 18,

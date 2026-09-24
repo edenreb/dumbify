@@ -1,6 +1,13 @@
 import type { Route } from '../types'
 import type { IconName } from './icons'
 
+/**
+ * Every word Dumbify shows is English, so dates and numbers are written the English way
+ * too - rather than in the browser's locale, which put "Donnerstag, 24. September" under
+ * "Good evening".
+ */
+export const UI_LOCALE = 'en-US'
+
 export const ROUTE_NAMES: Record<Route, string> = {
   home: 'Home',
   watch: 'Watch',

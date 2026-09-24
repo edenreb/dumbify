@@ -89,14 +89,15 @@ Curated rather than endless — in the spirit of GNOME and Pop!_OS, every option
 
 ### Settings Page
 
-A Notion-style settings page, reachable from the sidebar, the in-page `•••` menu, or the toolbar popup. Sections sit in a sticky list on the left and a **live preview** of the reading view on the right follows every change as it happens — even a slider mid-drag.
+A Notion-style settings page, reachable from the sidebar, the in-page `•••` menu, or the toolbar popup. Sections sit in a sticky list on the left and a **live preview** of the reading view on the right follows every change as it happens — even a slider mid-drag. The preview stays in view at every window size: beside the settings on wide screens, and floating in a corner (and tuckable) on narrow ones.
 
+- **Looks** — six curated starting points (Paper, Library, Aurora, Terminal, Sunset, Notebook), each a theme pair, typeface, layout and wallpaper applied in one click, with Undo.
 - **Appearance** — Light, Dark or Auto (follows the system), with a separate theme for each: 8 light and 11 dark, each tested for WCAG contrast. Accent colour from the theme, nine GNOME-style presets, a custom colour, or one taken from the wallpaper. Corner roundness and density.
-- **Typography** — Sans, Serif and Mono faces bundled with the extension, plus eight system font styles; text size 12–32px; line spacing; optional custom text colours per mode, with a contrast warning.
-- **Wallpaper** — images, animated GIF/WebP/APNG and MP4/WebM loops, uploaded, dropped anywhere on the page, or pasted; built-in gradients, patterns and slowly moving Live wallpapers. Full window or Notion-style page cover; click the preview to set the focal point; blur, fade, and an animation switch that also respects reduced-motion. Panels over the wallpaper can be solid, frosted glass, or clear, with opacity and a tint colour.
+- **Typography** — Sans, Serif and Mono faces bundled with the extension, plus nine system font styles; text size 12–32px; line spacing; optional custom text colours per mode, with a contrast warning.
+- **Wallpaper** — images, animated GIF/WebP/APNG and MP4/WebM loops, uploaded, dropped anywhere on the page, or pasted; built-in gradients, patterns and slowly moving Live wallpapers. Full window or Notion-style page cover; click the preview to set the focal point; blur, fade, and an animation switch that also respects reduced-motion. The last six uploads stay in a gallery to switch between or delete (with Undo). Panels over the wallpaper can be solid, frosted glass (with opacity), or clear, in the theme's colour or any tint; text switches ink when a tint or the wallpaper would make it hard to read, and the settings page says when it has.
 - **Layout** — List, Cards or Table feeds; page width; full, icons-only or hidden sidebar; row numbers; which details each video shows.
 - **Watch page** — Classic, Theater or Split (comments and playlist beside the video); open description and comments automatically.
-- **Backup & reset** — export everything, wallpaper included, to a file and import it back; reset asks before it does anything.
+- **Backup & reset** — export your settings and current wallpaper to a file and import them back (Dumbify's on/off switch is left as it is); reset asks before it does anything and keeps your uploads.
 
 ### Quick controls
 

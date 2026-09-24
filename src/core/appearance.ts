@@ -9,7 +9,7 @@ import {
   ACCENT_THEME, ACCENT_WALLPAPER, MONO_FONT, UI_FONT, accentPreset, getFont, getPreset,
   getTheme, type Scheme, type Theme,
 } from './themes.ts'
-import { contrast, ensureContrast, isHex, mix, readableOn, rgba } from './color.ts'
+import { contrast, ensureContrast, isDark, isHex, luminance, mix, readableOn, rgba } from './color.ts'
 import type { DumbifySettings } from './settings.ts'
 
 export interface Appearance {
@@ -24,6 +24,71 @@ export interface Appearance {
   paint: string
   /** Whether a wallpaper is showing, and how. */
   wallpaper: 'none' | 'window' | 'cover'
+  /**
+   * Panels floating over a window wallpaper: the colour their text actually sits on, and
+   * whether the ink had to change to stay readable there. null without them.
+   */
+  panels: PanelLegibility | null
+}
+
+export interface PanelLegibility {
+  /** The panel as it looks over the wallpaper: its colour, its opacity and the fade. */
+  tone: string
+  ink: string
+  /** The theme's (or the reader's own) text colour couldn't be read on the tone. */
+  inkChanged: boolean
+  /** Contrast of the ink on the tone. */
+  ratio: number
+}
+
+export interface AppearanceOptions {
+  /**
+   * An extension page dressed in the reader's theme - settings, popup - rather than the
+   * reading view. It has no panels over a wallpaper, so it keeps the theme's own colours.
+   */
+  plain?: boolean
+}
+
+// Neutral inks for text the theme's own can't serve: a dark tint under a light theme, a
+// clear panel over a dark photo.
+const LIGHT_INK = '#f5f4f0'
+const DARK_INK = '#1f1e1c'
+
+/** The theme's ink if it reads on `bg`; otherwise one from the other end of the scale. */
+export function legibleInk(text: string, bg: string): string {
+  if (contrast(text, bg) >= 4.5) return text
+  const alt = isDark(bg) ? LIGHT_INK : DARK_INK
+  return ensureContrast(contrast(alt, bg) > contrast(text, bg) ? alt : text, bg, 4.5)
+}
+
+/**
+ * `c`, moved toward `ink` just far enough to read on `bg`. The ink itself always does,
+ * so this always succeeds - and secondary text stays the same hue family as the body.
+ */
+function towardInk(c: string, ink: string, bg: string, min: number): string {
+  if (contrast(c, bg) >= min) return c
+  let lo = 0
+  let hi = 1
+  for (let i = 0; i < 12; i++) {
+    const mid = (lo + hi) / 2
+    if (contrast(mix(c, ink, mid), bg) >= min) hi = mid
+    else lo = mid
+  }
+  return mix(c, ink, hi)
+}
+
+/**
+ * A raised surface - menu, card, field - on a panel of `tone`. Light pages raise toward
+ * white, which only helps dark ink; dark pages raise toward the ink, only as far as the
+ * ink still reads on the result.
+ */
+function raisedSurface(tone: string, ink: string, dark: boolean): string {
+  if (!dark) return mix(tone, '#ffffff', 0.6)
+  for (const t of [0.08, 0.05, 0.03]) {
+    const c = mix(tone, ink, t)
+    if (contrast(ink, c) >= 4.5) return c
+  }
+  return tone
 }
 
 export function resolveScheme(s: DumbifySettings, systemDark: boolean): Scheme {
@@ -93,64 +158,103 @@ export function uiFontSize(readingSize: number): number {
   return Math.max(13, Math.min(17, Math.round(readingSize * 0.7)))
 }
 
-export function computeAppearance(s: DumbifySettings, systemDark = false): Appearance {
+export function computeAppearance(s: DumbifySettings, systemDark = false, opts: AppearanceOptions = {}): Appearance {
   const scheme = resolveScheme(s, systemDark)
   const theme = getTheme(scheme === 'dark' ? s.darkTheme : s.lightTheme, scheme)
   const accent = resolveAccent(s, theme)
   const custom = scheme === 'dark' ? s.textColorDark : s.textColorLight
-  const text = custom || theme.text
-  // A custom ink recolours the whole hierarchy, not just body text: secondary text is the
-  // same ink faded toward the page, so a sepia pick doesn't leave grey metadata behind.
-  const text2 = custom ? mix(custom, theme.bg, 0.36) : theme.text2
-  const text3 = custom ? mix(custom, theme.bg, 0.55) : theme.text3
+  const themeInk = custom || theme.text
 
   const showing = wallpaperShowing(s)
   const wallpaper: Appearance['wallpaper'] = showing ? s.wallpaperPlacement : 'none'
   const floating = wallpaper === 'window'
+  const onPanels = floating && !opts.plain
+
+  const preset = s.wallpaper.source === 'preset' ? getPreset(s.wallpaper.presetId) : undefined
+  const average = s.wallpaper.average || preset?.average || theme.bg
+  const fade = s.wallpaperFade
+  // Panels over a wallpaper: what they are made of, and how much of it there is. Solid
+  // is opaque, glass lets the wallpaper through, clear is no panel at all.
+  const clear = s.surface === 'clear'
+  const base = !clear && s.surfaceTint ? s.surfaceTint : theme.bg
+  const sideBase = !clear && s.surfaceTint ? s.surfaceTint : theme.sidebar
+  const alpha = s.surface === 'solid' ? 1 : s.surface === 'glass' ? s.surfaceOpacity : 0
+  // The wallpaper as it looks through its fade...
+  const behind = mix(average, base, fade)
+  // ...and what text on a panel actually sits on: the panel, over that.
+  const tone = onPanels ? mix(behind, base, alpha) : theme.bg
+  const sideTone = onPanels ? mix(behind, sideBase, alpha) : theme.sidebar
+  const paint = floating ? behind : theme.bg
+
+  // The ink follows the tone. A tint or a clear panel can make the page far darker or
+  // lighter than the theme it came from, and text in the theme's colour would vanish.
+  const ink = onPanels ? legibleInk(themeInk, tone) : themeInk
+  const inkChanged = ink !== themeInk
+  const recoloured = onPanels && (inkChanged || base !== theme.bg)
+  // A dark look is light text on a darker page - whatever the theme was called.
+  const dark = onPanels ? luminance(ink) > luminance(tone) : scheme === 'dark'
+
+  // A custom ink recolours the whole hierarchy, not just body text: secondary text is the
+  // same ink faded toward the page, so a sepia pick doesn't leave grey metadata behind.
+  let text2 = custom ? mix(custom, theme.bg, 0.36) : theme.text2
+  let text3 = custom ? mix(custom, theme.bg, 0.55) : theme.text3
+  let surface = theme.surface
+  let border = theme.border
+  if (recoloured) {
+    text2 = mix(ink, tone, 0.34)
+    text3 = mix(ink, tone, 0.52)
+    surface = raisedSurface(tone, ink, dark)
+    border = mix(tone, ink, dark ? 0.16 : 0.12)
+  }
+  if (onPanels) {
+    // However the wallpaper shows through, secondary text stays readable.
+    text2 = towardInk(text2, ink, tone, 4.5)
+    text3 = towardInk(text3, ink, tone, 3)
+    if (contrast(ink, surface) < 4.5) surface = raisedSurface(tone, ink, dark)
+  }
 
   let panel = theme.bg
   let panelSide = theme.sidebar
   let panelBlur = '0px'
-  if (floating) {
-    const alpha = s.surface === 'clear' ? 0 : s.surfaceOpacity
-    panel = rgba(s.surfaceTint || theme.bg, alpha)
-    panelSide = rgba(s.surfaceTint || theme.sidebar, alpha)
+  if (onPanels) {
+    panel = rgba(base, alpha)
+    panelSide = rgba(sideBase, alpha)
     if (s.surface === 'glass') panelBlur = `${s.surfaceBlur}px`
   }
 
   const [rSm, r, rLg] = RADII[s.corners]
-  const preset = s.wallpaper.source === 'preset' ? getPreset(s.wallpaper.presetId) : undefined
-  const average = s.wallpaper.average || preset?.average || theme.bg
-  const fade = s.wallpaperFade
-  const paint = floating ? mix(average, theme.bg, fade) : theme.bg
 
   const vars: Record<string, string> = {
-    '--df-bg': theme.bg,
-    '--df-sidebar': theme.sidebar,
-    '--df-surface': theme.surface,
-    '--df-text': text,
+    // Over a wallpaper, "the page" is the panel as it looks there.
+    '--df-bg': tone,
+    '--df-sidebar': sideTone,
+    '--df-surface': surface,
+    '--df-text': ink,
     '--df-text-2': text2,
     '--df-text-3': text3,
-    '--df-border': theme.border,
-    '--df-border-strong': mix(theme.border, text, 0.18),
+    '--df-border': border,
+    '--df-border-strong': mix(border, ink, 0.18),
     // Washes are the ink at low alpha rather than a fixed grey, so hover and selection
     // read correctly on a translucent panel over any wallpaper, not just on the theme.
-    '--df-hover': rgba(text, scheme === 'dark' ? 0.07 : 0.055),
-    '--df-active': rgba(text, scheme === 'dark' ? 0.12 : 0.09),
+    '--df-hover': rgba(ink, dark ? 0.07 : 0.055),
+    '--df-active': rgba(ink, dark ? 0.12 : 0.09),
     '--df-accent': accent,
-    '--df-accent-text': ensureContrast(accent, theme.bg, 4.5),
+    '--df-accent-text': ensureContrast(accent, tone, 4.5),
     '--df-accent-fg': readableOn(accent),
-    '--df-accent-soft': rgba(accent, scheme === 'dark' ? 0.2 : 0.13),
+    '--df-accent-soft': rgba(accent, dark ? 0.2 : 0.13),
     '--df-selection': rgba(accent, 0.28),
     '--df-focus': rgba(accent, 0.55),
-    '--df-shadow': scheme === 'dark' ? 'rgba(0, 0, 0, 0.55)' : 'rgba(15, 15, 15, 0.12)',
-    '--df-live': scheme === 'dark' ? '#ff6369' : '#dc3e42',
-    '--df-pattern': rgba(text, scheme === 'dark' ? 0.16 : 0.13),
+    '--df-shadow': dark ? 'rgba(0, 0, 0, 0.55)' : 'rgba(15, 15, 15, 0.12)',
+    '--df-live': dark ? '#ff6369' : '#dc3e42',
+    // Patterns are drawn on the wallpaper, under the panels: the theme's colours.
+    '--df-pattern': rgba(theme.text, scheme === 'dark' ? 0.16 : 0.13),
+    // Text straight on a clear panel gets a glow in the opposite of its ink.
+    '--df-halo': isDark(ink) ? 'rgba(255, 255, 255, 0.78)' : 'rgba(0, 0, 0, 0.62)',
 
     '--df-panel': panel,
     '--df-panel-side': panelSide,
     '--df-panel-blur': panelBlur,
-    '--df-menu': theme.surface,
+    '--df-menu': surface,
 
     '--df-font-read': getFont(s.font).stack,
     '--df-title-weight': String(getFont(s.font).titleWeight),
@@ -168,7 +272,7 @@ export function computeAppearance(s: DumbifySettings, systemDark = false): Appea
     '--df-page-width': PAGE_WIDTH[s.pageWidth],
 
     '--df-wall-blur': `${s.wallpaperBlur}px`,
-    '--df-wall-fade': rgba(theme.bg, fade),
+    '--df-wall-fade': rgba(base, fade),
     '--df-wall-position': `${s.wallpaperFocusX}% ${s.wallpaperFocusY}%`,
     '--df-wall-size': s.wallpaperFit === 'fill' ? 'cover' : s.wallpaperFit === 'fit' ? 'contain' : 'auto',
     '--df-wall-repeat': s.wallpaperFit === 'tile' ? 'repeat' : 'no-repeat',
@@ -184,6 +288,8 @@ export function computeAppearance(s: DumbifySettings, systemDark = false): Appea
 
   const attrs: Record<string, string> = {
     scheme,
+    // Light or dark as the text actually sits: a dark tint under a light theme is dark.
+    tone: dark ? 'dark' : 'light',
     theme: theme.id,
     layout: s.layout,
     density: s.density,
@@ -199,7 +305,8 @@ export function computeAppearance(s: DumbifySettings, systemDark = false): Appea
     hide: hidden.join(' '),
   }
 
-  return { scheme, theme, accent, vars, attrs, paint, wallpaper }
+  const panels: PanelLegibility | null = onPanels ? { tone, ink, inkChanged, ratio: contrast(ink, tone) } : null
+  return { scheme, theme, accent, vars, attrs, paint, wallpaper, panels }
 }
 
 /** The DOM half: writes an Appearance onto an element. */

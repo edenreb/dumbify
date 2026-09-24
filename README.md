@@ -32,15 +32,16 @@ YouTube's UI is built to maximize watch time, not help you find or finish a vide
 
 Curated rather than endless: every choice below is one that looks right.
 
+- **Looks** — six finished combinations to start from (Paper, Library, Aurora, Terminal, Sunset, Notebook): theme, type, layout and wallpaper in one click, with Undo. Everything stays adjustable afterwards.
 - **19 themes** — 8 light (Paper, Snow, Sepia, Sage, Latte, Dawn, Solarized, Frost) and 11 dark (Ink, Graphite, Midnight, Black, Forest, Mocha, Nord, Rosé Pine, Dracula, Gruvbox, Solarized Dark). Pick one for light mode and one for dark, and let **Auto** follow your system. Every theme is tested for WCAG contrast.
 - **Accent colour** — the theme's own, nine GNOME-style accents, any custom colour, or one **taken from your wallpaper**.
-- **Typography** — Sans, Serif and Mono faces bundled with the extension, plus eight system font styles; text size 12–32px, line spacing, and an optional custom text colour per mode.
+- **Typography** — Sans, Serif and Mono faces bundled with the extension, plus nine system font styles; text size 12–32px, line spacing, and an optional custom text colour per mode.
 - **Layouts** — feeds as a **List**, **Cards** or a dense **Table**; narrow, standard or full page width; a full sidebar, icons only, or hidden; choose which details each video shows. Corners (square, soft, round) and density (compact → spacious).
 - **Watch page layouts** — **Classic**, **Theater** (wide video) or **Split** (comments and playlist beside the video).
-- **Wallpapers** — upload an image, an **animated GIF**, animated WebP/APNG, or a short **MP4/WebM loop**; drop it anywhere on the settings page or paste it. Or pick a built-in gradient, pattern or slowly moving **Live** wallpaper. Show it behind the whole window or as a Notion-style **page cover**; set the focal point, blur and fade; pause animation (it pauses on its own when your system asks for reduced motion).
-- **Panels over the wallpaper** — solid, **frosted glass**, or **clear** (fully transparent), with opacity and a custom tint colour.
+- **Wallpapers** — upload an image, an **animated GIF**, animated WebP/APNG, or a short **MP4/WebM loop**; drop it anywhere on the settings page or paste it. Your last six uploads stay in a gallery to switch between, each deletable (with Undo). Or pick a built-in gradient, pattern or slowly moving **Live** wallpaper. Show it behind the whole window or as a Notion-style **page cover**; set the focal point, blur and fade; pause animation (it pauses on its own when your system asks for reduced motion, and a video loop pauses whenever it's out of sight).
+- **Panels over the wallpaper** — **solid**, **frosted glass** with adjustable opacity, or **clear** (fully transparent), in the theme's colour or any tint. Text follows what it actually sits on: a dark tint under a light theme switches to light ink, and text on clear panels gets a soft glow.
 - **Quick controls** — a page menu (`•••`) for style, size, layout and width; the toolbar popup for mode, theme, accent, size, font, layout and wallpaper.
-- **Backup** — export everything (wallpaper included) to a file and import it elsewhere.
+- **Backup** — export your settings, with the wallpaper you're using, to a file and import it elsewhere.
 
 ## How it works
 
@@ -66,8 +67,8 @@ After any change: `npm run build`, then reload the extension from `chrome://exte
 ### Tests
 
 ```bash
-npm test                 # unit tests: data extraction, settings + migration, themes, colour, wallpapers, storage
-npm run build && npm run test:e2e   # end-to-end: the built extension in headless Chromium
+npm test                 # unit tests: data extraction, settings + migration, themes, looks, colour, legibility, wallpapers, storage
+npm run build && npm run test:e2e   # end-to-end: the built extension in headless Chromium, plus the wallpaper layer on its own
 npm run screenshots -- out/          # capture the main screens for review
 ```
 
@@ -86,9 +87,11 @@ src/
   core/
     settings.ts      every preference, its default, validation and the v1 → v2 migration
     themes.ts        themes, accents, fonts and built-in wallpapers
-    appearance.ts    settings → CSS custom properties and data- attributes
-    storage.ts       chrome.storage access, serialized writes, wallpaper storage
-    wallpaper.ts     file sniffing and GIF/WebP/APNG animation detection
+    appearance.ts    settings → CSS custom properties and data- attributes, readable text on any panel
+    looks.ts         the curated one-click looks
+    storage.ts       chrome.storage access, serialized writes, the uploads gallery
+    wallpaper.ts     file sniffing, GIF/WebP/APNG animation detection, upload summaries
+    analyze.ts       thumbnails and colours for an upload (no DOM, so the service worker can run it)
     backup.ts        export / import
     color.ts         contrast and colour maths
     DataExtractor, FeatureManager, PageManager, UIEngine
@@ -105,7 +108,6 @@ tests/               unit tests (node --test)
 tests/e2e/           end-to-end tests (Playwright + fixtures)
 ```
 
-See `CLAUDE.md` for the full architecture and data-extraction notes.
 
 ## License
 
