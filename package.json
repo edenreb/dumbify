@@ -1,17 +1,22 @@
 {
   "name": "dumbify",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --test 'tests/*.test.ts'"
+    "test": "node --experimental-strip-types --test 'tests/*.test.ts'",
+    "test:e2e": "node --test 'tests/e2e/*.test.mjs'",
+    "screenshots": "node tests/e2e/screenshots.mjs",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.26",
     "@types/chrome": "^0.2.2",
+    "@types/node": "^22.20.4",
+    "playwright": "1.56.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.0"
   }
