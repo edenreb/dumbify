@@ -13,3 +13,6 @@ AGENTS.MD
 CLAUDE.md
 CURRENT_TASK.md
 TODO.md
+
+# screenshots written by `npm run screenshots` with no output dir
+/screenshots/

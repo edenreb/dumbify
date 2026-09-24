@@ -85,21 +85,22 @@ The subscriptions feed supports toolbar filters: All, Today, Yesterday, Past wee
 
 ## Customization
 
+Curated rather than endless — in the spirit of GNOME and Pop!_OS, every option is one that looks right.
+
 ### Settings Page
 
-A full settings page accessible from the sidebar gear icon or the toolbar popup:
+A Notion-style settings page, reachable from the sidebar, the in-page `•••` menu, or the toolbar popup. Sections sit in a sticky list on the left and a **live preview** of the reading view on the right follows every change as it happens — even a slider mid-drag.
 
-- **Theme** — Day (warm paper) or Night (dark ink)
-- **Font Size** — 14px to 32px
-- **Font Family** — 8 choices including system default, serif, sans-serif, and monospace
-- **Font Color** — Separate color pickers for light and dark mode
-- **Background Image** — Upload any image to use as a fullscreen background behind the reading view. Processed client-side (resized, format-optimized) and stored as a data URL
-- **Overlay Opacity** — Slider from 30% to 100% controlling how much of the background image shows through the content panels
-- **Live Preview** — Sample text updates in real time as you adjust settings
+- **Appearance** — Light, Dark or Auto (follows the system), with a separate theme for each: 8 light and 11 dark, each tested for WCAG contrast. Accent colour from the theme, nine GNOME-style presets, a custom colour, or one taken from the wallpaper. Corner roundness and density.
+- **Typography** — Sans, Serif and Mono faces bundled with the extension, plus eight system font styles; text size 12–32px; line spacing; optional custom text colours per mode, with a contrast warning.
+- **Wallpaper** — images, animated GIF/WebP/APNG and MP4/WebM loops, uploaded, dropped anywhere on the page, or pasted; built-in gradients, patterns and slowly moving Live wallpapers. Full window or Notion-style page cover; click the preview to set the focal point; blur, fade, and an animation switch that also respects reduced-motion. Panels over the wallpaper can be solid, frosted glass, or clear, with opacity and a tint colour.
+- **Layout** — List, Cards or Table feeds; page width; full, icons-only or hidden sidebar; row numbers; which details each video shows.
+- **Watch page** — Classic, Theater or Split (comments and playlist beside the video); open description and comments automatically.
+- **Backup & reset** — export everything, wallpaper included, to a file and import it back; reset asks before it does anything.
 
-### Toolbar Popup
+### Quick controls
 
-Quick access to the Day/Night toggle, reset button, and link to full settings.
+The in-page `•••` menu changes style, text size, layout, width, sidebar, mode and wallpaper without leaving the page. The toolbar popup has the on/off switch plus mode, theme, accent, text size, font, layout and wallpaper, and wears the reader's own theme.
 
 ## Design Philosophy
 
@@ -141,8 +142,8 @@ content.ts          — Entry point, initialization, route-to-feature mapping
 └── watch-page.ts   — Player relocation, like/save/comments, playlist sidebar
 
 background.ts       — Service worker: MAIN world data bridge, options page
-popup/index.ts      — Toolbar popup: theme toggle, reset
-options/index.ts    — Full settings page
+popup/index.ts      — Toolbar popup: on/off, mode, theme, accent, size, font, layout, wallpaper
+options/index.ts    — Full settings page with a live preview (preview/index.ts)
 ```
 
 ## Technical Details
