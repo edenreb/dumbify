@@ -1,7 +1,7 @@
 # Privacy Policy for Dumbify
 
 **Effective date:** September 2, 2026
-**Last updated:** September 2, 2026
+**Last updated:** September 24, 2026
 
 This Privacy Policy describes how the Dumbify browser extension ("Dumbify", "the
 extension") handles information. Please read it before installing or using the
@@ -36,13 +36,25 @@ information; personal communications; location data; or device identifiers.
 ## 4. Information stored on your device
 
 Dumbify stores your display preferences locally on your device using Chrome's
-extension storage API (`chrome.storage.local`). These preferences comprise: font
-size, font family, text colour (light and dark variants), theme selection,
-background image, and background opacity.
+extension storage API (`chrome.storage.local`). These preferences comprise: the
+on/off switch; theme, mode and accent colour; font, text size, line spacing and
+text colours; layout choices (feed layout, page width, sidebar, density, corners,
+which video details are shown, watch-page layout); wallpaper settings; and the
+wallpapers you upload - up to six images, animations or videos, each kept as you
+picked it (still images are resized and re-compressed first) with a small
+thumbnail and its main colours. Deleting an upload from the wallpaper gallery
+removes it from storage; resetting your settings leaves your uploads in the
+gallery until you delete them.
+
+So that pages open in your theme without a flash of the default one, Dumbify also
+keeps a small copy of the resulting colours and layout names in the browser's
+local storage for `youtube.com`, and for the extension's own pages. This copy
+contains no wallpaper and nothing about you or your use of YouTube.
 
 This information remains on your device. It is not transmitted to us or to any
 third party, is not synchronised across your devices, and is not accessible to
-us at any time.
+us at any time. Exporting a settings backup writes the same preferences to a file
+on your device that you choose; Dumbify does nothing further with it.
 
 ## 5. Interaction with YouTube
 
@@ -74,6 +86,7 @@ Dumbify requests the minimum permissions necessary to function:
 | Permission | Purpose |
 | --- | --- |
 | `storage` | To save your display preferences locally on your device. |
+| `unlimitedStorage` | To let a wallpaper animation or video larger than Chrome's default 10 MB extension storage allowance be saved locally. It grants no access to anything else. |
 | `scripting` | To read YouTube's own page data (`ytInitialData`, `ytcfg`) in order to render the simplified view. |
 | Host access to `https://www.youtube.com/*` | To operate on YouTube pages. The extension has no access to any other website. |
 
@@ -88,10 +101,13 @@ purposes.
 ## 8. Retention, deletion, and your rights
 
 Preferences stored under Section 4 are retained on your device until you delete
-them. You may remove them at any time by using the reset control on the
-extension's options page, by clearing the extension's storage through your
-browser's settings, or by uninstalling the extension, which deletes them
-permanently.
+them. You may return your preferences to their defaults at any time with the reset
+control on the extension's options page, and delete any uploaded wallpaper from the
+wallpaper gallery on the same page. Clearing the extension's storage through your
+browser's settings, or uninstalling the extension, deletes all of it permanently -
+except the small copy of colours and layout names kept in `youtube.com`'s own site
+storage (Section 4), which contains nothing about you and is cleared with that
+site's data.
 
 Because we hold no personal data concerning you, there is no data against which
 rights of access, rectification, erasure, portability, restriction, or objection

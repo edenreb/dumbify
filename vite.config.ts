@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import { crx } from '@crxjs/vite-plugin'
-import manifest from './src/manifest'
+import manifest from './src/manifest.ts'
 
 // Chrome injects a manifest-declared content script before any of our own code runs, so
 // main.css hid YouTube whether or not the extension was switched on - the "off" path
@@ -70,4 +70,11 @@ function deferContentScripts(): Plugin {
 
 export default defineConfig({
   plugins: [crx({ manifest }), deferContentScripts()],
+  build: {
+    rollupOptions: {
+      // The settings page's live preview is a page of its own, loaded in a frame, so
+      // nothing in the manifest points at it for crxjs to find.
+      input: { preview: 'src/preview/index.html' },
+    },
+  },
 })

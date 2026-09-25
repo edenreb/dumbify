@@ -1,6 +1,6 @@
 import type { NavigationState } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { content, renderNotFound, makeClickable } from '../core/UIEngine'
+import { content, renderNotFound, makeClickable, currentSettings, onAppearance } from '../core/UIEngine'
 
 import {
   extractPageError,
@@ -26,6 +26,10 @@ import {
 } from '../core/DataExtractor'
 import type { Video } from '../types'
 import { navigateTo, linkTo } from '../core/PageManager'
+import { h, avatar } from '../ui/dom'
+import { UI_LOCALE } from '../ui/routes'
+import { icon } from '../ui/icons'
+import { setCrumbs } from './shell'
 
 
 const PLAYER_SELECTORS = [
@@ -68,6 +72,9 @@ let createParams: string | null = null
 const commentReplies = new Map<string, CommentItem[]>()
 const commentRepliesNextToken = new Map<string, string | null>()
 const expandedReplies = new Set<string>()
+
+let watchSide: HTMLElement | null = null
+let unsubWatchAppearance: (() => void) | null = null
 
 let playlistPanel: HTMLElement | null = null
 let playlistVideos: Video[] = []
@@ -141,9 +148,7 @@ async function refreshCommentsFromData() {
 function renderMoreButton(list: HTMLElement) {
   list.querySelector('.df-comment-more')?.remove()
   if (!moreToken) return
-  const btn = document.createElement('button')
-  btn.className = 'df-comment-more'
-  btn.textContent = 'Load more'
+  const btn = h('button', { class: 'df-btn df-comment-more', type: 'button', text: 'More comments' })
   btn.onclick = async () => {
     if (!moreToken || btn.disabled) return
     btn.disabled = true
@@ -269,8 +274,9 @@ function nativeLikeState(): boolean {
 }
 
 function setLikeUi(btn: HTMLButtonElement, liked: boolean) {
-  btn.classList.toggle('df-liked', liked)
-  btn.textContent = liked ? 'Liked' : 'Like'
+  btn.classList.toggle('df-on', liked)
+  btn.setAttribute('aria-pressed', String(liked))
+  btn.replaceChildren(icon('thumb'), liked ? 'Liked' : 'Like')
 }
 
 function syncLikeState(btn: HTMLButtonElement) {
@@ -352,8 +358,8 @@ function closeSavePicker() {
 
 function paintSaveButton(btn: HTMLButtonElement, playlists: SavePlaylist[]) {
   const saved = playlists.some((p) => p.saved)
-  btn.classList.toggle('df-saved', saved)
-  btn.textContent = saved ? 'Saved' : 'Save'
+  btn.classList.toggle('df-on', saved)
+  btn.replaceChildren(icon('bookmark'), saved ? 'Saved' : 'Save')
 }
 
 function renderSaveRow(
@@ -362,18 +368,13 @@ function renderSaveRow(
   btn: HTMLButtonElement,
   all: SavePlaylist[]
 ): HTMLElement {
-  const row = document.createElement('button')
-  row.className = 'df-save-row'
-
-  const box = document.createElement('span')
-  box.className = 'df-save-row-box'
-  const name = document.createElement('span')
-  name.className = 'df-save-row-name'
-  name.textContent = p.title
-  row.append(box, name)
+  const row = h('button', { class: 'df-save-row', type: 'button', role: 'checkbox' },
+    h('span', { class: 'df-save-row-box', 'aria-hidden': 'true' }, icon('check')),
+    h('span', { class: 'df-save-row-name', text: p.title }),
+  )
 
   const paint = () => {
-    box.textContent = p.saved ? '[x]' : '[ ]'
+    row.setAttribute('aria-checked', String(p.saved))
     row.classList.toggle('df-save-row--on', p.saved)
   }
   paint()
@@ -410,26 +411,26 @@ function renderCreateFooter(
   const footer = document.createElement('div')
   footer.className = 'df-save-create'
 
-  const open = document.createElement('button')
-  open.className = 'df-save-row df-save-create-open'
-  open.textContent = '+ New playlist'
+  const open = h('button', { class: 'df-save-row df-save-create-open', type: 'button' }, icon('plus'), 'New playlist')
   footer.appendChild(open)
 
   open.onclick = () => {
-    footer.innerHTML = ''
+    footer.replaceChildren()
 
     const form = document.createElement('form')
     form.className = 'df-save-create-form'
 
     const name = document.createElement('input')
     name.className = 'df-save-create-name'
+    name.setAttribute('aria-label', 'Playlist name')
     name.type = 'text'
     name.placeholder = 'Playlist name'
     name.maxLength = 150
     form.appendChild(name)
 
     const privacy = document.createElement('select')
-    privacy.className = 'df-save-create-privacy'
+    privacy.className = 'df-select df-save-create-privacy'
+    privacy.setAttribute('aria-label', 'Visibility')
     for (const [value, label] of [['PRIVATE', 'Private'], ['UNLISTED', 'Unlisted'], ['PUBLIC', 'Public']]) {
       const opt = document.createElement('option')
       opt.value = value
@@ -441,12 +442,12 @@ function renderCreateFooter(
     const row = document.createElement('div')
     row.className = 'df-save-create-actions'
     const create = document.createElement('button')
-    create.className = 'df-save-create-submit'
+    create.className = 'df-btn df-btn-primary df-save-create-submit'
     create.type = 'submit'
     create.textContent = 'Create'
     create.disabled = true
     const cancel = document.createElement('button')
-    cancel.className = 'df-save-create-cancel'
+    cancel.className = 'df-btn df-save-create-cancel'
     cancel.type = 'button'
     cancel.textContent = 'Cancel'
     row.append(create, cancel)
@@ -474,7 +475,7 @@ function renderCreateFooter(
       if (!title || create.disabled) return
       create.disabled = true
       cancel.disabled = true
-      create.textContent = 'Creating'
+      create.textContent = 'Creating…'
       error.textContent = ''
 
       const made = await createPlaylistWithVideo(title, videoId, privacy.value as 'PRIVATE' | 'UNLISTED' | 'PUBLIC')
@@ -507,9 +508,11 @@ function toggleSavePicker(btn: HTMLButtonElement, videoId: string) {
   panel.className = 'df-save-picker'
   savePicker = panel
 
+  panel.setAttribute('role', 'dialog')
+  panel.setAttribute('aria-label', 'Save to playlist')
   const status = document.createElement('p')
   status.className = 'df-save-picker-status'
-  status.textContent = 'Loading'
+  status.textContent = 'Loading your playlists…'
   panel.appendChild(status)
   btn.parentElement!.appendChild(panel)
 
@@ -534,10 +537,10 @@ function toggleSavePicker(btn: HTMLButtonElement, videoId: string) {
   fetchSavePlaylists(videoId).then((playlists) => {
     if (savePicker !== panel) return
     if (!playlists.length) {
-      status.textContent = 'No playlists — sign in to save'
+      status.textContent = 'No playlists yet. Sign in to YouTube to save videos.'
       return
     }
-    panel.innerHTML = ''
+    panel.replaceChildren()
     paintSaveButton(btn, playlists)
     playlists.forEach((p) => panel.appendChild(renderSaveRow(p, videoId, btn, playlists)))
     panel.appendChild(renderCreateFooter(panel, videoId, btn, playlists))
@@ -780,16 +783,16 @@ async function postCommentViaApi(comment: string): Promise<'ok' | 'signin' | 'fa
   return ok ? 'ok' : 'failed'
 }
 
-function commentLikeLabel(c: CommentItem): string {
+function paintCommentLike(btn: HTMLButtonElement, c: CommentItem) {
   const count = c.liked ? c.likesLiked : c.likesNotliked
-  const word = c.liked ? 'Liked' : 'Like'
-  return count ? `${word} · ${count}` : word
+  btn.classList.toggle('df-liked', c.liked)
+  btn.setAttribute('aria-pressed', String(c.liked))
+  btn.setAttribute('aria-label', c.liked ? 'Unlike comment' : 'Like comment')
+  btn.replaceChildren(icon('thumb'), count || (c.liked ? 'Liked' : 'Like'))
 }
 
 function showCommentNotice(anchor: HTMLElement, message: string) {
-  const note = document.createElement('span')
-  note.className = 'df-comment-notice'
-  note.textContent = message
+  const note = h('span', { class: 'df-comment-notice', role: 'status', text: message })
   anchor.insertAdjacentElement('afterend', note)
   window.setTimeout(() => note.remove(), 2500)
 }
@@ -815,12 +818,21 @@ async function handleCommentLike(c: CommentItem, btn: HTMLButtonElement) {
   const result = await performCommentAction(action, c.stateKey)
   btn.disabled = false
   if (!result.ok) {
-    showCommentNotice(btn, 'Failed to update like')
+    showCommentNotice(btn, 'Couldn’t update that like')
     return
   }
   c.liked = result.liked ?? !c.liked
-  btn.classList.toggle('df-liked', c.liked)
-  btn.textContent = commentLikeLabel(c)
+  paintCommentLike(btn, c)
+}
+
+// Grows with its text rather than scrolling inside a one-line box.
+function autoGrow(input: HTMLTextAreaElement) {
+  const grow = () => {
+    input.style.height = 'auto'
+    input.style.height = `${Math.min(input.scrollHeight, 220)}px`
+  }
+  input.addEventListener('input', grow)
+  return grow
 }
 
 function toggleReplyBox(c: CommentItem, host: HTMLElement) {
@@ -829,15 +841,9 @@ function toggleReplyBox(c: CommentItem, host: HTMLElement) {
     existing.remove()
     return
   }
-  const box = document.createElement('div')
-  box.className = 'df-comment-reply-box'
-  const input = document.createElement('textarea')
-  input.className = 'df-comment-input'
-  input.placeholder = `Reply to ${c.author}…`
-  input.rows = 1
-  const submit = document.createElement('button')
-  submit.className = 'df-comment-submit'
-  submit.textContent = 'Reply'
+  const input = h('textarea', { class: 'df-comment-input', rows: '1', placeholder: `Reply to ${c.author}…`, 'aria-label': `Reply to ${c.author}` })
+  autoGrow(input)
+  const submit = h('button', { class: 'df-btn df-btn-primary df-comment-submit', type: 'button', text: 'Reply' })
   submit.onclick = async () => {
     const text = input.value.trim()
     if (!text || submit.disabled) return
@@ -846,7 +852,7 @@ function toggleReplyBox(c: CommentItem, host: HTMLElement) {
         ? 'Reload to reply to this comment'
         : c.signedOut
           ? 'Sign in on YouTube to reply'
-          : 'Replies are disabled for this comment'
+          : 'Replies are turned off for this comment'
       showCommentNotice(submit, msg)
       return
     }
@@ -858,12 +864,13 @@ function toggleReplyBox(c: CommentItem, host: HTMLElement) {
     } else {
       submit.disabled = false
       submit.textContent = 'Reply'
-      showCommentNotice(submit, 'Failed to post reply')
+      showCommentNotice(submit, 'Couldn’t post that reply')
     }
   }
-  box.appendChild(input)
-  box.appendChild(submit)
-  host.appendChild(box)
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit.click()
+  })
+  host.appendChild(h('div', { class: 'df-comment-reply-box' }, input, submit))
   input.focus()
 }
 
@@ -903,22 +910,17 @@ async function toggleReplies(c: CommentItem) {
 }
 
 function renderRepliesInto(container: HTMLElement, c: CommentItem) {
-  container.innerHTML = ''
+  container.replaceChildren()
   if (!c.commentId) return
   const replies = commentReplies.get(c.commentId)
   if (!replies) {
-    const loading = document.createElement('p')
-    loading.className = 'df-comment-empty'
-    loading.textContent = 'Loading replies…'
-    container.appendChild(loading)
+    container.appendChild(h('p', { class: 'df-comment-empty', text: 'Loading replies…' }))
     return
   }
   replies.forEach((r) => container.appendChild(renderCommentItem(r, 1)))
   const nextToken = commentRepliesNextToken.get(c.commentId)
   if (nextToken) {
-    const more = document.createElement('button')
-    more.className = 'df-comment-more'
-    more.textContent = 'Load more replies'
+    const more = h('button', { class: 'df-btn df-comment-more', type: 'button', text: 'More replies' })
     more.onclick = async () => {
       if (more.disabled || !c.commentId) return
       more.disabled = true
@@ -932,62 +934,43 @@ function renderRepliesInto(container: HTMLElement, c: CommentItem) {
 }
 
 function renderCommentItem(c: CommentItem, depth = 0): HTMLElement {
-  const item = document.createElement('article')
-  item.className = depth > 0 ? 'df-comment df-comment-reply' : 'df-comment'
+  const body = h('div', { class: 'df-comment-body' },
+    h('p', { class: 'df-comment-meta' },
+      h('span', { class: 'df-comment-author', text: c.author }),
+      c.time ? h('span', { class: 'df-comment-time', text: c.time }) : null,
+    ),
+    h('p', { class: 'df-comment-text', text: c.text }),
+  )
 
-  const meta = document.createElement('p')
-  meta.className = 'df-comment-meta'
-  meta.textContent = [c.author, c.time].filter(Boolean).join(' · ')
-  item.appendChild(meta)
-
-  const text = document.createElement('p')
-  text.className = 'df-comment-text'
-  text.textContent = c.text
-  item.appendChild(text)
-
-  const actions = document.createElement('div')
-  actions.className = 'df-comment-actions'
-
-  const likeBtn = document.createElement('button')
-  likeBtn.className = 'df-comment-action'
-  likeBtn.classList.toggle('df-liked', c.liked)
-  likeBtn.textContent = commentLikeLabel(c)
+  const likeBtn = h('button', { class: 'df-comment-action', type: 'button' })
+  paintCommentLike(likeBtn, c)
   likeBtn.onclick = () => handleCommentLike(c, likeBtn)
-  actions.appendChild(likeBtn)
 
-  const replyBoxHost = document.createElement('div')
-  replyBoxHost.className = 'df-comment-reply-box-host'
-
-  const replyBtn = document.createElement('button')
-  replyBtn.className = 'df-comment-action'
-  replyBtn.textContent = 'Reply'
+  const replyBoxHost = h('div', { class: 'df-comment-reply-box-host' })
+  const replyBtn = h('button', { class: 'df-comment-action', type: 'button' }, icon('comment'), 'Reply')
   replyBtn.onclick = () => toggleReplyBox(c, replyBoxHost)
-  actions.appendChild(replyBtn)
 
-  item.appendChild(actions)
-  item.appendChild(replyBoxHost)
+  body.append(h('div', { class: 'df-comment-actions' }, likeBtn, replyBtn), replyBoxHost)
 
   const hasLocalReplies = !!c.commentId && commentReplies.has(c.commentId)
   if (depth === 0 && c.commentId && (c.repliesToken || c.replyCount > 0 || hasLocalReplies)) {
     const isOpen = expandedReplies.has(c.commentId)
-    const toggle = document.createElement('button')
-    toggle.className = 'df-comment-replies-toggle'
-    toggle.textContent = isOpen ? 'Hide replies' : `View ${c.replyCount > 0 ? c.replyCount + ' ' : ''}replies`
+    const label = isOpen ? 'Hide replies' : `${c.replyCount > 0 ? c.replyCount + ' ' : ''}${c.replyCount === 1 ? 'reply' : 'replies'}`
+    const toggle = h('button', { class: 'df-comment-replies-toggle', type: 'button', 'aria-expanded': String(isOpen) }, icon(isOpen ? 'chevronDown' : 'chevron'), label)
     toggle.onclick = () => toggleReplies(c)
-    item.appendChild(toggle)
+    body.appendChild(toggle)
 
-    const repliesContainer = document.createElement('div')
-    repliesContainer.className = 'df-comment-replies'
-    item.appendChild(repliesContainer)
+    const repliesContainer = h('div', { class: 'df-comment-replies' })
+    body.appendChild(repliesContainer)
     if (isOpen) renderRepliesInto(repliesContainer, c)
   }
 
-  return item
+  return h('article', { class: depth > 0 ? 'df-comment df-comment-reply' : 'df-comment' }, avatar(c.author), body)
 }
 
 function renderComments(list: HTMLElement, source: CommentItem[] | null = null) {
   const comments = source ?? extractComments()
-  list.innerHTML = ''
+  list.replaceChildren()
   if (comments.length === 0) {
     if (DEBUG) {
       const threads = document.querySelectorAll('ytd-comment-thread-renderer').length
@@ -1002,10 +985,7 @@ function renderComments(list: HTMLElement, source: CommentItem[] | null = null) 
     const off = commentsDisabled || !!document.querySelector('ytd-comments ytd-message-renderer')
     const composer = commentsSection?.querySelector<HTMLElement>('.df-comment-composer')
     if (composer) composer.style.display = off ? 'none' : ''
-    const empty = document.createElement('p')
-    empty.className = 'df-comment-empty'
-    empty.textContent = off ? 'Comments are turned off' : 'No comments yet'
-    list.appendChild(empty)
+    list.appendChild(h('p', { class: 'df-comment-empty', text: off ? 'Comments are turned off for this video.' : 'No comments yet. Start the conversation.' }))
     return
   }
   const composer = commentsSection?.querySelector<HTMLElement>('.df-comment-composer')
@@ -1014,26 +994,11 @@ function renderComments(list: HTMLElement, source: CommentItem[] | null = null) 
 }
 
 function buildCommentsSection(): HTMLElement {
-  const section = document.createElement('section')
-  section.className = 'df-comments'
+  const input = h('textarea', { class: 'df-comment-input', rows: '1', placeholder: 'Add a comment…', 'aria-label': 'Add a comment' })
+  const grow = autoGrow(input)
+  grow()
 
-  const composer = document.createElement('div')
-  composer.className = 'df-comment-composer'
-
-  const input = document.createElement('textarea')
-  input.className = 'df-comment-input'
-  input.placeholder = 'Add a comment…'
-  input.rows = 1
-  const autoGrow = () => {
-    input.style.height = 'auto'
-    input.style.height = `${Math.min(input.scrollHeight, 200)}px`
-  }
-  input.addEventListener('input', autoGrow)
-  autoGrow()
-
-  const postBtn = document.createElement('button')
-  postBtn.className = 'df-comment-submit'
-  postBtn.textContent = 'Post'
+  const postBtn = h('button', { class: 'df-btn df-btn-primary df-comment-submit', type: 'button', text: 'Post' })
   postBtn.onclick = async () => {
     const text = input.value.trim()
     if (!text || postBtn.disabled) return
@@ -1042,20 +1007,22 @@ function buildCommentsSection(): HTMLElement {
     postBtn.disabled = true
     postBtn.textContent = 'Posting…'
     const r = await postCommentViaApi(text)
-    postBtn.textContent = r === 'ok' ? 'Posted' : r === 'signin' ? 'Sign in to post' : 'Failed'
+    postBtn.textContent = r === 'ok' ? 'Posted' : r === 'signin' ? 'Sign in to post' : 'Couldn’t post'
     window.setTimeout(() => {
       postBtn.disabled = false
       postBtn.textContent = 'Post'
     }, 1500)
   }
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) postBtn.click()
+  })
 
-  composer.appendChild(input)
-  composer.appendChild(postBtn)
-  section.appendChild(composer)
-
-  const list = document.createElement('div')
-  list.className = 'df-comment-list'
-  section.appendChild(list)
+  const list = h('div', { class: 'df-comment-list' })
+  const section = h('section', { class: 'df-comments', 'aria-label': 'Comments' },
+    h('h2', { class: 'df-comments-title', text: 'Comments' }),
+    h('div', { class: 'df-comment-composer' }, input, postBtn),
+    list,
+  )
 
   commentsSection = section
   renderComments(list)
@@ -1069,10 +1036,10 @@ function toggleComments() {
   if (commentsOpen) {
     if (!commentsSection) {
       commentsSection = buildCommentsSection()
-      content!.appendChild(commentsSection)
+      ;(watchSide ?? content!).appendChild(commentsSection)
       const inp = commentsSection.querySelector<HTMLTextAreaElement>('.df-comment-input')
       if (inp) inp.dispatchEvent(new Event('input'))
-      commentsSection.scrollIntoView({ block: 'start' })
+      if (!sideBySide()) commentsSection.scrollIntoView({ block: 'start', behavior: 'smooth' })
       window.dispatchEvent(new Event('scroll'))
       refreshCommentsFromData()
     }
@@ -1082,6 +1049,7 @@ function toggleComments() {
     commentsSection.remove()
     commentsSection = null
   }
+  updateCommentsToggle()
 }
 
 function commentCount(): string {
@@ -1092,9 +1060,13 @@ function commentCount(): string {
 }
 
 function updateCommentsToggle() {
-  if (!commentsBtnEl) return
   const count = commentCount()
-  commentsBtnEl.textContent = count ? `Comments · ${count}` : 'Comments'
+  const title = commentsSection?.querySelector('.df-comments-title')
+  if (title) title.textContent = count ? `Comments · ${count}` : 'Comments'
+  if (!commentsBtnEl) return
+  commentsBtnEl.replaceChildren(icon('comment'), count ? `Comments · ${count}` : 'Comments')
+  commentsBtnEl.classList.toggle('df-on', commentsOpen)
+  commentsBtnEl.setAttribute('aria-expanded', String(commentsOpen))
 }
 
 function scheduleRender() {
@@ -1167,60 +1139,41 @@ function resetPlaylist() {
 }
 
 function renderPlaylistItem(video: Video, index: number, current: boolean): HTMLElement {
-  const item = document.createElement('div')
-  item.className = 'df-playlist-item' + (current ? ' df-playlist-item--current' : '')
-
-  const num = document.createElement('span')
-  num.className = 'df-playlist-item-num'
-  num.textContent = String(index + 1)
-  item.appendChild(num)
-
-  const info = document.createElement('div')
-  info.className = 'df-playlist-item-info'
-
-  const title = document.createElement('p')
-  title.className = 'df-playlist-item-title'
-  title.textContent = video.title || 'Untitled'
-  info.appendChild(title)
-
-  const channel = document.createElement('p')
-  channel.className = 'df-playlist-item-channel'
-  channel.textContent = video.channel || ''
-  info.appendChild(channel)
-
-  item.appendChild(info)
-
-  if (!current) {
+  const item = h('div', { class: 'df-playlist-item' + (current ? ' df-playlist-item--current' : '') },
+    h('span', { class: 'df-playlist-item-num', text: current ? '▶' : String(index + 1) }),
+    h('div', { class: 'df-playlist-item-info' },
+      h('p', { class: 'df-playlist-item-title', text: video.title || 'Untitled' }),
+      h('p', { class: 'df-playlist-item-channel', text: video.channel || '' }),
+    ),
+  )
+  if (current) item.setAttribute('aria-current', 'true')
+  else {
     makeClickable(item, () => {
       const listParam = new URLSearchParams(location.search).get('list')
       const url = listParam ? `/watch?v=${video.id}&list=${listParam}` : `/watch?v=${video.id}`
       navigateTo(url)
     })
   }
-
   return item
 }
 
 function renderPlaylistPanel() {
   if (!playlistPanel) return
-  playlistPanel.innerHTML = ''
-
-  if (playlistTitle) {
-    const header = document.createElement('p')
-    header.className = 'df-playlist-header'
-    header.textContent = playlistTitle
-    playlistPanel.appendChild(header)
-  }
+  playlistPanel.replaceChildren()
 
   const currentVideoId = playlistCurrentId ?? new URLSearchParams(location.search).get('v')
+  const position = playlistVideos.findIndex((v) => v.id === currentVideoId)
+  const header = h('div', { class: 'df-playlist-header' }, icon('playlists'),
+    h('span', { text: playlistTitle || 'Playlist' }))
+  if (position >= 0) header.append(h('span', { class: 'df-group-count', text: `${position + 1} / ${playlistVideos.length}${playlistToken ? '+' : ''}` }))
+  playlistPanel.appendChild(header)
+
   playlistVideos.forEach((v, i) => {
     playlistPanel!.appendChild(renderPlaylistItem(v, i, v.id === currentVideoId))
   })
 
   if (playlistToken) {
-    const loadMore = document.createElement('button')
-    loadMore.className = 'df-playlist-load-more'
-    loadMore.textContent = 'Load more'
+    const loadMore = h('button', { class: 'df-playlist-load-more', type: 'button', text: 'Load more' })
     loadMore.onclick = async () => {
       if (!playlistToken || loadMore.disabled) return
       loadMore.disabled = true
@@ -1239,10 +1192,11 @@ function renderPlaylistPanel() {
     playlistPanel.appendChild(loadMore)
   }
 
-  // Scroll to current item
+  // Scroll to current item, inside the panel only - scrollIntoView would drag the whole
+  // page along with it.
   requestAnimationFrame(() => {
-    const current = playlistPanel?.querySelector('.df-playlist-item--current')
-    if (current) current.scrollIntoView({ block: 'nearest' })
+    const current = playlistPanel?.querySelector<HTMLElement>('.df-playlist-item--current')
+    if (current && playlistPanel) playlistPanel.scrollTop = current.offsetTop - playlistPanel.clientHeight / 2
   })
 }
 
@@ -1267,20 +1221,28 @@ function startPlaylistUrlWatch() {
   }, 500)
 }
 
+// Split puts the playlist and comments beside the video - only where there is room.
+function sideBySide(): boolean {
+  return currentSettings().watchLayout === 'split' && window.matchMedia('(min-width: 1100px)').matches
+}
+
+function formatPublished(published: string): string {
+  // publishDate carries the uploader's own offset ("2009-10-24T23:57:33-07:00").
+  // new Date() + toLocaleDateString would re-render it in the viewer's timezone and
+  // shift the day, so take the calendar date straight from the string.
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(published)
+  const d = ymd ? new Date(+ymd[1], +ymd[2] - 1, +ymd[3]) : new Date(published)
+  if (isNaN(d.getTime())) return published
+  return d.toLocaleDateString(UI_LOCALE, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 function buildWatchPage(nav: NavigationState) {
-  content!.innerHTML = ''
+  content!.replaceChildren()
   resetComments()
   resetPlaylist()
   closeSavePicker()
-
-  const hasPlaylist = !!nav.playlistId
-
-  // Two-column layout when in a playlist
-  const layout = document.createElement('div')
-  layout.className = hasPlaylist ? 'df-watch-layout' : ''
-
-  const mainCol = document.createElement('div')
-  mainCol.className = hasPlaylist ? 'df-watch-main' : ''
+  unsubWatchAppearance?.()
+  unsubWatchAppearance = null
 
   const pageError = extractPageError()
   if (pageError) {
@@ -1288,18 +1250,14 @@ function buildWatchPage(nav: NavigationState) {
     return
   }
 
-  const nowPlaying = document.createElement('p')
-  nowPlaying.className = 'df-now-playing'
-  nowPlaying.textContent = 'Now playing'
-  mainCol.appendChild(nowPlaying)
+  const hasPlaylist = !!nav.playlistId
+  const mainCol = h('div', { class: 'df-watch-main' })
+  const side = h('aside', { class: 'df-watch-side', 'aria-label': hasPlaylist ? 'Playlist and comments' : 'Comments' })
+  watchSide = side
+  const layout = h('div', { class: 'df-watch-layout' }, mainCol, side)
 
-  const player = document.createElement('div')
-  player.className = 'df-player'
-  mainCol.appendChild(player)
-
-  const screen = document.createElement('div')
-  screen.className = 'df-player-screen df-player-screen--native'
-  player.appendChild(screen)
+  const screen = h('div', { class: 'df-player-screen df-player-screen--native' })
+  mainCol.appendChild(h('div', { class: 'df-player' }, screen))
 
   movePlayerInto(screen)
 
@@ -1316,10 +1274,7 @@ function buildWatchPage(nav: NavigationState) {
       playerWatcher = null
       if (!movedPlayer) {
         console.warn('[Dumbify] player not found after 10s; selectors:', PLAYER_SELECTORS.join(', '))
-        const msg = document.createElement('p')
-        msg.className = 'df-play-label'
-        msg.textContent = 'Video not available'
-        screen.appendChild(msg)
+        screen.appendChild(h('p', { class: 'df-play-label', text: 'This video isn’t available right now.' }))
       }
     }, 10000)
   }
@@ -1344,6 +1299,7 @@ function buildWatchPage(nav: NavigationState) {
     }
     onFullscreenKey = (e) => {
       if (e.key !== 'f' && e.key !== 'F') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
       if (isTypingTarget(e.target)) return
       e.preventDefault()
       e.stopImmediatePropagation()
@@ -1355,83 +1311,47 @@ function buildWatchPage(nav: NavigationState) {
   }
 
   const data = extractWatchData()
+  setCrumbs(data.video.title || 'Watch')
+  if (data.video.title) document.title = `${data.video.title} · Dumbify`
 
-  const title = document.createElement('h1')
-  title.className = 'df-watch-title'
-  title.textContent = data.video.title || 'Untitled'
-  if (data.video.live) {
-    const liveBadge = document.createElement('span')
-    liveBadge.className = 'df-live-badge'
-    liveBadge.textContent = 'LIVE'
-    title.appendChild(liveBadge)
-  }
-  mainCol.appendChild(title)
+  const title = h('h1', { class: 'df-watch-title', text: data.video.title || 'Untitled' })
+  if (data.video.live) title.appendChild(h('span', { class: 'df-live-badge', text: 'Live' }))
 
-  const metaBar = document.createElement('div')
-  metaBar.className = 'df-watch-meta-bar'
+  const metaBar = h('div', { class: 'df-watch-meta-bar' })
 
   if (data.video.channel) {
     const channelId = data.video.channelId
     // An <a> only when it actually goes somewhere, so Cmd-click opens the channel in a
     // tab; plain text otherwise.
-    const channelSpan = document.createElement(channelId ? 'a' : 'span')
-    channelSpan.className = 'df-watch-channel'
-    if (channelId) {
-      channelSpan.classList.add('df-watch-channel--link')
-      const label = document.createElement('span')
-      label.textContent = data.video.channel
-      channelSpan.appendChild(label)
-      linkTo(channelSpan as HTMLAnchorElement, `/channel/${channelId}`)
-    } else {
-      channelSpan.textContent = data.video.channel
-    }
-    metaBar.appendChild(channelSpan)
+    const channel = channelId
+      ? h('a', { class: 'df-watch-channel df-watch-channel--link' })
+      : h('span', { class: 'df-watch-channel' })
+    channel.append(avatar(data.video.channel), h('span', { class: 'df-watch-channel-name', text: data.video.channel }))
+    if (channelId) linkTo(channel as HTMLAnchorElement, `/channel/${channelId}`)
+    metaBar.appendChild(channel)
   }
 
-  if (data.video.views || data.video.published) {
-    const metaItem = document.createElement('span')
-    metaItem.className = 'df-watch-meta-item'
-    const parts: string[] = []
-    if (data.video.views) {
-      const num = parseInt(data.video.views.replace(/[^0-9]/g, ''), 10)
-      parts.push(isNaN(num) ? data.video.views : `${num.toLocaleString()} views`)
-    }
-    if (data.video.published) {
-      // publishDate carries the uploader's own offset ("2009-10-24T23:57:33-07:00").
-      // new Date() + toLocaleDateString would re-render it in the viewer's timezone and
-      // shift the day, so take the calendar date straight from the string.
-      const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(data.video.published)
-      const d = ymd ? new Date(+ymd[1], +ymd[2] - 1, +ymd[3]) : new Date(data.video.published)
-      if (!isNaN(d.getTime())) {
-        parts.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))
-      } else {
-        parts.push(data.video.published)
-      }
-    }
-    metaItem.textContent = parts.join(' · ')
-    metaBar.appendChild(metaItem)
+  const parts: string[] = []
+  if (data.video.views) {
+    const num = parseInt(data.video.views.replace(/[^0-9]/g, ''), 10)
+    parts.push(isNaN(num) ? data.video.views : `${num.toLocaleString(UI_LOCALE)} views`)
   }
+  if (data.video.published) parts.push(formatPublished(data.video.published))
+  if (parts.length) metaBar.appendChild(h('span', { class: 'df-watch-meta-item', text: parts.join(' · ') }))
 
-  const actions = document.createElement('div')
-  actions.className = 'df-watch-actions'
+  const actions = h('div', { class: 'df-watch-actions' })
 
-  const likeBtn = document.createElement('button')
-  likeBtn.className = 'df-watch-action'
-  likeBtn.textContent = 'Like'
+  const likeBtn = h('button', { class: 'df-btn df-watch-action', type: 'button' })
   likeBtn.onclick = () => clickNativeLike(likeBtn)
   actions.appendChild(likeBtn)
   paintInitialLikeState(likeBtn)
   watchLikeState(likeBtn)
 
-  const saveBtn = document.createElement('button')
-  saveBtn.className = 'df-watch-action'
-  saveBtn.textContent = 'Save'
+  const saveBtn = h('button', { class: 'df-btn df-watch-action', type: 'button', 'aria-haspopup': 'dialog' }, icon('bookmark'), 'Save')
   saveBtn.onclick = () => toggleSavePicker(saveBtn, data.video.id)
   actions.appendChild(saveBtn)
 
-  const commentsBtn = document.createElement('button')
-  commentsBtn.className = 'df-watch-action'
-  commentsBtn.textContent = 'Comments'
+  const commentsBtn = h('button', { class: 'df-btn df-watch-action df-comments-btn', type: 'button', 'aria-expanded': 'false' })
   commentsBtnEl = commentsBtn
   commentsBtn.onclick = () => toggleComments()
   actions.appendChild(commentsBtn)
@@ -1439,33 +1359,51 @@ function buildWatchPage(nav: NavigationState) {
 
   metaBar.appendChild(actions)
 
-  mainCol.appendChild(metaBar)
+  const descriptionText = (data.video.description ?? '').trim()
+  const firstLine = descriptionText.split('\n').find((l) => l.trim()) ?? ''
+  const description = h('details', { class: 'df-watch-description' },
+    h('summary', null, icon('chevron'), 'Description',
+      firstLine ? h('span', { class: 'df-summary-hint', text: `— ${firstLine}` }) : null),
+    h('p', { class: 'df-watch-description-text', text: descriptionText || 'No description.' }),
+  )
 
-  const description = document.createElement('details')
-  description.className = 'df-watch-description'
-  const summary = document.createElement('summary')
-  summary.textContent = 'Description'
-  description.appendChild(summary)
-  const text = document.createElement('p')
-  text.className = 'df-watch-description-text'
-  text.textContent = (data.video.description ?? '').trim() || 'No description'
-  description.appendChild(text)
-  mainCol.appendChild(description)
+  mainCol.appendChild(h('div', { class: 'df-watch-info' }, title, metaBar, description))
 
-  // Playlist sidebar (below main content, full width)
   if (hasPlaylist) {
-    const sideCol = document.createElement('div')
-    sideCol.className = 'df-playlist-panel'
-    playlistPanel = sideCol
-    mainCol.appendChild(sideCol)
+    const panel = h('div', { class: 'df-playlist-panel' })
+    playlistPanel = panel
+    side.appendChild(panel)
     renderPlaylistPanel()
     loadPlaylistSidebar(nav.playlistId!, data.video.id)
     startPlaylistUrlWatch()
   }
 
-  layout.appendChild(mainCol)
-
   content!.appendChild(layout)
+
+  // The page is built before the settings have been read, so the "open automatically"
+  // choices wait for them rather than reading the defaults. Split fills its column when
+  // the page opens in it or is switched to it - not on every later change, which would
+  // reopen comments the reader had just closed.
+  let prevLayout: string | null = null
+  const offAppearance = onAppearance((s) => {
+    const first = prevLayout === null
+    const becameSplit = s.watchLayout === 'split' && prevLayout !== 'split'
+    prevLayout = s.watchLayout
+    if (first) {
+      if (s.autoDescription) description.open = true
+      if (s.autoComments && !commentsOpen) toggleComments()
+    }
+    if (becameSplit && !commentsOpen && sideBySide()) toggleComments()
+  })
+  // Beside the video the comments have no switch (it would only empty the column), so a
+  // window widened into split's range fills the column the same way.
+  const wide = window.matchMedia('(min-width: 1100px)')
+  const onWide = () => { if (sideBySide() && !commentsOpen) toggleComments() }
+  wide.addEventListener('change', onWide)
+  unsubWatchAppearance = () => {
+    offAppearance()
+    wide.removeEventListener('change', onWide)
+  }
 
   if (DEBUG) logLikeDiagnostics()
 }
@@ -1482,10 +1420,13 @@ export const watchPageFeature: Feature = {
   },
 
   unmount() {
+    unsubWatchAppearance?.()
+    unsubWatchAppearance = null
     resetComments()
     resetPlaylist()
     closeSavePicker()
     restorePlayer()
-    content!.innerHTML = ''
+    watchSide = null
+    content!.replaceChildren()
   },
 }

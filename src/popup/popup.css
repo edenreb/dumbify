@@ -1,0 +1,285 @@
+/* Do not try to round the popup. Chrome paints the popup window itself and does not
+   honour a transparent document: a radius here only exposes the frame underneath as
+   white notches at the four corners. The window's own shape is Chrome's to draw. */
+html,
+body {
+  background: var(--df-bg);
+}
+
+body {
+  width: 348px;
+  font-size: 13.5px;
+}
+
+.pop {
+  display: flex;
+  flex-direction: column;
+}
+
+.pop-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--df-border);
+}
+
+.pop-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.015em;
+}
+
+.pop-state {
+  margin-left: auto;
+  color: var(--df-text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.pop-body {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px 6px;
+}
+
+.pop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--df-border);
+}
+
+.pop-row:last-child {
+  border-bottom: 0;
+}
+
+.pop-row.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.pop-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--df-text);
+  font-weight: 500;
+}
+
+.pop-label .df-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--df-text-2);
+}
+
+.pop-label-value {
+  margin-left: auto;
+  color: var(--df-text-2);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.pop-label small {
+  margin-left: auto;
+  color: var(--df-text-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.seg-face {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12.5px;
+}
+
+.theme-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.theme-dot {
+  position: relative;
+  display: inline-grid;
+}
+
+.theme-dot-face {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--t-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--t-text) 22%, transparent);
+  cursor: pointer;
+  transition: transform 120ms;
+}
+
+.theme-dot-face::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--t-accent);
+}
+
+.theme-dot-face:hover {
+  transform: scale(1.08);
+}
+
+.theme-dot input:checked + .theme-dot-face {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--t-text) 22%, transparent), 0 0 0 2px var(--df-bg), 0 0 0 4px var(--df-accent);
+}
+
+.theme-dot input:focus-visible + .theme-dot-face {
+  outline: 2px solid var(--df-focus);
+  outline-offset: 5px;
+}
+
+.swatches {
+  gap: 7px;
+}
+
+.swatch-face {
+  width: 22px;
+  height: 22px;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: calc(var(--df-radius) + 2px);
+  background: var(--df-hover);
+}
+
+.stepper button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--df-radius);
+  background: transparent;
+  color: var(--df-text-2);
+  cursor: pointer;
+}
+
+.stepper button:hover:not(:disabled) {
+  background: var(--df-surface);
+  color: var(--df-text);
+}
+
+.stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.stepper .df-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.stepper output {
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.wall-mini {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wall-thumb {
+  flex: none;
+  width: 44px;
+  height: 28px;
+  border-radius: 5px;
+  background: var(--df-hover) center / cover no-repeat;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--df-text) 14%, transparent);
+}
+
+.wall-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--df-text-2);
+  font-size: 12.5px;
+  max-width: 130px;
+}
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--df-accent-text);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pop-off {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 20px 22px;
+  text-align: center;
+  color: var(--df-text-2);
+}
+
+.pop-off .df-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--df-text-3);
+}
+
+.pop-off strong {
+  color: var(--df-text);
+  font-size: 14px;
+}
+
+.pop-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--df-border);
+  background: var(--df-sidebar);
+}
+
+.pop-footer .btn {
+  height: 30px;
+}
+
+.pop-footer .btn:first-child {
+  flex: 1;
+}
+
+.pop-status {
+  padding: 0 16px 8px;
+  color: var(--df-live);
+  font-size: 12px;
+}
+
+.pop-status:empty {
+  display: none;
+}

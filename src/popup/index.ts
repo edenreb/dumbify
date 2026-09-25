@@ -1,131 +1,216 @@
-import {
-  getSettings, setSettings, resetSettings, FONT_SIZES, FONT_FAMILIES,
-} from '../core/storage'
+import '../ui/controls.css'
+import './popup.css'
+import '../styles/fonts.css'
+import { ACCENTS, ACCENT_THEME, getPreset, getTheme, themesFor } from '../core/themes'
+import { resolveScheme, systemPrefersDark, wallpaperShowing } from '../core/appearance'
+import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../core/settings'
+import { getUploads } from '../core/storage'
+import { SettingsStore } from '../ui/store'
+import { followSystem, paintFromCache, themePage } from '../ui/page-theme'
+import { h } from '../ui/dom'
+import { brandMark, icon } from '../ui/icons'
+import { segmented, toggle } from '../ui/controls'
 
 // The Chrome Web Store listing. "Rate" is the review tab of that same page.
 const STORE_URL =
   'https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf'
 
-let statusText = 'Changes save automatically'
+paintFromCache()
 
-async function saving(work: Promise<unknown>) {
-  try {
-    await work
-    statusText = 'Changes save automatically'
-  } catch (err) {
-    statusText = err instanceof Error ? err.message : 'Could not save'
-  }
-  render()
+function openSettings(section?: string) {
+  chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS', section })
+  window.close()
 }
 
-function toggleRow(label: string, on: boolean, onClick: () => void): HTMLElement {
-  const row = document.createElement('div')
-  row.className = `setting ${on ? 'on' : ''}`
-
-  const lbl = document.createElement('div')
-  lbl.className = `lbl ${on ? 'lbl-on' : 'lbl-off'}`
-  lbl.textContent = label
-  row.appendChild(lbl)
-
-  const toggle = document.createElement('div')
-  toggle.className = `toggle ${on ? 'on' : 'off'}`
-  const knob = document.createElement('div')
-  knob.className = 'toggle-knob'
-  toggle.appendChild(knob)
-  row.appendChild(toggle)
-
-  row.addEventListener('click', onClick)
-  return row
+function label(iconName: Parameters<typeof icon>[0], text: string, extra?: HTMLElement): HTMLElement {
+  return h('span', { class: 'pop-label' }, icon(iconName), text, extra ?? null)
 }
 
-function selectRow<T extends string | number>(
-  label: string,
-  options: { value: T; label: string }[],
-  current: T,
-  onChange: (value: T) => void,
-): HTMLElement {
-  const row = document.createElement('div')
-  row.className = 'setting'
-
-  const lbl = document.createElement('div')
-  lbl.className = 'lbl lbl-on'
-  lbl.textContent = label
-  row.appendChild(lbl)
-
-  const select = document.createElement('select')
-  select.className = 'select'
-  for (const o of options) {
-    const opt = document.createElement('option')
-    opt.value = String(o.value)
-    opt.textContent = o.label
-    opt.selected = o.value === current
-    select.appendChild(opt)
-  }
-  select.addEventListener('change', () => {
-    const picked = options.find((o) => String(o.value) === select.value)
-    if (picked) onChange(picked.value)
-  })
-  row.appendChild(select)
-  return row
-}
-
-function button(text: string, onClick: () => void): HTMLButtonElement {
-  const b = document.createElement('button')
-  b.textContent = text
-  b.addEventListener('click', onClick)
-  return b
-}
-
-function render() {
-  const app = document.getElementById('app')!
-  getSettings().then((s) => {
-    app.replaceChildren()
-
-    const h1 = document.createElement('h1')
-    h1.textContent = 'Dumbify'
-    app.appendChild(h1)
-
-    app.appendChild(toggleRow('On/Off', s.enabled, () => saving(setSettings({ enabled: !s.enabled }))))
-
-    // Everything below only means something while the reading view is actually on.
-    if (s.enabled) {
-      const isDark = s.theme === 'dark'
-      app.appendChild(toggleRow('Night Mode', isDark, () =>
-        saving(setSettings({ theme: isDark ? 'light' : 'dark' }))))
-
-      app.appendChild(selectRow(
-        'Text Size',
-        FONT_SIZES.map((sz) => ({ value: sz, label: `${sz}px` })),
-        s.fontSize,
-        (v) => saving(setSettings({ fontSize: v })),
-      ))
-
-      app.appendChild(selectRow(
-        'Font',
-        FONT_FAMILIES,
-        s.fontFamily,
-        (v) => saving(setSettings({ fontFamily: v })),
-      ))
+/** The theme row: a dot per theme for the mode in use, and the chosen one's name. */
+function themeDots(store: SettingsStore): { dots: HTMLElement; name: HTMLElement } {
+  const wrap = h('div', { class: 'theme-dots', role: 'radiogroup', 'aria-label': 'Theme' })
+  const name = h('span', { class: 'pop-label-value' })
+  let scheme: 'light' | 'dark' | null = null
+  const draw = () => {
+    const s = store.value
+    const next = resolveScheme(s, systemPrefersDark())
+    name.textContent = getTheme(next === 'dark' ? s.darkTheme : s.lightTheme, next).name
+    if (next === scheme) {
+      wrap.querySelectorAll<HTMLInputElement>('input').forEach((i) => { i.checked = i.value === (next === 'dark' ? s.darkTheme : s.lightTheme) })
+      return
     }
-
-    const actions = document.createElement('div')
-    actions.className = 'actions'
-    actions.appendChild(button('Reset', () => saving(resetSettings())))
-    actions.appendChild(button('Full Settings', () => chrome.runtime.openOptionsPage()))
-    app.appendChild(actions)
-
-    const rate = document.createElement('div')
-    rate.className = 'actions rate'
-    rate.appendChild(button('★  Rate Dumbify', () => {
-      chrome.tabs.create({ url: `${STORE_URL}/reviews` })
-    }))
-    app.appendChild(rate)
-
-    const status = document.createElement('div')
-    status.className = 'status'
-    status.textContent = statusText
-    app.appendChild(status)
-  })
+    scheme = next
+    wrap.replaceChildren()
+    for (const t of themesFor(next)) {
+      const input = h('input', { type: 'radio', name: 'theme', value: t.id, class: 'sr-only', 'aria-label': t.name })
+      input.checked = t.id === (next === 'dark' ? s.darkTheme : s.lightTheme)
+      input.addEventListener('change', () => {
+        if (input.checked) void store.commit(next === 'dark' ? { darkTheme: t.id } : { lightTheme: t.id })
+      })
+      const face = h('span', { class: 'theme-dot-face', title: t.name })
+      const el = h('label', { class: 'theme-dot' }, input, face)
+      el.style.setProperty('--t-bg', t.bg)
+      el.style.setProperty('--t-text', t.text)
+      el.style.setProperty('--t-accent', t.accent)
+      wrap.appendChild(el)
+    }
+  }
+  store.subscribe(draw)
+  return { dots: wrap, name }
 }
 
-render()
+function accentDots(store: SettingsStore): HTMLElement {
+  const wrap = h('div', { class: 'swatches', role: 'radiogroup', 'aria-label': 'Accent colour' })
+  const inputs: HTMLInputElement[] = []
+  const add = (value: string, name: string, color: string, className = '') => {
+    const input = h('input', { type: 'radio', name: 'accent', value, class: 'sr-only', 'aria-label': name })
+    input.addEventListener('change', () => { if (input.checked) void store.commit({ accent: value }) })
+    const el = h('label', { class: `swatch ${className}` }, input, h('span', { class: 'swatch-face', title: name }, icon('check')))
+    el.style.setProperty('--swatch', color)
+    inputs.push(input)
+    wrap.appendChild(el)
+    return el
+  }
+  const themeSwatch = add(ACCENT_THEME, 'Theme accent', '#888', 'swatch-theme')
+  for (const a of ACCENTS) add(a.id, a.name, a.color)
+  store.subscribe((s) => {
+    const scheme = resolveScheme(s, systemPrefersDark())
+    const theme = getTheme(scheme === 'dark' ? s.darkTheme : s.lightTheme, scheme)
+    themeSwatch.style.setProperty('--swatch', theme.accent)
+    themeSwatch.style.setProperty('--swatch-2', theme.bg)
+    inputs.forEach((i) => { i.checked = i.value === s.accent })
+  })
+  return wrap
+}
+
+function sizeStepper(store: SettingsStore): HTMLElement {
+  const out = h('output', { 'aria-live': 'polite' })
+  const down = h('button', { type: 'button', 'aria-label': 'Smaller text' }, icon('minus'))
+  const up = h('button', { type: 'button', 'aria-label': 'Larger text' }, icon('plus'))
+  down.addEventListener('click', () => void store.commit({ fontSize: Math.max(FONT_SIZE_MIN, store.value.fontSize - 1) }))
+  up.addEventListener('click', () => void store.commit({ fontSize: Math.min(FONT_SIZE_MAX, store.value.fontSize + 1) }))
+  store.subscribe((s) => {
+    out.textContent = `${s.fontSize}px`
+    down.disabled = s.fontSize <= FONT_SIZE_MIN
+    up.disabled = s.fontSize >= FONT_SIZE_MAX
+  })
+  return h('div', { class: 'stepper', role: 'group', 'aria-label': 'Text size' }, down, out, up)
+}
+
+function wallpaperRow(store: SettingsStore): HTMLElement {
+  const thumb = h('span', { class: 'wall-thumb', 'aria-hidden': 'true' })
+  const name = h('span', { class: 'wall-name' })
+  const choose = h('button', { class: 'link-btn', type: 'button', text: 'Choose…', onclick: () => openSettings('wallpaper') })
+  const sw = toggle(store, { label: 'Show wallpaper', get: (s) => wallpaperShowing(s), set: (v) => ({ wallpaperEnabled: v }) })
+  let shownKey = ''
+  store.subscribe(async (s) => {
+    const w = s.wallpaper
+    const none = w.source === 'none'
+    sw.hidden = none
+    choose.hidden = !none
+    name.textContent = none ? 'None' : w.name || 'Wallpaper'
+    const key = `${w.source}:${w.presetId}:${w.uploadId}`
+    if (key === shownKey) return
+    shownKey = key
+    thumb.style.background = ''
+    if (w.source === 'preset') {
+      const p = getPreset(w.presetId)
+      if (p) thumb.style.background = p.css
+    } else if (w.source === 'upload') {
+      if (w.average) thumb.style.background = w.average
+      // The gallery's thumbnail - a few KB - never the file: a 14 MB video read into a
+      // popup just to draw 28 pixels cost it tens of megabytes of memory.
+      const upload = (await getUploads()).find((u) => u.id === w.uploadId)
+      if (upload?.thumbUrl && shownKey === key) thumb.style.backgroundImage = `url("${upload.thumbUrl}")`
+    }
+  })
+  return h('div', { class: 'pop-row' }, label('image', 'Wallpaper'),
+    h('span', { class: 'wall-mini' }, thumb, name, choose, sw))
+}
+
+async function main() {
+  const app = document.getElementById('app')!
+  const status = h('div', { class: 'pop-status', role: 'alert' })
+  const store = new SettingsStore({
+    saved: () => { status.textContent = '' },
+    failed: (msg) => { status.textContent = msg },
+  })
+  await store.load()
+  store.subscribe((s) => themePage(s))
+  followSystem(() => store.value)
+
+  const stateText = h('span', { class: 'pop-state' })
+  const header = h('header', { class: 'pop-header' },
+    h('span', { class: 'pop-brand' }, brandMark(), 'Dumbify'),
+    stateText,
+    toggle(store, { label: 'Dumbify on YouTube', get: (s) => s.enabled, set: (v) => ({ enabled: v }) }),
+  )
+
+  const body = h('div', { class: 'pop-body' },
+    h('div', { class: 'pop-row' }, label('palette', 'Appearance'), segmented(store, {
+      label: 'Appearance',
+      compact: true,
+      options: [
+        { value: 'light', label: '', icon: 'sun', hint: 'Light' },
+        { value: 'dark', label: '', icon: 'moon', hint: 'Dark' },
+        { value: 'auto', label: '', icon: 'monitor', hint: 'Match system' },
+      ],
+      get: (s) => s.mode,
+      set: (v) => ({ mode: v }),
+    })),
+    (() => {
+      const themes = themeDots(store)
+      return h('div', { class: 'pop-row stacked' }, label('sparkles', 'Theme', themes.name), themes.dots)
+    })(),
+    h('div', { class: 'pop-row stacked' }, label('drop', 'Accent'), accentDots(store)),
+    h('div', { class: 'pop-row' }, label('textSize', 'Text size'), sizeStepper(store)),
+    h('div', { class: 'pop-row' }, label('type', 'Font'), segmented(store, {
+      label: 'Font',
+      compact: true,
+      options: [
+        { value: 'sans', label: 'Sans' },
+        { value: 'serif', label: 'Serif' },
+        { value: 'mono', label: 'Mono' },
+      ],
+      get: (s) => (s.font === 'sans' || s.font === 'serif' || s.font === 'mono' ? s.font : ('' as 'sans')),
+      set: (v) => ({ font: v }),
+    })),
+    h('div', { class: 'pop-row' }, label('layout', 'Layout'), segmented(store, {
+      label: 'Layout',
+      compact: true,
+      options: [
+        { value: 'list', label: '', icon: 'list', hint: 'List' },
+        { value: 'cards', label: '', icon: 'cards', hint: 'Cards' },
+        { value: 'table', label: '', icon: 'table', hint: 'Table' },
+      ],
+      get: (s) => s.layout,
+      set: (v) => ({ layout: v }),
+    })),
+    wallpaperRow(store),
+  )
+
+  const off = h('div', { class: 'pop-off' }, icon('power'),
+    h('strong', { text: 'Dumbify is off' }),
+    h('span', { text: 'YouTube looks like normal YouTube. Switch it on to get the calm, text-first view back.' }))
+
+  store.subscribe((s) => {
+    body.hidden = !s.enabled
+    off.hidden = s.enabled
+    stateText.textContent = s.enabled ? 'On' : 'Off'
+  })
+
+  const footer = h('footer', { class: 'pop-footer' },
+    h('button', { class: 'btn', type: 'button', onclick: () => openSettings() }, icon('sliders'), 'All settings'),
+    h('button', {
+      class: 'btn btn-quiet', type: 'button', title: 'Rate Dumbify on the Chrome Web Store',
+      onclick: () => { chrome.tabs.create({ url: `${STORE_URL}/reviews` }); window.close() },
+    }, icon('star'), 'Rate'),
+  )
+
+  app.replaceChildren(h('div', { class: 'pop' }, header, status, body, off, footer))
+}
+
+main().catch((err) => {
+  console.error('[Dumbify] popup failed:', err)
+  document.getElementById('app')!.textContent = 'Couldn’t load settings.'
+})

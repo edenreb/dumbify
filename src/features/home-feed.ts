@@ -1,9 +1,14 @@
 import type { NavigationState, Video, Channel, Route } from '../types'
 import type { Feature } from '../core/FeatureManager'
-import { content, root, renderNotFound, makeClickable } from '../core/UIEngine'
-import { extractPageError, extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, fetchUserPlaylists, fetchLikedPlaylist, fetchPlaylistPage, setChannelSubscription, diag } from '../core/DataExtractor'
+import { content, renderNotFound, makeClickable, scroller, onAppearance, emptyState } from '../core/UIEngine'
+import { extractPageError, extractPageVideosWithContinuation, fetchContinuation, fetchSearchResults, fetchChannelPage, fetchChannelPlaylists, fetchUserPlaylists, fetchLikedPlaylist, fetchPlaylistPage, setChannelSubscription } from '../core/DataExtractor'
 import type { SearchItem, PlaylistItem } from '../core/DataExtractor'
 import { navigateTo, linkTo } from '../core/PageManager'
+import { wantsNewTab } from '../core/links'
+import { h, avatar } from '../ui/dom'
+import { UI_LOCALE } from '../ui/routes'
+import { icon, type IconName } from '../ui/icons'
+import { setCrumbs } from './shell'
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
@@ -46,72 +51,86 @@ function dateBucket(published: string): string {
 
 function groupVideosByDate(videos: Video[]): Map<string, Video[]> {
   const groups = new Map<string, Video[]>()
+  const age = new Map<string, number>()
   const order = ['Today', 'Yesterday', 'Past week', 'Past month']
   for (const v of videos) {
     const bucket = dateBucket(v.published)
     if (!groups.has(bucket)) groups.set(bucket, [])
     groups.get(bucket)!.push(v)
+    const days = parseRelativeDate(v.published)
+    age.set(bucket, Math.min(age.get(bucket) ?? Infinity, days))
   }
-  // Sort groups: named buckets first in order, then month names alphabetically, then Unknown/Older
+  // Named buckets first, then the older ones newest-first. They used to sort
+  // alphabetically, which put April ahead of March whatever the year.
   const sorted = new Map<string, Video[]>()
   for (const key of order) {
     if (groups.has(key)) sorted.set(key, groups.get(key)!)
   }
   const remaining = [...groups.keys()]
-    .filter((k) => !order.includes(k) && k !== 'Unknown')
-    .sort()
+    .filter((k) => !order.includes(k) && k !== 'Unknown' && k !== 'Older')
+    .sort((a, b) => (age.get(a) ?? 0) - (age.get(b) ?? 0))
   for (const key of remaining) sorted.set(key, groups.get(key)!)
+  if (groups.has('Older')) sorted.set('Older', groups.get('Older')!)
   if (groups.has('Unknown')) sorted.set('Unknown', groups.get('Unknown')!)
   return sorted
 }
 
-const ROUTE_TITLES: Partial<Record<Route, { eyebrow: string; title: string; note: string; aside?: string }>> = {
-  home: {
-    eyebrow: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
-    title: 'Recommended for you',
-    note: '',
-  },
-  history: {
-    eyebrow: '',
-    title: 'History',
-    note: '',
-    aside: '',
-  },
-  subscriptions: {
-    eyebrow: '',
-    title: 'Subscriptions',
-    note: '',
-  },
-  'watch-later': {
-    eyebrow: '',
-    title: 'Watch Later',
-    note: '',
-  },
-  liked: {
-    eyebrow: '',
-    title: 'Liked',
-    note: '',
-  },
-  playlists: {
-    eyebrow: '',
-    title: 'Playlists',
-    note: '',
-  },
-  playlist: {
-    eyebrow: 'Playlist',
-    title: 'Playlist',
-    note: '',
-  },
-  search: {
-    eyebrow: 'Search',
-    title: 'Search results',
-    note: '',
-  },
-  channel: {
-    eyebrow: 'Channel',
-    title: 'Channel',
-    note: '',
-  },
+function greeting(now = new Date()): string {
+  const hour = now.getHours()
+  if (hour >= 5 && hour < 12) return 'Good morning'
+  if (hour >= 12 && hour < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
+interface PageInfo {
+  icon: IconName
+  title: string
+  sub: string
+}
+
+// Worked out per render, not at module load: the home page's date used to be frozen at
+// whenever the content script first ran, so a tab left open overnight showed yesterday.
+function pageInfo(nav: NavigationState): PageInfo | null {
+  switch (nav.route) {
+    case 'home':
+      return {
+        icon: 'home',
+        title: greeting(),
+        sub: `${new Date().toLocaleDateString(UI_LOCALE, { weekday: 'long', month: 'long', day: 'numeric' })} · Recommended for you`,
+      }
+    case 'subscriptions':
+      return { icon: 'subscriptions', title: 'Subscriptions', sub: 'The latest from channels you follow' }
+    case 'history':
+      return { icon: 'history', title: 'History', sub: 'Everything you’ve watched, most recent first' }
+    case 'watch-later':
+      return { icon: 'clock', title: 'Watch later', sub: 'Videos you saved for later' }
+    case 'liked':
+      return { icon: 'thumb', title: 'Liked videos', sub: 'Everything you’ve given a thumbs up' }
+    case 'playlists':
+      return { icon: 'playlists', title: 'Playlists', sub: 'Playlists you made or saved' }
+    case 'playlist':
+      return { icon: 'playlists', title: 'Playlist', sub: '' }
+    case 'search':
+      return {
+        icon: 'search',
+        title: nav.searchQuery ? `“${nav.searchQuery}”` : 'Search',
+        sub: 'Search results',
+      }
+    default:
+      return null
+  }
+}
+
+const EMPTY_COPY: Partial<Record<Route, [IconName, string, string]>> = {
+  home: ['home', 'No recommendations right now', 'YouTube didn’t send any. Try reloading the page.'],
+  subscriptions: ['subscriptions', 'No new videos', 'Nothing new from the channels you follow.'],
+  history: ['history', 'No watch history yet', 'Videos you watch will show up here.'],
+  'watch-later': ['clock', 'Nothing saved for later', 'Use Save on any video to add it here.'],
+  liked: ['thumb', 'No liked videos', 'Videos you like will show up here.'],
+  playlists: ['playlists', 'No playlists yet', ''],
+  playlist: ['playlists', 'This playlist is empty', ''],
+  search: ['search', 'No results', 'Try different words.'],
+  channel: ['film', 'No videos', 'This channel hasn’t posted anything here.'],
 }
 
 // Subscriptions is the only feed with a working toolbar - its options are wired to a
@@ -122,129 +141,177 @@ const TOOLBAR_OPTIONS: Partial<Record<Route, string[]>> = {
 }
 
 function renderPageHead(nav: NavigationState) {
-  const info = ROUTE_TITLES[nav.route]
-  if (!info || nav.route === 'channel') return
-
-  const head = document.createElement('header')
-  head.className = 'df-page-head'
-  head.id = 'df-page-head'
-
-  const body = document.createElement('div')
-  body.className = 'df-page-head-body'
-
-  const eyebrow = document.createElement('p')
-  eyebrow.className = 'df-page-eyebrow'
-  eyebrow.textContent = info.eyebrow
-  body.appendChild(eyebrow)
-
-  const title = document.createElement('h1')
-  title.className = 'df-page-title'
-  title.textContent = info.title
-  body.appendChild(title)
-
-  if (info.note) {
-    const note = document.createElement('p')
-    note.className = 'df-page-note'
-    note.textContent = nav.route === 'search' && nav.searchQuery
-      ? `Results for “${nav.searchQuery}”`
-      : info.note
-    body.appendChild(note)
-  }
-
-  head.appendChild(body)
-
-  if (info.aside) {
-    const aside = document.createElement('div')
-    aside.className = 'df-page-aside'
-    const span = document.createElement('span')
-    span.className = 'df-page-eyebrow'
-    span.textContent = info.aside
-    aside.appendChild(span)
-    head.appendChild(aside)
-  }
-
-  content!.appendChild(head)
+  const info = pageInfo(nav)
+  if (!info) return
+  content!.appendChild(h('header', { class: 'df-page-head', id: 'df-page-head' },
+    h('div', { class: 'df-page-head-body' },
+      h('div', { class: 'df-page-icon', 'aria-hidden': 'true' }, icon(info.icon)),
+      h('h1', { class: 'df-page-title', text: info.title }),
+      info.sub ? h('p', { class: 'df-page-sub', text: info.sub }) : h('p', { class: 'df-page-sub', hidden: true }),
+    ),
+  ))
 }
 
-function updatePageHead(overrides: { eyebrow?: string; title?: string; note?: string }) {
+function updatePageHead(overrides: { title?: string; sub?: string }) {
   const head = document.getElementById('df-page-head')
   if (!head) return
-  const eyebrow = head.querySelector('.df-page-eyebrow')
-  if (eyebrow && overrides.eyebrow) eyebrow.textContent = overrides.eyebrow
   const title = head.querySelector('.df-page-title')
   if (title && overrides.title) title.textContent = overrides.title
-  const note = head.querySelector('.df-page-note')
-  if (note && overrides.note !== undefined) note.textContent = overrides.note
+  const sub = head.querySelector<HTMLElement>('.df-page-sub')
+  if (sub && overrides.sub !== undefined) {
+    sub.textContent = overrides.sub
+    sub.hidden = !overrides.sub
+  }
 }
 
 function renderToolbar(route: Route, onOption?: (option: string) => void): HTMLElement | null {
   const options = TOOLBAR_OPTIONS[route]
   if (!options) return null
 
-  const bar = document.createElement('div')
-  bar.className = 'df-toolbar'
-
+  const bar = h('div', { class: 'df-toolbar', role: 'toolbar', 'aria-label': 'Filter' })
   options.forEach((o, i) => {
-    const span = document.createElement('span')
-    span.className = i === 0 ? 'df-toolbar-item df-active' : 'df-toolbar-item'
-    span.textContent = o
+    const chip = h('span', { class: i === 0 ? 'df-chip df-active' : 'df-chip', text: o, 'aria-pressed': String(i === 0) })
     if (onOption) {
-      makeClickable(span, () => {
-        bar.querySelectorAll('.df-toolbar-item').forEach((el) => el.classList.remove('df-active'))
-        span.classList.add('df-active')
+      makeClickable(chip, () => {
+        bar.querySelectorAll('.df-chip').forEach((el) => {
+          el.classList.remove('df-active')
+          el.setAttribute('aria-pressed', 'false')
+        })
+        chip.classList.add('df-active')
+        chip.setAttribute('aria-pressed', 'true')
         onOption(o)
       })
     }
-    bar.appendChild(span)
+    bar.appendChild(chip)
   })
 
   content!.appendChild(bar)
   return bar
 }
 
-function renderChannelBanner(ch: Channel, before?: HTMLElement) {
-  const banner = document.createElement('a')
-  banner.className = 'df-channel-banner'
-  linkTo(banner, `/channel/${ch.id}`)
-  banner.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(`/channel/${ch.id}`) } }
-  banner.setAttribute('role', 'link')
-  banner.tabIndex = 0
+// Channel names inside a row are a second link inside the row's own <a>. A plain
+// left click goes to the channel; the same gestures that open the row in a new tab open
+// the channel in one.
+function channelLabel(v: Video): HTMLElement {
+  if (!v.channelId) return h('span', { class: 'df-item-channel', text: v.channel })
+  const path = `/channel/${v.channelId}`
+  const el = h('span', { class: 'df-item-channel df-item-channel-link', role: 'link', tabindex: '0', text: v.channel })
+  // Absolute on purpose: a content script's window.open resolves a bare path against
+  // the extension's own origin, which opened an error page.
+  const openInTab = () => window.open(new URL(path, location.origin).href, '_blank', 'noopener')
+  el.addEventListener('click', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (wantsNewTab(e)) openInTab()
+    else navigateTo(path)
+  })
+  el.addEventListener('auxclick', (e) => {
+    if (e.button !== 1) return
+    e.preventDefault()
+    e.stopPropagation()
+    openInTab()
+  })
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    e.stopPropagation()
+    navigateTo(path)
+  })
+  return el
+}
 
-  const label = document.createElement('span')
-  label.className = 'df-channel-banner-label'
-  label.textContent = ch.verified ? 'Channel · Verified' : 'Channel'
-  banner.appendChild(label)
+function renderVideo(v: Video): HTMLElement {
+  const row = h('a', { class: 'df-item-row' })
+  linkTo(row, v.url)
 
-  const row = document.createElement('div')
-  row.className = 'df-channel-banner-row'
+  const title = h('span', { class: 'df-item-title', text: v.title })
 
-  const title = document.createElement('span')
-  title.className = 'df-channel-banner-name'
-  title.textContent = ch.name
-  row.appendChild(title)
+  // Fixed order - channel, views, date - and absent fields simply not rendered, so the
+  // separators (drawn in CSS) never leave a gap or a stray dot.
+  const meta = h('span', { class: 'df-item-meta' })
+  if (v.channel) meta.appendChild(channelLabel(v))
+  if (v.views) meta.appendChild(h('span', { class: 'df-item-views', text: v.views }))
+  if (v.published) meta.appendChild(h('span', { class: 'df-item-date', text: v.published }))
 
-  const meta = document.createElement('span')
-  meta.className = 'df-channel-banner-meta'
-  const parts: string[] = []
-  if (ch.subscribers) parts.push(ch.subscribers)
-  if (ch.videoCount) parts.push(ch.videoCount)
-  meta.textContent = parts.join(' · ')
-  row.appendChild(meta)
+  row.append(
+    h('span', { class: 'df-item-number', 'aria-hidden': 'true' }),
+    h('span', { class: 'df-item-body' }, title, meta),
+    // Live streams have no length, and a badge inside the title was cut off by the
+    // table layout's ellipsis - the length slot carries it instead.
+    v.live
+      ? h('span', { class: 'df-item-duration df-item-live', text: 'Live' })
+      : h('span', { class: 'df-item-duration', text: v.duration }),
+  )
+  return row
+}
 
-  banner.appendChild(row)
+function renderPlaylistRow(p: PlaylistItem): HTMLElement {
+  const row = h('a', { class: 'df-item-row' })
+  linkTo(row, p.url)
+  const meta = h('span', { class: 'df-item-meta' })
+  if (p.videoCount) meta.appendChild(h('span', { class: 'df-item-count', text: p.videoCount }))
+  row.append(
+    h('span', { class: 'df-item-number', 'aria-hidden': 'true' }),
+    h('span', { class: 'df-item-body' }, h('span', { class: 'df-item-title', text: p.title }), meta),
+    h('span', { class: 'df-item-duration' }),
+  )
+  return row
+}
 
-  if (ch.description) {
-    const desc = document.createElement('p')
-    desc.className = 'df-channel-banner-desc'
-    desc.textContent = ch.description
-    banner.appendChild(desc)
+function skeletonRows(n = 8): DocumentFragment {
+  const frag = document.createDocumentFragment()
+  for (let i = 0; i < n; i++) {
+    frag.appendChild(h('div', { class: 'df-item-row df-skeleton', 'aria-hidden': 'true' },
+      h('span', { class: 'df-item-number' }),
+      h('span', { class: 'df-item-body' }, h('span', { class: 'df-skel df-skel-title' }), h('span', { class: 'df-skel df-skel-meta' })),
+      h('span', { class: 'df-skel df-skel-dur' }),
+    ))
   }
+  return frag
+}
 
-  const cta = document.createElement('span')
-  cta.className = 'df-channel-banner-cta'
-  cta.textContent = 'View channel'
-  banner.appendChild(cta)
+/** Column labels for the table layout; only visible there. */
+function tableHead(): HTMLElement {
+  return h('div', { class: 'df-table-head', 'aria-hidden': 'true' },
+    h('span'), h('span', { text: 'Title' }), h('span', { text: 'Channel' }),
+    h('span', { text: 'Views' }), h('span', { text: 'Published' }), h('span', { text: 'Length' }),
+  )
+}
 
+function dateGroup(label: string): { group: HTMLElement; count: HTMLElement } {
+  const count = h('span', { class: 'df-group-count' })
+  const group = h('div', { class: 'df-date-group' },
+    h('div', { class: 'df-date-group-header', role: 'heading', 'aria-level': '2' }, h('span', { text: label }), count),
+  )
+  return { group, count }
+}
+
+function channelMeta(ch: Channel): string {
+  return [ch.subscribers, ch.videoCount].filter(Boolean).join(' · ')
+}
+
+function channelName(ch: Channel, className: string): HTMLElement {
+  const name = h('span', { class: className, text: ch.name })
+  if (ch.verified) {
+    name.append(icon('verified', 'df-icon df-verified'), h('span', { class: 'df-sr-only', text: 'Verified' }))
+  }
+  return name
+}
+
+function renderChannelCard(ch: Channel, banner = false): HTMLElement {
+  const card = h('a', { class: banner ? 'df-channel-card df-channel-banner' : 'df-channel-card' })
+  linkTo(card, `/channel/${ch.id}`)
+  const body = h('span', { class: 'df-channel-card-body' },
+    channelName(ch, 'df-channel-card-name'),
+    h('span', { class: 'df-channel-card-meta', text: channelMeta(ch) || 'Channel' }),
+  )
+  if (ch.description) body.appendChild(h('span', { class: 'df-channel-card-desc', text: ch.description }))
+  card.append(avatar(ch.name), body, icon('chevron'))
+  return card
+}
+
+function renderChannelBanner(ch: Channel, before?: HTMLElement) {
+  const banner = renderChannelCard(ch, true)
   if (before && before.parentNode) before.parentNode.insertBefore(banner, before)
   else content!.appendChild(banner)
 }
@@ -265,9 +332,12 @@ function renderChannelBanner(ch: Channel, before?: HTMLElement) {
 // was because param extraction was unreliable, not because the API call failed, so the
 // path forward is fixing extraction (already done - see extractSubscriptionInfo's
 // comment) rather than continuing to chase click simulation.
-function setSubUi(btn: HTMLButtonElement, subscribed: boolean) {
-  btn.classList.toggle('df-sub-btn--on', subscribed)
-  btn.textContent = subscribed ? 'Unsubscribe' : 'Subscribe'
+function setSubUi(btn: HTMLButtonElement, subscribed: boolean, name: string) {
+  btn.classList.toggle('df-on', subscribed)
+  btn.classList.toggle('df-btn-primary', !subscribed)
+  btn.replaceChildren(subscribed ? icon('check') : icon('plus'), subscribed ? 'Subscribed' : 'Subscribe')
+  btn.setAttribute('aria-label', subscribed ? `Unsubscribe from ${name}` : `Subscribe to ${name}`)
+  btn.title = subscribed ? 'Click to unsubscribe' : ''
 }
 
 interface SubUiState {
@@ -305,7 +375,7 @@ function detectRealSubscribedState(): boolean | null {
 // Polls briefly for the real header to render (it's the underlying YouTube page,
 // which loads independently of Dumbify's own fetch), then applies whichever state it
 // finds. Never clicks anything - purely a one-time read to correct the initial label.
-function applyRealSubscribedState(btn: HTMLButtonElement, state: SubUiState) {
+function applyRealSubscribedState(btn: HTMLButtonElement, state: SubUiState, name: string) {
   let tries = 0
   const poll = window.setInterval(() => {
     tries++
@@ -313,7 +383,7 @@ function applyRealSubscribedState(btn: HTMLButtonElement, state: SubUiState) {
     if (real !== null) {
       window.clearInterval(poll)
       state.subscribed = real
-      setSubUi(btn, real)
+      setSubUi(btn, real, name)
     } else if (tries >= 15) {
       window.clearInterval(poll)
       console.warn('[Dumbify] could not detect real subscribed state from header; leaving initial guess')
@@ -321,147 +391,62 @@ function applyRealSubscribedState(btn: HTMLButtonElement, state: SubUiState) {
   }, 200)
 }
 
-async function handleSubscribeClick(btn: HTMLButtonElement, channelId: string, state: SubUiState) {
+async function handleSubscribeClick(btn: HTMLButtonElement, ch: Channel, state: SubUiState) {
   const wantSubscribe = !state.subscribed
   const params = wantSubscribe ? state.subParams : state.unsubParams
   if (!params) {
     console.warn(
-      `[Dumbify] no ${wantSubscribe ? 'subscribe' : 'unsubscribe'} params extracted for channel ${channelId}; cannot ${wantSubscribe ? 'subscribe' : 'unsubscribe'} (not signed in, or YouTube's data shape changed)`
+      `[Dumbify] no ${wantSubscribe ? 'subscribe' : 'unsubscribe'} params extracted for channel ${ch.id}; cannot ${wantSubscribe ? 'subscribe' : 'unsubscribe'} (not signed in, or YouTube's data shape changed)`
     )
-    const original = btn.textContent
-    btn.textContent = 'Sign in to subscribe'
-    window.setTimeout(() => { btn.textContent = original }, 1500)
+    btn.replaceChildren('Sign in to subscribe')
+    window.setTimeout(() => setSubUi(btn, state.subscribed, ch.name), 1500)
     return
   }
   btn.disabled = true
-  setSubUi(btn, wantSubscribe)
-  const ok = await setChannelSubscription(channelId, wantSubscribe, params)
+  setSubUi(btn, wantSubscribe, ch.name)
+  const ok = await setChannelSubscription(ch.id, wantSubscribe, params)
   btn.disabled = false
   if (ok) {
     state.subscribed = wantSubscribe
   } else {
-    console.warn(`[Dumbify] ${wantSubscribe ? 'subscribe' : 'unsubscribe'} request failed for channel ${channelId}`)
-    setSubUi(btn, state.subscribed)
+    console.warn(`[Dumbify] ${wantSubscribe ? 'subscribe' : 'unsubscribe'} request failed for channel ${ch.id}`)
+    setSubUi(btn, state.subscribed, ch.name)
   }
 }
 
-function renderChannelHead(ch: Channel, before?: HTMLElement) {
-  const head = document.createElement('header')
-  head.className = 'df-page-head'
+function renderChannelHead(ch: Channel, videos: Video[], before?: HTMLElement) {
+  const head = h('header', { class: 'df-channel-head' })
+  head.appendChild(avatar(ch.name))
 
-  const body = document.createElement('div')
-  body.className = 'df-page-head-body'
-
-  const eyebrow = document.createElement('p')
-  eyebrow.className = 'df-page-eyebrow'
   // handle is a path: "/@Name" for a channel with a handle, "/channel/UC..." without one.
-  // Only the handle form is worth showing; stripping just "@" left the whole path behind.
+  // Only the handle form is worth showing.
   const handleName = ch.handle.match(/@([^/]+)/)?.[1]
-  eyebrow.textContent = handleName ? `Channel · ${handleName}` : 'Channel'
-  body.appendChild(eyebrow)
+  const count = ch.videoCount || (videos.length ? `${videos.length}+ videos` : '')
+  const meta = [handleName ? `@${handleName}` : '', ch.subscribers, count].filter(Boolean).join(' · ')
 
-  const title = document.createElement('h1')
-  title.className = 'df-page-title df-channel-page-title'
-  title.textContent = ch.name
-  body.appendChild(title)
+  const title = h('h1', { class: 'df-page-title' }, ch.name)
+  if (ch.verified) title.append(icon('verified', 'df-icon df-verified'), h('span', { class: 'df-sr-only', text: 'Verified' }))
 
+  const body = h('div', { class: 'df-channel-head-body' }, title)
+  if (meta) body.appendChild(h('div', { class: 'df-channel-meta', text: meta }))
+  if (ch.description) body.appendChild(h('p', { class: 'df-channel-desc', text: ch.description }))
   head.appendChild(body)
 
-  const aside = document.createElement('div')
-  aside.className = 'df-page-aside'
-
-  if (ch.verified) {
-    const verified = document.createElement('span')
-    verified.className = 'df-sub-badge'
-    verified.textContent = 'Verified'
-    aside.appendChild(verified)
-  }
-
   if (ch.id) {
-    const subBtn = document.createElement('button')
-    subBtn.className = 'df-sub-btn'
+    const subBtn = h('button', { class: 'df-btn', type: 'button' })
     const subState: SubUiState = {
       subscribed: ch.subscribed === true,
       subParams: ch.subParams ?? '',
       unsubParams: ch.unsubParams ?? '',
     }
-    setSubUi(subBtn, subState.subscribed)
-    subBtn.onclick = () => handleSubscribeClick(subBtn, ch.id, subState)
-    aside.appendChild(subBtn)
-    applyRealSubscribedState(subBtn, subState)
+    setSubUi(subBtn, subState.subscribed, ch.name)
+    subBtn.onclick = () => handleSubscribeClick(subBtn, ch, subState)
+    head.appendChild(h('div', { class: 'df-page-aside' }, subBtn))
+    applyRealSubscribedState(subBtn, subState, ch.name)
   }
-
-  head.appendChild(aside)
 
   if (before && before.parentNode) before.parentNode.insertBefore(head, before)
   else content!.appendChild(head)
-}
-
-function renderChannelStats(ch: Channel, videos: Video[], before?: HTMLElement) {
-  const stats = document.createElement('dl')
-  stats.className = 'df-channel-stats'
-
-  const entries: { k: string; v: string }[] = [
-    { k: 'Subscribers', v: (ch.subscribers || '—').replace(/\s*subscribers?\s*/i, '').trim() },
-    { k: 'Videos', v: (ch.videoCount || String(videos.length)).replace(/\s*videos?\s*/i, '').trim() },
-  ]
-
-  entries.forEach((entry) => {
-    const cell = document.createElement('div')
-    const dt = document.createElement('dt')
-    dt.className = 'df-stat-label'
-    dt.textContent = entry.k
-    const dd = document.createElement('dd')
-    dd.className = 'df-stat-value'
-    dd.textContent = entry.v
-    cell.appendChild(dt)
-    cell.appendChild(dd)
-    stats.appendChild(cell)
-  })
-
-  if (before && before.parentNode) before.parentNode.insertBefore(stats, before)
-  else content!.appendChild(stats)
-}
-
-function renderChannelCard(ch: Channel): HTMLElement {
-  const card = document.createElement('a')
-  card.className = 'df-channel-card'
-  linkTo(card, `/channel/${ch.id}`)
-  card.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(`/channel/${ch.id}`) } }
-  card.setAttribute('role', 'link')
-  card.tabIndex = 0
-
-  const label = document.createElement('span')
-  label.className = 'df-channel-card-label'
-  label.textContent = ch.verified ? 'Channel · Verified' : 'Channel'
-  card.appendChild(label)
-
-  const name = document.createElement('span')
-  name.className = 'df-channel-card-name'
-  name.textContent = ch.name
-  card.appendChild(name)
-
-  const meta = document.createElement('span')
-  meta.className = 'df-channel-card-meta'
-  const parts: string[] = []
-  if (ch.subscribers) parts.push(ch.subscribers)
-  if (ch.videoCount) parts.push(ch.videoCount)
-  meta.textContent = parts.join(' · ')
-  card.appendChild(meta)
-
-  if (ch.description) {
-    const desc = document.createElement('p')
-    desc.className = 'df-channel-card-desc'
-    desc.textContent = ch.description
-    card.appendChild(desc)
-  }
-
-  const cta = document.createElement('span')
-  cta.className = 'df-channel-card-cta'
-  cta.textContent = 'View channel'
-  card.appendChild(cta)
-
-  return card
 }
 
 function parseViews(v: string): number {
@@ -473,105 +458,13 @@ function parseViews(v: string): number {
   return n * mult
 }
 
-function renderVideo(v: Video): HTMLElement {
-  const article = document.createElement('a')
-  article.className = 'df-item-row'
-  linkTo(article, v.url)
-  article.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(v.url) } }
-
-  const number = document.createElement('span')
-  number.className = 'df-item-number'
-  article.appendChild(number)
-
-  const body = document.createElement('span')
-
-  const title = document.createElement('span')
-  title.className = 'df-item-title'
-  title.textContent = v.title
-  if (v.live) {
-    const liveBadge = document.createElement('span')
-    liveBadge.className = 'df-live-badge'
-    liveBadge.textContent = 'LIVE'
-    title.appendChild(liveBadge)
-  }
-  body.appendChild(title)
-
-  const meta = document.createElement('div')
-  meta.className = 'df-item-meta'
-
-
-    // Deterministic order: channel / views / release date. Missing fields are
-  // simply omitted rather than leaving a gap or a stray separator.
-  const metaParts: string[] = []
-  if (v.channel) metaParts.push(v.channel)
-  if (v.views) metaParts.push(v.views)
-  if (v.published) metaParts.push(v.published)
-
-  metaParts.forEach((text, i) => {
-    if (i > 0) {
-      const sep = document.createElement('span')
-      sep.className = 'df-item-meta-sep'
-      sep.textContent = '/'
-      meta.appendChild(sep)
-    }
-    const el = document.createElement('span')
-    el.textContent = text
-    if (text === v.channel && v.channelId) {
-      el.className = 'df-item-channel-link'
-      el.onclick = (e) => { e.preventDefault(); e.stopPropagation(); navigateTo(`/channel/${v.channelId}`) }
-    }
-    meta.appendChild(el)
-  })
-
-  body.appendChild(meta)
-  article.appendChild(body)
-
-  const dur = document.createElement('span')
-  dur.className = 'df-item-duration'
-  dur.textContent = v.duration
-  article.appendChild(dur)
-
-  return article
-}
-
-function renderPlaylistRow(p: PlaylistItem): HTMLElement {
-  const article = document.createElement('a')
-  article.className = 'df-item-row'
-  linkTo(article, p.url)
-  article.onkeydown = (e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateTo(p.url) } }
-
-  const number = document.createElement('span')
-  number.className = 'df-item-number'
-  article.appendChild(number)
-
-  const body = document.createElement('span')
-
-  const title = document.createElement('span')
-  title.className = 'df-item-title'
-  title.textContent = p.title
-  body.appendChild(title)
-
-  if (p.videoCount) {
-    const meta = document.createElement('div')
-    meta.className = 'df-item-meta'
-    const count = document.createElement('span')
-    count.textContent = p.videoCount
-    meta.appendChild(count)
-    body.appendChild(meta)
-  }
-
-  article.appendChild(body)
-  return article
-}
-
 // History interleaves whole Shorts shelves with regular videos, and YouTube collapses
 // each shelf into one row. We listed every Short individually, so an afternoon of them
 // buried the video you actually wanted. Each run of consecutive Shorts becomes one
 // <details> that reads as an ordinary row - native disclosure, no JS state to keep,
 // collapsed by default.
 // The Shorts glyph, drawn rather than fetched: an <img> cannot take the reading
-// colour, and this has to be whatever ink the page is set to - black on paper, white
-// at night, or whatever the reader picked in Settings.
+// colour, and this has to be whatever ink the page is set to.
 //
 // Two identical capsules, both tilted 30 degrees and stacked with an overlap, are what
 // make this read as Shorts. A single rounded rectangle - the first attempt - just read
@@ -591,12 +484,12 @@ let shortsIconSeq = 0
 
 function shortsIcon(): SVGSVGElement {
   const NS = 'http://www.w3.org/2000/svg'
-  const { x, y, w, h } = SHORTS_VIEWBOX
+  const { x, y, w, h: height } = SHORTS_VIEWBOX
   const maskId = `df-shorts-mask-${++shortsIconSeq}`
 
   const svg = document.createElementNS(NS, 'svg')
   svg.setAttribute('class', 'df-shorts-icon')
-  svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`)
+  svg.setAttribute('viewBox', `${x} ${y} ${w} ${height}`)
   svg.setAttribute('aria-hidden', 'true')
   svg.setAttribute('focusable', 'false')
 
@@ -606,7 +499,7 @@ function shortsIcon(): SVGSVGElement {
   lit.setAttribute('x', String(x))
   lit.setAttribute('y', String(y))
   lit.setAttribute('width', String(w))
-  lit.setAttribute('height', String(h))
+  lit.setAttribute('height', String(height))
   lit.setAttribute('fill', '#fff')
   const arrow = document.createElementNS(NS, 'path')
   arrow.setAttribute('d', 'M6.9 7.7L6.9 16.3L13.7 12Z')
@@ -629,49 +522,32 @@ function shortsIcon(): SVGSVGElement {
 }
 
 function shortsBundle(): HTMLElement {
-  const box = document.createElement('details')
-  box.className = 'df-shorts-bundle'
-
-  const summary = document.createElement('summary')
-  summary.className = 'df-item-row df-shorts-summary'
-
-  const number = document.createElement('span')
-  number.className = 'df-item-number'
-  number.appendChild(shortsIcon())
-  summary.appendChild(number)
-
-  const body = document.createElement('span')
-  const title = document.createElement('span')
-  title.className = 'df-item-title'
-  title.textContent = 'Shorts'
-  body.appendChild(title)
-  const meta = document.createElement('div')
-  meta.className = 'df-item-meta df-shorts-count'
-  body.appendChild(meta)
-  summary.appendChild(body)
-
-  const arrow = document.createElement('span')
-  arrow.className = 'df-shorts-arrow'
-  arrow.textContent = '>'
-  summary.appendChild(arrow)
-
-  box.appendChild(summary)
-  return box
+  const summary = h('summary', { class: 'df-item-row df-shorts-summary' },
+    h('span', { class: 'df-item-number' }, shortsIcon()),
+    h('span', { class: 'df-item-body' },
+      h('span', { class: 'df-item-title', text: 'Shorts' }),
+      h('span', { class: 'df-item-meta' }, h('span', { class: 'df-item-count df-shorts-count' })),
+    ),
+    h('span', { class: 'df-shorts-arrow', 'aria-hidden': 'true' }, icon('chevron')),
+  )
+  return h('details', { class: 'df-shorts-bundle' }, summary, h('div', { class: 'df-shorts-items' }))
 }
 
 function updateShortsCount(box: HTMLElement) {
-  const n = box.querySelectorAll('.df-shorts-item').length
+  const n = box.querySelectorAll('.df-shorts-items > .df-item-row').length
   box.querySelector('.df-shorts-count')!.textContent = n === 1 ? '1 short' : `${n} shorts`
 }
 
 let feedCancelled = false
+let scrollBinding: { el: HTMLElement; fn: () => void } | null = null
+let unsubAppearance: (() => void) | null = null
 
 export const homeFeedFeature: Feature = {
   id: 'home-feed',
 
   mount(nav: NavigationState) {
     feedCancelled = false
-    content!.innerHTML = ''
+    content!.replaceChildren()
 
     // A page that genuinely doesn't exist gets the 404. A real YouTube page this
     // extension simply has no view for (trending, gaming, account) goes home.
@@ -692,15 +568,12 @@ export const homeFeedFeature: Feature = {
       if (allSubscriptions.length) renderSubscriptionList()
     } : undefined)
 
-    const list = document.createElement('div')
-    list.id = 'df-feed'
-    list.className = 'df-item-list'
-
-    const loading = document.createElement('div')
-    loading.className = 'df-loading'
-    loading.textContent = 'Loading...'
-    list.appendChild(loading)
-    content!.appendChild(list)
+    const showsVideos = nav.route !== 'playlists'
+    const head = tableHead()
+    head.hidden = !showsVideos
+    const list = h('div', { id: 'df-feed', class: 'df-item-list', 'aria-busy': 'true' })
+    list.appendChild(skeletonRows())
+    content!.append(head, list)
 
     let continuationToken: string | null = null
     let loadingMore = false
@@ -720,16 +593,32 @@ export const homeFeedFeature: Feature = {
     let playlistsLoading = false
     let historyBucket: string | null = null
     let historyGroup: HTMLElement | null = null
+    let historyCount: HTMLElement | null = null
+    let historyGroupSize = 0
     let subscriptionsFilter: string = 'All'
     let allSubscriptions: Video[] = []
     let creatorSelect: HTMLSelectElement | null = null
 
+    const sc = scroller()
+    const nearEnd = () => sc.scrollHeight - sc.scrollTop - sc.clientHeight < 800
+
     const onScroll = () => {
       if (loadingMore || feedExhausted || !initialLoadDone) return
       if (currentTab === 'about' || currentTab === 'playlists') return
-      if (root!.scrollHeight - root!.scrollTop - root!.clientHeight < 600) {
-        loadMore()
-      }
+      if (nearEnd()) loadMore()
+    }
+
+    // Scrolling is what asks for more, so a first page too short to scroll never asked:
+    // on a tall window, or in the card layout, the feed simply stopped. Keep loading
+    // until the page is taller than the window or the feed runs out.
+    const fillWindow = () => {
+      if (feedCancelled) return
+      requestAnimationFrame(onScroll)
+    }
+
+    function finishLoading() {
+      list.removeAttribute('aria-busy')
+      list.querySelectorAll('.df-skeleton').forEach((el) => el.remove())
     }
 
     // A subscription list of any size makes "By creator" a wall of headings to scroll
@@ -742,9 +631,7 @@ export const homeFeedFeature: Feature = {
         return
       }
       if (!creatorSelect) {
-        creatorSelect = document.createElement('select')
-        creatorSelect.className = 'df-creator-select'
-        creatorSelect.setAttribute('aria-label', 'Go to creator')
+        creatorSelect = h('select', { class: 'df-select', 'aria-label': 'Go to creator' })
         creatorSelect.onchange = () => {
           const id = creatorSelect!.value
           // Leave the picker on its placeholder: navigation is a full page load, and
@@ -760,23 +647,16 @@ export const homeFeedFeature: Feature = {
         if (v.channelId && v.channel) byId.set(v.channelId, v.channel)
       }
       const creators = [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1]))
-      creatorSelect.innerHTML = ''
-      for (const [id, name] of [['', 'Go to creator...'] as [string, string], ...creators]) {
-        const opt = document.createElement('option')
-        opt.value = id
-        opt.textContent = name
-        creatorSelect.appendChild(opt)
+      creatorSelect.replaceChildren()
+      for (const [id, name] of [['', 'Go to creator…'] as [string, string], ...creators]) {
+        creatorSelect.appendChild(h('option', { value: id, text: name }))
       }
       creatorSelect.value = ''
     }
 
     function renderSubscriptionGroup(into: ParentNode, header: string, videos: Video[]) {
-      const group = document.createElement('div')
-      group.className = 'df-date-group'
-      const h = document.createElement('p')
-      h.className = 'df-date-group-header'
-      h.textContent = header
-      group.appendChild(h)
+      const { group, count } = dateGroup(header)
+      count.textContent = String(videos.length)
       videos.forEach((v) => {
         videoIds.add(v.id)
         group.appendChild(renderVideo(v))
@@ -813,10 +693,7 @@ export const homeFeedFeature: Feature = {
         if (filtered.length) {
           renderSubscriptionGroup(frag, subscriptionsFilter, filtered)
         } else {
-          const e = document.createElement('div')
-          e.className = 'df-empty'
-          e.textContent = `No videos from ${subscriptionsFilter}`
-          frag.appendChild(e)
+          frag.appendChild(emptyState('clock', `Nothing from ${subscriptionsFilter.toLowerCase()}`, 'Try a wider range.'))
         }
       }
       list.replaceChildren(frag)
@@ -830,14 +707,14 @@ export const homeFeedFeature: Feature = {
       const bucket = v.watchedOn ?? ''
       if (bucket && bucket !== historyBucket) {
         historyBucket = bucket
-        historyGroup = document.createElement('div')
-        historyGroup.className = 'df-date-group'
-        const h = document.createElement('p')
-        h.className = 'df-date-group-header'
-        h.textContent = bucket
-        historyGroup.appendChild(h)
+        const made = dateGroup(bucket)
+        historyGroup = made.group
+        historyCount = made.count
+        historyGroupSize = 0
         list.appendChild(historyGroup)
       }
+      historyGroupSize++
+      if (historyCount) historyCount.textContent = String(historyGroupSize)
       const target: HTMLElement = historyGroup ?? list
       if (!v.short) { target.appendChild(renderVideo(v)); return }
       // Reuse the trailing bundle so a run split across two scroll pages stays one row.
@@ -845,9 +722,7 @@ export const homeFeedFeature: Feature = {
       const box = last?.classList.contains('df-shorts-bundle')
         ? (last as HTMLElement)
         : target.appendChild(shortsBundle())
-      const row = renderVideo(v)
-      row.classList.add('df-shorts-item')
-      box.appendChild(row)
+      box.querySelector('.df-shorts-items')!.appendChild(renderVideo(v))
       updateShortsCount(box)
     }
 
@@ -855,7 +730,8 @@ export const homeFeedFeature: Feature = {
     // from a page that only repeated what we already have.
     function appendVideos(videos: Video[]): number {
       if (feedCancelled) return 0
-      if (list.querySelector('.df-loading, .df-empty')) list.innerHTML = ''
+      finishLoading()
+      if (list.querySelector('.df-empty')) list.replaceChildren()
       const playlistContext = (nav.route === 'playlist' || nav.route === 'liked' || nav.route === 'watch-later')
         ? nav.searchParams.get('list') : null
       const newVids = videos.filter((v) => !videoIds.has(v.id))
@@ -863,14 +739,16 @@ export const homeFeedFeature: Feature = {
         allSubscriptions = allSubscriptions.concat(newVids)
         renderSubscriptionList()
       } else {
+        const frag = document.createDocumentFragment()
         newVids.forEach((v) => {
           videoIds.add(v.id)
           if (playlistContext && !v.url.includes('list=')) {
             v = { ...v, url: `${v.url}&list=${playlistContext}` }
           }
           if (nav.route === 'history') { appendHistoryVideo(v); return }
-          list.appendChild(renderVideo(v))
+          frag.appendChild(renderVideo(v))
         })
+        list.appendChild(frag)
       }
       if (nav.route === 'channel') {
         const newForChannel = videos.filter((v) => !channelVideoIds.has(v.id))
@@ -882,7 +760,8 @@ export const homeFeedFeature: Feature = {
 
     function appendSearchItems(items: SearchItem[]): number {
       if (feedCancelled) return 0
-      if (list.querySelector('.df-loading, .df-empty')) list.innerHTML = ''
+      finishLoading()
+      if (list.querySelector('.df-empty')) list.replaceChildren()
       const channels: Channel[] = []
       const videos: Video[] = []
       for (const item of items) {
@@ -912,16 +791,15 @@ export const homeFeedFeature: Feature = {
         frag.appendChild(renderVideo(v))
       }
       list.replaceChildren(frag)
+      if (!sorted.length && initialLoadDone) showEmpty()
     }
 
     function renderPlaylists(items: PlaylistItem[]) {
       if (feedCancelled) return
-      list.innerHTML = ''
+      finishLoading()
+      list.replaceChildren()
       if (!items.length) {
-        const e = document.createElement('div')
-        e.className = 'df-empty'
-        e.textContent = 'No playlists to display'
-        list.appendChild(e)
+        list.appendChild(emptyState('playlists', 'No playlists to show', ''))
         return
       }
       items.forEach((p) => list.appendChild(renderPlaylistRow(p)))
@@ -931,11 +809,7 @@ export const homeFeedFeature: Feature = {
       if (playlists) { renderPlaylists(playlists); return }
       if (playlistsLoading) return
       playlistsLoading = true
-      list.innerHTML = ''
-      const loadingEl = document.createElement('div')
-      loadingEl.className = 'df-loading'
-      loadingEl.textContent = 'Loading...'
-      list.appendChild(loadingEl)
+      list.replaceChildren(skeletonRows(5))
       fetchChannelPlaylists(nav.channelId ?? '')
         .then((result) => {
           playlistsLoading = false
@@ -952,75 +826,62 @@ export const homeFeedFeature: Feature = {
 
     function setTab(tab: string) {
       currentTab = tab
-      if (tabsEl) {
-        const spans = tabsEl.querySelectorAll('.df-toolbar-item')
-        spans.forEach((s, i) => s.classList.toggle('df-active', i === (tab === 'videos' ? 0 : tab === 'popular' ? 1 : tab === 'playlists' ? 2 : 3)))
-      }
-      if (aboutEl) aboutEl.style.display = tab === 'about' ? '' : 'none'
-      if (list) list.style.display = tab === 'about' ? 'none' : ''
+      tabsEl?.querySelectorAll<HTMLElement>('.df-tab').forEach((el) => {
+        const on = el.dataset.tab === tab
+        el.classList.toggle('df-active', on)
+        el.setAttribute('aria-selected', String(on))
+      })
+      if (aboutEl) aboutEl.hidden = tab !== 'about'
+      list.hidden = tab === 'about'
+      head.hidden = tab === 'about' || tab === 'playlists'
       if (tab === 'popular') rerenderChannelList([...channelVideos].sort((a, b) => parseViews(b.views) - parseViews(a.views)))
       if (tab === 'videos') rerenderChannelList(channelVideos)
       if (tab === 'playlists') loadPlaylists()
     }
 
     function renderChannelTabs(before: HTMLElement) {
-      tabsEl = document.createElement('div')
-      tabsEl.className = 'df-toolbar df-channel-tabs'
-      const labels = ['Videos', 'Popular', 'Playlists', 'About']
-      labels.forEach((o, i) => {
-        const span = document.createElement('span')
-        span.className = i === 0 ? 'df-toolbar-item df-active' : 'df-toolbar-item'
-        span.textContent = o
-        makeClickable(span, () => setTab(i === 0 ? 'videos' : i === 1 ? 'popular' : i === 2 ? 'playlists' : 'about'))
-        tabsEl!.appendChild(span)
+      tabsEl = h('div', { class: 'df-tabs', role: 'tablist', 'aria-label': 'Channel sections' })
+      const tabs: [string, string][] = [['videos', 'Videos'], ['popular', 'Popular'], ['playlists', 'Playlists'], ['about', 'About']]
+      tabs.forEach(([id, label], i) => {
+        const tab = h('span', { class: i === 0 ? 'df-tab df-active' : 'df-tab', 'data-tab': id, text: label })
+        makeClickable(tab, () => setTab(id))
+        tab.setAttribute('role', 'tab')
+        tab.setAttribute('aria-selected', String(i === 0))
+        tabsEl!.appendChild(tab)
       })
-      if (before && before.parentNode) before.parentNode.insertBefore(tabsEl, before)
-      else content!.appendChild(tabsEl)
+      before.parentNode?.insertBefore(tabsEl, before)
     }
 
     function renderChannelAbout(ch: Channel, before: HTMLElement) {
-      aboutEl = document.createElement('div')
-      aboutEl.className = 'df-channel-about'
-      aboutEl.style.display = 'none'
-
-      const desc = document.createElement('p')
-      desc.className = 'df-channel-about-desc'
-      desc.textContent = ch.description || 'No description yet.'
-      aboutEl.appendChild(desc)
-
+      aboutEl = h('div', { class: 'df-channel-about', hidden: true },
+        h('p', { class: 'df-channel-about-desc', text: ch.description || 'No description yet.' }),
+      )
       if (ch.handle) {
-        const links = document.createElement('div')
-        links.className = 'df-channel-about-links'
-        const link = document.createElement('a')
-        link.href = `https://www.youtube.com${ch.handle}`
-        link.target = '_blank'
-        link.rel = 'noopener noreferrer'
-        link.textContent = `youtube.com${ch.handle}`
-        links.appendChild(link)
-        aboutEl.appendChild(links)
+        const link = h('a', {
+          href: `https://www.youtube.com${ch.handle}`, target: '_blank', rel: 'noopener noreferrer',
+          text: `youtube.com${ch.handle}`,
+        })
+        aboutEl.appendChild(h('div', { class: 'df-channel-about-links' }, link))
       }
-
-      if (before && before.parentNode) before.parentNode.insertBefore(aboutEl, before)
-      else content!.appendChild(aboutEl)
+      before.parentNode?.insertBefore(aboutEl, before)
     }
 
     function showEmpty() {
       if (feedCancelled) return
-      list.innerHTML = ''
-      const empty = document.createElement('div')
-      empty.className = 'df-empty'
-      empty.textContent = 'No videos to display'
-      list.appendChild(empty)
+      finishLoading()
+      const [iconName, title, detail] = EMPTY_COPY[nav.route] ?? ['film', 'No videos to show', '']
+      const text = nav.route === 'search' && nav.searchQuery ? `Nothing matched “${nav.searchQuery}”. Try different words.` : detail
+      list.replaceChildren(emptyState(iconName, title, text))
     }
 
     async function loadMore() {
       if (loadingMore || feedCancelled || feedExhausted) return
       loadingMore = true
+      let added = 0
       try {
         const result = await fetchContinuation(continuationToken || '', nav.route, nav.searchQuery ?? '', nav.channelId ?? '')
         if (feedCancelled) return
         continuationToken = result.token
-        let added = 0
         if (nav.route === 'search' && result.items?.length) {
           added = appendSearchItems(result.items)
         } else if (result.videos.length) {
@@ -1033,6 +894,7 @@ export const homeFeedFeature: Feature = {
       } finally {
         loadingMore = false
       }
+      if (added > 0) fillWindow()
     }
 
     async function doLoad() {
@@ -1047,10 +909,11 @@ export const homeFeedFeature: Feature = {
         continuationToken = result.continuation
         if (feedCancelled) return
         featuredChannelId = result.channels[0]?.id ?? null
-        if (featuredChannelId) renderChannelBanner(result.channels[0], list)
+        if (featuredChannelId) renderChannelBanner(result.channels[0], head)
         if (result.items?.length) {
           appendSearchItems(result.items)
           initialLoadDone = true
+          fillWindow()
           return
         }
       } else if (nav.route === 'channel') {
@@ -1062,14 +925,15 @@ export const homeFeedFeature: Feature = {
           name: channelName,
           handle: '',
           subscribers: '',
-          videoCount: String(result.videos.length),
+          videoCount: '',
           description: '',
           verified: false,
         }
-        renderChannelHead(channel, list)
-        renderChannelStats(channel, result.videos, list)
-        renderChannelTabs(list)
-        renderChannelAbout(channel, list)
+        setCrumbs(channel.name)
+        document.title = `${channel.name} · Dumbify`
+        renderChannelHead(channel, result.videos, head)
+        renderChannelTabs(head)
+        renderChannelAbout(channel, head)
         videos = result.videos
         continuationToken = result.continuation
       } else if (nav.route === 'liked') {
@@ -1078,17 +942,9 @@ export const homeFeedFeature: Feature = {
         videos = result.videos
         continuationToken = result.token
       } else if (nav.route === 'playlists') {
-        const playlists = await fetchUserPlaylists()
+        const items = await fetchUserPlaylists()
         if (feedCancelled) return
-        list.innerHTML = ''
-        if (playlists.length) {
-          playlists.forEach((p) => list.appendChild(renderPlaylistRow(p)))
-            } else {
-          const empty = document.createElement('div')
-          empty.className = 'df-empty'
-          empty.textContent = 'No playlists to display'
-          list.appendChild(empty)
-        }
+        renderPlaylists(items)
         initialLoadDone = true
         feedExhausted = true
         return
@@ -1097,7 +953,9 @@ export const homeFeedFeature: Feature = {
         const result = await fetchPlaylistPage(playlistId)
         if (feedCancelled) return
         if (result.title) {
-          updatePageHead({ title: result.title, note: '' })
+          updatePageHead({ title: result.title, sub: '' })
+          setCrumbs(result.title)
+          document.title = `${result.title} · Dumbify`
         }
         videos = result.videos
         continuationToken = result.token
@@ -1116,20 +974,24 @@ export const homeFeedFeature: Feature = {
       }
 
       initialLoadDone = true
+      fillWindow()
     }
 
-    root!.addEventListener('scroll', onScroll, { passive: true })
-    ;(root as any).__dfScrollHandler = onScroll
+    sc.addEventListener('scroll', onScroll, { passive: true })
+    scrollBinding = { el: sc, fn: onScroll }
+    // A layout switch (list to cards, say) changes how tall the page is.
+    unsubAppearance = onAppearance(() => fillWindow())
 
     doLoad()
   },
 
   unmount() {
     feedCancelled = true
-    const h = (root as any).__dfScrollHandler
-    if (h) root!.removeEventListener('scroll', h)
-    delete (root as any).__dfScrollHandler
-    content!.innerHTML = ''
+    if (scrollBinding) scrollBinding.el.removeEventListener('scroll', scrollBinding.fn)
+    scrollBinding = null
+    unsubAppearance?.()
+    unsubAppearance = null
+    content!.replaceChildren()
   },
 
   update(nav: NavigationState) {
