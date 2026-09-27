@@ -74,6 +74,17 @@ npm run screenshots -- out/          # capture the main screens for review
 
 The end-to-end suites load `dist/` into a real Chromium and serve `youtube.com` from local fixtures (`tests/e2e/fixtures.mjs`), so they need no network and no account. They use Playwright's Chromium; install it once with `npx playwright install chromium`.
 
+### Website
+
+The GitHub Pages site is `index.html` and `site/` at the repo root; Pages serves `main` as it is, so the built parts are committed. Its live demo is the settings page's preview, built from `src/demo`.
+
+```bash
+npm run site                          # build the demo into site/demo - after any change to src/
+npm run build && npm run site:shots   # re-take site/shots: the looks, watch layouts, settings, popup and social card
+```
+
+To try it locally, serve the repo root (`python3 -m http.server`) - the demo talks to the page with `postMessage`, which needs a real origin rather than `file://`.
+
 ## Tech stack
 
 TypeScript + Vite (via [`@crxjs/vite-plugin`](https://crxjs.dev/vite-plugin)), Manifest V3, hand-written CSS. No UI framework, no runtime dependencies — plain DOM.
@@ -103,6 +114,7 @@ src/
   ui/                shared DOM helpers, icons, controls and the wallpaper layer
   options/           settings page
   preview/           the settings page's live preview (real reading-view CSS, sample content)
+  demo/              the website's live demo: the preview, driven by the page around it
   popup/             toolbar popup
 tests/               unit tests (node --test)
 tests/e2e/           end-to-end tests (Playwright + fixtures)
