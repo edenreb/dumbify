@@ -31,7 +31,7 @@ async function until(check, { timeout = 10000, interval = 50, what = 'condition'
   }
 }
 
-export async function launch({ colorScheme = 'light', reducedMotion = 'no-preference', viewport = { width: 1280, height: 860 }, locale = 'en-US' } = {}) {
+export async function launch({ colorScheme = 'light', reducedMotion = 'no-preference', viewport = { width: 1280, height: 860 }, locale = 'en-US', deviceScaleFactor = 1 } = {}) {
   if (!built()) throw new Error('Run `npm run build` before the end-to-end tests')
   const userDir = mkdtempSync(join(tmpdir(), 'dumbify-e2e-'))
   const context = await chromium.launchPersistentContext(userDir, {
@@ -39,6 +39,7 @@ export async function launch({ colorScheme = 'light', reducedMotion = 'no-prefer
     headless: true,
     args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`],
     viewport,
+    deviceScaleFactor,
     colorScheme,
     reducedMotion,
     locale,

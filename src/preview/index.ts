@@ -18,25 +18,28 @@ interface Sample {
   views: string
   date: string
   duration: string
+  /** The description's first line. */
+  about: string
   live?: boolean
 }
 
 const VIDEOS: Sample[] = [
-  { title: 'The quiet genius of Japanese joinery', channel: 'Workshop Notes', views: '1.2M views', date: '3 days ago', duration: '18:42' },
-  { title: 'Why cities are rediscovering the tram', channel: 'City Lines', views: '845K views', date: '1 week ago', duration: '24:10' },
-  { title: 'Northern lights over Tromsø', channel: 'Arctic Cam', views: '12K watching', date: '', duration: '', live: true },
-  { title: 'A slow tour of the Milky Way, in true scale', channel: 'Deep Field', views: '3.4M views', date: '2 weeks ago', duration: '41:07' },
-  { title: 'How sourdough actually works', channel: 'The Kitchen Lab', views: '512K views', date: '5 days ago', duration: '15:36' },
-  { title: 'Learning the cello at 40: one year in', channel: 'Late Bloomer', views: '96K views', date: '1 month ago', duration: '12:58' },
-  { title: 'The mathematics of paper folding', channel: 'Proof by Example', views: '2.1M views', date: '3 months ago', duration: '19:21' },
-  { title: 'Restoring a 1960s typewriter, start to finish', channel: 'Workshop Notes', views: '430K views', date: '2 months ago', duration: '32:05' },
-  { title: 'What the tide tables don’t tell you', channel: 'Coastline', views: '77K views', date: '4 days ago', duration: '9:44' },
+  { title: 'The quiet genius of Japanese joinery', channel: 'Workshop Notes', views: '1.2M views', date: '3 days ago', duration: '18:42', about: 'Six joints, no nails, no glue.' },
+  { title: 'Why cities are rediscovering the tram', channel: 'City Lines', views: '845K views', date: '1 week ago', duration: '24:10', about: 'Forty cities, one old idea, and why it keeps coming back.' },
+  { title: 'Northern lights over Tromsø', channel: 'Arctic Cam', views: '12K watching', date: '', duration: '', about: 'A camera pointed north, all night.', live: true },
+  { title: 'A slow tour of the Milky Way, in true scale', channel: 'Deep Field', views: '3.4M views', date: '2 weeks ago', duration: '41:07', about: 'If the Sun were a grain of sand, where would everything else be?' },
+  { title: 'How sourdough actually works', channel: 'The Kitchen Lab', views: '512K views', date: '5 days ago', duration: '15:36', about: 'Wild yeast, lactic acid and a lot of waiting.' },
+  { title: 'Learning the cello at 40: one year in', channel: 'Late Bloomer', views: '96K views', date: '1 month ago', duration: '12:58', about: 'Scales, bad days, and the first piece I could play for someone.' },
+  { title: 'The mathematics of paper folding', channel: 'Proof by Example', views: '2.1M views', date: '3 months ago', duration: '19:21', about: 'Crease patterns, flat folds and one surprising theorem.' },
+  { title: 'Restoring a 1960s typewriter, start to finish', channel: 'Workshop Notes', views: '430K views', date: '2 months ago', duration: '32:05', about: 'Seized keys to a clean first line, in one long take.' },
+  { title: 'What the tide tables don’t tell you', channel: 'Coastline', views: '77K views', date: '4 days ago', duration: '9:44', about: 'Reading the numbers, and what they leave out.' },
 ]
 
+// Any of the videos can be open, so the comments are ones that suit all of them.
 const COMMENTS = [
-  { author: 'Mara Lindqvist', time: '2 days ago', text: 'The bit about the kanawa tsugi joint finally made it click for me. Beautifully explained.', likes: '214' },
+  { author: 'Mara Lindqvist', time: '2 days ago', text: 'Beautifully explained. This is the one that finally made it click for me.', likes: '214' },
   { author: 'tomás', time: '1 day ago', text: 'No music, no jump cuts, just the work. More of this please.', likes: '98' },
-  { author: 'Priya K', time: '5 hours ago', text: 'Watched this twice. Going to try the simple lap joint this weekend.', likes: '12' },
+  { author: 'Priya K', time: '5 hours ago', text: 'Watched this twice. Going to try it myself this weekend.', likes: '12' },
 ]
 
 const noop = (e: Event) => e.preventDefault()
@@ -75,11 +78,11 @@ function sidebar(): HTMLElement {
   )
 }
 
-function topbar(page: 'feed' | 'watch'): HTMLElement {
+function topbar(page: 'feed' | 'watch', v: Sample): HTMLElement {
   return h('header', { class: 'df-topbar' },
     h('button', { class: 'df-icon-btn df-drawer-btn', type: 'button' }, icon('menu')),
     h('div', { class: 'df-crumbs' }, icon(page === 'watch' ? 'play' : 'home'),
-      h('span', { class: 'df-crumbs-label', text: page === 'watch' ? VIDEOS[0].title : 'Home' })),
+      h('span', { class: 'df-crumbs-label', text: page === 'watch' ? v.title : 'Home' })),
     h('form', { class: 'df-search' }, icon('search'),
       h('input', { class: 'df-search-input', type: 'search', placeholder: 'Search YouTube', tabindex: '-1' }),
       h('span', { class: 'df-kbd', text: shortcutLabel('K') })),
@@ -117,8 +120,7 @@ function feedPage(): HTMLElement[] {
   ]
 }
 
-function watchPage(): HTMLElement[] {
-  const v = VIDEOS[0]
+function watchPage(v: Sample): HTMLElement[] {
   const player = h('div', { class: 'df-player' }, h('div', { class: 'df-player-screen' },
     h('div', { class: 'df-preview-player' }, h('span', { class: 'df-preview-play' }, icon('play')))))
   const comments = h('section', { class: 'df-comments' },
@@ -141,14 +143,14 @@ function watchPage(): HTMLElement[] {
         h('h1', { class: 'df-watch-title', text: v.title }),
         h('div', { class: 'df-watch-meta-bar' },
           h('a', { class: 'df-watch-channel df-watch-channel--link', href: '#' }, avatar(v.channel), h('span', { class: 'df-watch-channel-name', text: v.channel })),
-          h('span', { class: 'df-watch-meta-item', text: '1,204,331 views · Sep 21, 2026' }),
+          h('span', { class: 'df-watch-meta-item', text: v.date ? `${v.views} · ${v.date}` : v.views }),
           h('div', { class: 'df-watch-actions' },
             h('button', { class: 'df-btn df-on', type: 'button' }, icon('thumb'), 'Liked'),
             h('button', { class: 'df-btn', type: 'button' }, icon('bookmark'), 'Save'),
             h('button', { class: 'df-btn df-on', type: 'button' }, icon('comment'), 'Comments · 1.2K'))),
         h('details', { class: 'df-watch-description' },
-          h('summary', null, icon('chevron'), 'Description', h('span', { class: 'df-summary-hint', text: '— Six joints, no nails, no glue.' })),
-          h('p', { class: 'df-watch-description-text', text: 'Six joints, no nails, no glue.' })))),
+          h('summary', null, icon('chevron'), 'Description', h('span', { class: 'df-summary-hint', text: `— ${v.about}` })),
+          h('p', { class: 'df-watch-description-text', text: v.about })))),
     h('aside', { class: 'df-watch-side' }, comments),
   )]
 }
@@ -175,17 +177,19 @@ document.head.appendChild(style)
 
 const wallpaper = new WallpaperLayer({ window: backdrop, cover }, getWallpaper)
 let page: 'feed' | 'watch' | null = null
+let shown = 0
 
-function render(s: DumbifySettings, nextPage: 'feed' | 'watch', systemDark: boolean) {
+function render(s: DumbifySettings, nextPage: 'feed' | 'watch', systemDark: boolean, video = 0) {
   const a = computeAppearance(s, systemDark)
   applyAppearance(root, a)
   root.dataset.route = nextPage === 'watch' ? 'watch' : 'home'
   document.documentElement.style.setProperty('--df-paint', a.paint)
   root.querySelectorAll('.df-dark-switch').forEach((b) => b.setAttribute('aria-checked', String(a.scheme === 'dark')))
-  if (nextPage !== page) {
+  if (nextPage !== page || video !== shown) {
     page = nextPage
-    content.replaceChildren(...(page === 'watch' ? watchPage() : feedPage()))
-    sheet.replaceChildren(topbar(page), cover, content)
+    shown = video
+    content.replaceChildren(...(page === 'watch' ? watchPage(VIDEOS[video]) : feedPage()))
+    sheet.replaceChildren(topbar(page, VIDEOS[video]), cover, content)
   }
   void wallpaper.sync(s, a.wallpaper, !s.wallpaperAnimate || prefersReducedMotion())
 }
@@ -195,9 +199,11 @@ root.addEventListener('submit', noop, true)
 
 window.addEventListener('message', (e) => {
   if (e.origin !== location.origin) return
-  const data = e.data as { type?: string; settings?: unknown; page?: string; systemDark?: boolean }
+  const data = e.data as { type?: string; settings?: unknown; page?: string; video?: number; systemDark?: boolean }
   if (data?.type !== 'dumbify:preview') return
-  render(normalizeSettings(data.settings), data.page === 'watch' ? 'watch' : 'feed', !!data.systemDark)
+  // Which sample the watch page shows - the website's demo opens the row that was clicked.
+  const video = typeof data.video === 'number' && VIDEOS[data.video] ? data.video : 0
+  render(normalizeSettings(data.settings), data.page === 'watch' ? 'watch' : 'feed', !!data.systemDark, video)
 })
 
 // Until the settings page says otherwise, show what is stored.
