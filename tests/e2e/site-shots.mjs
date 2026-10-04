@@ -85,7 +85,7 @@ try {
   const og = await h.context.newPage()
   await og.setViewportSize({ width: 1200, height: 630 })
   await og.goto('https://site.test/')
-  await og.addStyleTag({ content: '.nav-wrap { display: none } .hero-copy { padding-top: 64px } .demo, .stats { visibility: hidden }' })
+  await og.addStyleTag({ content: '.nav { display: none } .hero { padding-top: 140px } .demo { visibility: hidden }' })
   await settle(og, 1500)
   await og.screenshot({ path: join(out, 'og.jpg'), type: 'jpeg', quality: 88, scale: 'css' })
   console.log('saved og')
