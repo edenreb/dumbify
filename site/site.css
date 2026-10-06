@@ -408,6 +408,104 @@ h1 {
   color: var(--text);
 }
 
+/* ---- Works with: a slow, quiet marquee of other extensions ---- */
+
+.works {
+  padding-top: clamp(96px, 12vw, 140px);
+}
+
+.works-title {
+  color: var(--dim);
+  font-size: 14px;
+  text-align: center;
+}
+
+.marquee {
+  overflow: hidden;
+  margin-top: 32px;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent);
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 40s linear infinite;
+}
+
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+.marquee ul {
+  display: flex;
+  align-items: center;
+  gap: 72px;
+  margin: 0;
+  padding: 0 36px;
+  list-style: none;
+}
+
+.marquee li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--dim);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: color 200ms;
+}
+
+.marquee img {
+  width: 28px;
+  height: 28px;
+  filter: grayscale(1);
+  opacity: 0.7;
+  transition: filter 200ms, opacity 200ms;
+}
+
+.marquee li:hover {
+  color: var(--text);
+}
+
+.marquee li:hover img {
+  filter: none;
+  opacity: 1;
+}
+
+/* Each list is one full loop, so sliding by one list's width joins end to start. */
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .marquee-track {
+    width: auto;
+    justify-content: center;
+    animation: none;
+  }
+
+  .marquee ul {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px 48px;
+  }
+
+  .marquee ul[aria-hidden],
+  .marquee li[aria-hidden] {
+    display: none;
+  }
+}
+
 /* ---- Sections ---- */
 
 .section {
