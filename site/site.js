@@ -1,4 +1,5 @@
-// Dumbify's site: the live demo, its divider, and the YouTube it is compared with.
+// Dumbify's site: the live demo, its divider, the YouTube it is compared with, and a
+// faint ASCII trail behind the pointer.
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -177,4 +178,53 @@ for (const b of looks) {
     take()
     showMore()
   })
+}
+
+/* ---- A faint ASCII trail behind the pointer ---- */
+
+// Mouse and trackpad only, never under reduced motion. One canvas over the page, drawn
+// only while characters are still fading, so an idle pointer costs nothing.
+if (matchMedia('(pointer: fine)').matches && !reduce) {
+  const GLYPHS = '.:-=+*~'
+  const LIFE = 650
+  const GAP = 16
+  const canvas = document.createElement('canvas')
+  canvas.className = 'trail'
+  canvas.setAttribute('aria-hidden', 'true')
+  document.body.append(canvas)
+  const ctx = canvas.getContext('2d')
+  const marks = []
+  let last = null
+  let frame = 0
+
+  const size = () => {
+    const dpr = Math.min(devicePixelRatio || 1, 2)
+    canvas.width = innerWidth * dpr
+    canvas.height = innerHeight * dpr
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  }
+  size()
+  addEventListener('resize', size)
+
+  const draw = (now) => {
+    ctx.clearRect(0, 0, innerWidth, innerHeight)
+    while (marks.length && now - marks[0].t > LIFE) marks.shift()
+    ctx.font = '13px "Inter Tight", system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (const m of marks) {
+      const age = (now - m.t) / LIFE
+      ctx.fillStyle = `rgba(237, 237, 237, ${0.32 * (1 - age)})`
+      ctx.fillText(m.ch, m.x, m.y - age * 6)
+    }
+    frame = marks.length ? requestAnimationFrame(draw) : 0
+  }
+
+  addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return
+    if (last && Math.hypot(e.clientX - last.x, e.clientY - last.y) < GAP) return
+    last = { x: e.clientX, y: e.clientY }
+    marks.push({ x: e.clientX, y: e.clientY, t: performance.now(), ch: GLYPHS[(Math.random() * GLYPHS.length) | 0] })
+    if (!frame) frame = requestAnimationFrame(draw)
+  }, { passive: true })
 }
