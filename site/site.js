@@ -111,16 +111,39 @@ const take = () => {
   cancelAnimationFrame(glideFrame)
 }
 
-handle.addEventListener('pointerdown', (e) => {
+// Drag from the knob, from anywhere along the line, or straight from YouTube's side. Each
+// is a drag, never the start of a text selection: the browser otherwise highlights page
+// text from wherever the press began to wherever the pointer goes.
+const line = stage.querySelector('.split')
+
+function startDrag(e, target) {
+  if (e.button !== 0) return
+  e.preventDefault()
+  getSelection()?.removeAllRanges()
+  handle.focus({ preventScroll: true })
   take()
-  handle.setPointerCapture(e.pointerId)
+  const from = e.clientX
+  let moved = false
+  target.setPointerCapture(e.pointerId)
   stage.classList.add('dragging')
-  handle.onpointermove = (ev) => setSplit(percentAt(ev.clientX))
-  handle.onpointerup = handle.onpointercancel = () => {
-    handle.onpointermove = null
-    stage.classList.remove('dragging')
+  document.documentElement.classList.add('dragging-split')
+  target.onpointermove = (ev) => {
+    if (!moved && Math.abs(ev.clientX - from) < 3) return
+    moved = true
+    setSplit(percentAt(ev.clientX))
   }
-})
+  target.onpointerup = target.onpointercancel = (ev) => {
+    target.onpointermove = target.onpointerup = target.onpointercancel = null
+    stage.classList.remove('dragging')
+    document.documentElement.classList.remove('dragging-split')
+    // A press on YouTube's side that never moved is a click: wipe the divider there.
+    if (!moved && target === tube && ev.type === 'pointerup') glide(percentAt(ev.clientX))
+  }
+}
+
+handle.addEventListener('pointerdown', (e) => startDrag(e, handle))
+line.addEventListener('pointerdown', (e) => startDrag(e, line))
+tube.addEventListener('pointerdown', (e) => startDrag(e, tube))
 
 handle.addEventListener('keydown', (e) => {
   const step = e.shiftKey ? 20 : 5
@@ -130,12 +153,6 @@ handle.addEventListener('keydown', (e) => {
   e.preventDefault()
   take()
   setSplit(to)
-})
-
-// A click on YouTube's side wipes it back to there: the divider, without the drag.
-tube.addEventListener('click', (e) => {
-  take()
-  glide(percentAt(e.clientX))
 })
 
 power.addEventListener('click', () => {

@@ -346,12 +346,33 @@ h1 {
   user-select: none;
 }
 
+/* While the divider is dragged, nothing on the page selects and the cursor stays put. */
+.dragging-split,
+.dragging-split * {
+  cursor: ew-resize !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+/* The line, with a grab strip wider than it looks. */
 .split {
   position: absolute;
   top: 0;
   bottom: 0;
   left: var(--x);
   z-index: 3;
+  width: 24px;
+  margin-left: -12px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.split::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
   width: 1px;
   margin-left: -0.5px;
   background: rgb(255 255 255 / 0.8);
@@ -617,6 +638,8 @@ h3 {
 /* ---- YouTube, as shipped: the busy half of the comparison ---- */
 
 .tube {
+  -webkit-user-select: none;
+  user-select: none;
   position: absolute;
   inset: 0;
   overflow: hidden;
