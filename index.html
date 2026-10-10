@@ -3,351 +3,234 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dumbify · A calm, text-first YouTube</title>
-<meta name="description" content="Dumbify is a free Chrome extension that turns YouTube into a calm, readable list: no thumbnails, no autoplay, no rabbit holes. You stay signed in, and everything still works.">
-<meta name="theme-color" content="#000000">
+<title>Dumbify · YouTube, without the noise</title>
+<meta name="description" content="Dumbify is a free browser extension that turns YouTube into a calm, text-first list: no thumbnails, no autoplay, no rabbit holes. You stay signed in, and everything still works.">
+<meta name="theme-color" content="#0a0a0a">
 <link rel="canonical" href="https://edenrebello.me/dumbify/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://edenrebello.me/dumbify/">
-<meta property="og:title" content="Dumbify · YouTube, but it reads like a book">
-<meta property="og:description" content="A free Chrome extension that turns YouTube into a calm, readable list. No thumbnails, no autoplay, no rabbit holes.">
+<meta property="og:title" content="Dumbify · YouTube, without the noise">
+<meta property="og:description" content="A free extension that turns YouTube into a calm, text-first list. No thumbnails, no autoplay, no rabbit holes.">
 <meta property="og:image" content="https://edenrebello.me/dumbify/site/shots/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/png" sizes="32x32" href="public/icons/icon-32.png">
 <link rel="apple-touch-icon" href="public/icons/icon-128.png">
-<link rel="preload" href="site/demo/fonts/newsreader-300-600-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="site/demo/fonts/inter-tight-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="site/site.css">
-<script>document.documentElement.classList.add('js')</script>
-<script type="module" src="site/site.js"></script>
+<script>document.documentElement.classList.add('js'); if (/\bFirefox\//.test(navigator.userAgent)) document.documentElement.classList.add('firefox')</script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
-  <symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 19V5"/></symbol>
-  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
-  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
-  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a10 10 0 1 1 10-10c0 3-2.5 4.5-5 4.5h-1.8a1.7 1.7 0 0 0-1.2 2.9c.3.3.5.7.5 1.2 0 .8-.7 1.4-2.5 1.4Z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16.5" cy="10.5" r="1"/></symbol>
-  <symbol id="i-lr" viewBox="0 0 24 24"><path d="m9 7-5 5 5 5M15 7l5 5-5 5"/></symbol>
-  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
-  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-chrome" viewBox="0 0 24 24"><path d="M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0zM1.931 5.47A11.943 11.943 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29zm13.342 2.166a5.446 5.446 0 0 1 1.45 7.09l.002.001h-.002l-5.344 9.257c.206.01.413.016.621.016 6.627 0 12-5.373 12-12 0-1.54-.29-3.011-.818-4.364zM12 16.364a4.364 4.364 0 1 1 0-8.728 4.364 4.364 0 0 1 0 8.728Z"/></symbol>
+  <symbol id="i-firefox" viewBox="0 0 24 24"><path d="M8.824 7.287c.008 0 .004 0 0 0zm-2.8-1.4c.006 0 .003 0 0 0zm16.754 2.161c-.505-1.215-1.53-2.528-2.333-2.943.654 1.283 1.033 2.57 1.177 3.53l.002.02c-1.314-3.278-3.544-4.6-5.366-7.477-.091-.147-.184-.292-.273-.446a3.545 3.545 0 01-.13-.24 2.118 2.118 0 01-.172-.46.03.03 0 00-.027-.03.038.038 0 00-.021 0l-.006.001a.037.037 0 00-.01.005L15.624 0c-2.585 1.515-3.657 4.168-3.932 5.856a6.197 6.197 0 00-2.305.587.297.297 0 00-.147.37c.057.162.24.24.396.17a5.622 5.622 0 012.008-.523l.067-.005a5.847 5.847 0 011.957.222l.095.03a5.816 5.816 0 01.616.228c.08.036.16.073.238.112l.107.055a5.835 5.835 0 01.368.211 5.953 5.953 0 012.034 2.104c-.62-.437-1.733-.868-2.803-.681 4.183 2.09 3.06 9.292-2.737 9.02a5.164 5.164 0 01-1.513-.292 4.42 4.42 0 01-.538-.232c-1.42-.735-2.593-2.121-2.74-3.806 0 0 .537-2 3.845-2 .357 0 1.38-.998 1.398-1.287-.005-.095-2.029-.9-2.817-1.677-.422-.416-.622-.616-.8-.767a3.47 3.47 0 00-.301-.227 5.388 5.388 0 01-.032-2.842c-1.195.544-2.124 1.403-2.8 2.163h-.006c-.46-.584-.428-2.51-.402-2.913-.006-.025-.343.176-.389.206-.406.29-.787.616-1.136.974-.397.403-.76.839-1.085 1.303a9.816 9.816 0 00-1.562 3.52c-.003.013-.11.487-.19 1.073-.013.09-.026.181-.037.272a7.8 7.8 0 00-.069.667l-.002.034-.023.387-.001.06C.386 18.795 5.593 24 12.016 24c5.752 0 10.527-4.176 11.463-9.661.02-.149.035-.298.052-.448.232-1.994-.025-4.09-.753-5.844z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
   <symbol id="i-keys" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></symbol>
   <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
   <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83ZM22 17.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
-  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
   <symbol id="i-infinity" viewBox="0 0 24 24"><path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z"/></symbol>
-  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
-  <symbol id="i-github" viewBox="0 0 24 24"><path class="solid" d="M12 .3a12 12 0 0 0-3.8 23.38c.6.11.82-.26.82-.58l-.02-2.04c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.33-1.76-1.33-1.76-1.09-.74.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.81 5.63-5.48 5.92.43.37.81 1.1.81 2.22l-.01 3.29c0 .32.21.7.82.58A12 12 0 0 0 12 .3"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
 </svg>
-
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="nav-wrap">
-  <nav class="nav" aria-label="Main">
+  <nav class="nav wrap" aria-label="Main">
     <a class="brand" href="./" aria-label="Dumbify home">
       <svg class="mark" viewBox="0 0 28 16" aria-hidden="true"><rect x=".5" y=".5" width="27" height="15" rx="7.5"/><circle cx="20" cy="8" r="5"/></svg>
       <span>dumbify</span>
     </a>
     <ul class="nav-links">
-      <li><a href="#demo">Demo</a></li>
-      <li><a href="#looks">Looks</a></li>
       <li><a href="#features">Features</a></li>
+      <li><a href="#looks">Looks</a></li>
+      <li><a href="#watch">Watch page</a></li>
       <li><a href="#privacy">Privacy</a></li>
     </ul>
-    <a class="icon-link" href="https://github.com/edenreb/dumbify" aria-label="Dumbify on GitHub"><svg class="i"><use href="#i-github"/></svg></a>
-    <a class="btn btn-light btn-sm" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Add to Chrome</a>
+    <div class="nav-end">
+      <a class="nav-text" href="https://github.com/edenreb/dumbify">GitHub</a>
+      <a class="pill pill-ghost pill-sm only-chrome" href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/"><svg class="i i-brand" aria-hidden="true"><use href="#i-firefox"/></svg>Add to Firefox</a>
+      <a class="pill pill-ghost pill-sm only-firefox" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf"><svg class="i i-brand" aria-hidden="true"><use href="#i-chrome"/></svg>Add to Chrome</a>
+      <a class="pill pill-light pill-sm only-chrome" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf"><svg class="i i-brand" aria-hidden="true"><use href="#i-chrome"/></svg>Add to Chrome</a>
+      <a class="pill pill-light pill-sm only-firefox" href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/"><svg class="i i-brand" aria-hidden="true"><use href="#i-firefox"/></svg>Add to Firefox</a>
+    </div>
   </nav>
 </header>
 
-<main id="main">
-  <section class="hero" aria-labelledby="hero-title">
-    <div class="hero-top">
-      <canvas class="ascii" data-shape="play" aria-hidden="true"></canvas>
-      <div class="wrap">
-        <div class="hero-copy">
-          <a class="eyebrow" href="https://github.com/edenreb/dumbify/releases"><span class="dot" aria-hidden="true"></span>Dumbify 2.0 · the redesign<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a>
-          <h1 id="hero-title">YouTube, but it <em>reads</em> like a book.</h1>
-          <p class="lede">Dumbify is a Chrome extension that turns youtube.com into a calm, numbered list of titles. No thumbnails, no autoplay, no rabbit holes. You stay signed in, and subscriptions, history and comments all still work.</p>
-          <div class="cta">
-            <a class="btn btn-light" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add to Chrome<span class="tag">Free</span></a>
-            <a class="btn btn-dark" href="https://github.com/edenreb/dumbify"><svg class="i" aria-hidden="true"><use href="#i-github"/></svg>GitHub<span class="tag">GPLv3</span></a>
-          </div>
-          <p class="fine">No account · No tracking · Nothing leaves your browser</p>
-        </div>
-      </div>
+<main id="main" tabindex="-1">
+  <section class="hero wrap" aria-labelledby="hero-title">
+    <h1 id="hero-title">Dumbify turns YouTube into a minimal focus-first platform. For the mindful.</h1>
+    <div class="cta">
+      <a class="pill pill-light only-chrome" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf"><svg class="i i-brand" aria-hidden="true"><use href="#i-chrome"/></svg>Add to Chrome</a>
+      <a class="pill pill-light only-firefox" href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/"><svg class="i i-brand" aria-hidden="true"><use href="#i-firefox"/></svg>Add to Firefox</a>
+      <a class="pill pill-dark only-chrome" href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/"><svg class="i i-brand" aria-hidden="true"><use href="#i-firefox"/></svg>Add to Firefox</a>
+      <a class="pill pill-dark only-firefox" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf"><svg class="i i-brand" aria-hidden="true"><use href="#i-chrome"/></svg>Add to Chrome</a>
     </div>
 
-    <div class="wrap demo" id="demo">
-      <div class="window">
-        <div class="window-bar">
-          <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="url" aria-hidden="true"><svg class="i"><use href="#i-lock"/></svg>youtube.com</span>
-          <button class="ext" type="button" role="switch" aria-checked="true" aria-label="Dumbify" title="Switch Dumbify on or off">
-            <svg class="mark" viewBox="0 0 28 16" aria-hidden="true"><rect x=".5" y=".5" width="27" height="15" rx="7.5"/><circle cx="20" cy="8" r="5"/></svg>
-          </button>
-        </div>
-        <div class="stage" style="--x: 100%">
-          <!-- The divider comes first in the markup so it is reached before the demo's own links. -->
-          <div class="split-handle" role="slider" tabindex="0" aria-label="Compare Dumbify with YouTube" aria-describedby="split-help" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-valuetext="All Dumbify">
-            <svg class="i" aria-hidden="true"><use href="#i-lr"/></svg>
-          </div>
-          <p class="sr-only" id="split-help">Left of the divider is Dumbify's reading view; right of it, YouTube's home page with thumbnails, Shorts and ads. Use the arrow keys to move the divider.</p>
-          <div class="split" aria-hidden="true">
-            <span class="split-tag tag-dumbify">Dumbify</span>
-            <span class="split-tag tag-youtube">YouTube</span>
-          </div>
-          <div class="stage-inner">
-            <iframe class="demo-frame" src="site/demo/#look=paper&amp;mode=dark" title="Live demo of Dumbify's reading view, on sample videos"></iframe>
-            <div class="tube" aria-hidden="true"></div>
-          </div>
-        </div>
+    <div class="canvas canvas-hero" data-reveal>
+      <div class="backdrop" aria-hidden="true"><canvas></canvas></div>
+      <div class="window window-demo">
+        <div class="window-bar"><i></i><i></i><i></i><span>youtube.com · Dumbify</span></div>
+        <iframe class="demo-frame" src="site/demo/#look=paper&amp;mode=dark" title="Live demo of Dumbify's reading view, on sample videos" loading="lazy"></iframe>
       </div>
-
-      <div class="dock" role="toolbar" aria-label="Try the demo">
-        <div class="dock-looks" role="group" aria-label="Looks">
-          <button class="look" type="button" data-look="paper" data-name="Paper" data-note="The calm default" aria-pressed="true" aria-label="Paper look" style="--sw: linear-gradient(135deg, #f7f5ee 50%, #1d1d1d 50%)"></button>
-          <button class="look" type="button" data-look="library" data-name="Library" data-note="Serif on sepia, room to read" aria-pressed="false" aria-label="Library look" style="--sw: linear-gradient(135deg, #ffecd2, #fcb69f)"></button>
-          <button class="look" type="button" data-look="aurora" data-name="Aurora" data-note="Frosted glass on moving light" aria-pressed="false" aria-label="Aurora look" style="--sw: linear-gradient(120deg, #0b1020, #1f6f8b, #6d28d9, #0ea5a4)"></button>
-          <button class="look" type="button" data-look="terminal" data-name="Terminal" data-note="Mono, dense, a table" aria-pressed="false" aria-label="Terminal look" style="--sw: radial-gradient(circle at 68% 68%, #fabd2f 0 24%, #282828 26%)"></button>
-          <button class="look" type="button" data-look="sunset" data-name="Sunset" data-note="Warm glass, soft corners" aria-pressed="false" aria-label="Sunset look" style="--sw: linear-gradient(135deg, #ff9a8b, #ff6a88, #7f5a83)"></button>
-          <button class="look" type="button" data-look="notebook" data-name="Notebook" data-note="A cover on every page" aria-pressed="false" aria-label="Notebook look" style="--sw: linear-gradient(180deg, #2c5364 0 42%, #fff 42%)"></button>
-        </div>
-        <p class="dock-name" aria-live="polite"><b>Paper</b><span>The calm default</span></p>
-        <div class="dock-controls">
-          <button class="dock-btn" type="button" popovertarget="themes" aria-label="All 19 themes" title="All 19 themes"><svg class="i" aria-hidden="true"><use href="#i-palette"/></svg></button>
-          <div class="seg" role="group" aria-label="Feed layout">
-            <button type="button" data-layout="list" aria-pressed="true">List</button>
-            <button type="button" data-layout="cards" aria-pressed="false">Cards</button>
-            <button type="button" data-layout="table" aria-pressed="false">Table</button>
-          </div>
-          <div class="seg" role="group" aria-label="Page">
-            <button type="button" data-page="feed" aria-pressed="true">Feed</button>
-            <button type="button" data-page="watch" aria-pressed="false">Watch</button>
-          </div>
-          <button class="dock-btn" type="button" data-dark role="switch" aria-checked="true" aria-label="Dark mode" title="Dark mode"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg></button>
-        </div>
-      </div>
-      <div class="themes" id="themes" popover>
-        <div class="themes-list"></div>
-      </div>
-      <p class="demo-note">The real reading view, on sample videos. Drag the divider, click a title, try a look.</p>
+      <figure class="window window-pop">
+        <div class="window-bar"><i></i><i></i><i></i><span>Dumbify</span></div>
+        <img src="site/shots/popup.webp" alt="The Dumbify toolbar popup: the on switch, appearance, theme, accent, text size, font, layout and wallpaper." loading="lazy" decoding="async">
+      </figure>
     </div>
-
-    <div class="wrap">
-      <dl class="stats">
-        <div class="stat"><dt>thumbnails, anywhere</dt><dd>0</dd></div>
-        <div class="stat"><dt>themes, all contrast-tested</dt><dd>19</dd></div>
-        <div class="stat"><dt>looks to start from</dt><dd>6</dd></div>
-        <div class="stat"><dt>servers, trackers or accounts</dt><dd>0</dd></div>
-      </dl>
+    <div class="looks-bar" role="toolbar" aria-label="Try a look in the demo">
+      <span>Try a look</span>
+      <button type="button" data-look="paper" aria-pressed="true">Paper</button>
+      <button type="button" data-look="library" aria-pressed="false">Library</button>
+      <button type="button" data-look="aurora" aria-pressed="false">Aurora</button>
+      <button type="button" data-look="terminal" aria-pressed="false">Terminal</button>
+      <button type="button" data-look="sunset" aria-pressed="false">Sunset</button>
+      <button type="button" data-look="notebook" aria-pressed="false">Notebook</button>
     </div>
   </section>
 
-  <section class="section" id="reading" aria-labelledby="reading-title">
-    <div class="wrap pair">
-      <div class="copy" data-reveal>
-        <span class="chip">Reading view</span>
-        <h2 id="reading-title">Every feed is a list you can actually read.</h2>
-        <p>Home, search, subscriptions, history, channels, playlists and Watch Later arrive as numbered rows: title, channel, views, date, length. Your eye lands on words, not on whichever face is shouting loudest.</p>
-        <ul class="ticks">
-          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>A list, cards or a dense table</li>
-          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>A day of Shorts folds into one line</li>
-          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Infinite scroll through your real feed</li>
-        </ul>
-      </div>
-      <figure class="figure" data-reveal>
-        <div class="shot tilt"><img src="site/shots/history.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="Dumbify's History page in the dark Graphite theme: videos grouped under Today and Yesterday as numbered text rows, with a day's Shorts folded into one expandable line."></div>
-        <figcaption>History, grouped by day, Shorts folded away · Graphite</figcaption>
+  <section class="facts wrap" aria-labelledby="works-title">
+    <p class="facts-title" id="works-title">Works with your favorite extensions.</p>
+    <ul class="facts-grid logos">
+      <li><img src="site/logos/ublock-origin.svg" alt="" width="28" height="28"><span>uBlock Origin</span></li>
+      <li><img src="site/logos/sponsorblock.png" alt="" width="28" height="28"><span>SponsorBlock</span></li>
+      <li><img src="site/logos/return-youtube-dislike.svg" alt="" width="28" height="28"><span>Return YouTube Dislike</span></li>
+      <li><img src="site/logos/privacy-badger.png" alt="" width="28" height="28"><span>Privacy Badger</span></li>
+      <li><img src="site/logos/google-translate.svg" alt="" width="28" height="28"><span>Google Translate</span></li>
+      <li><img src="site/logos/shazam.svg" alt="" width="28" height="28"><span>Shazam</span></li>
+    </ul>
+  </section>
+
+  <section class="feature wrap" id="features" aria-labelledby="features-title">
+    <div class="feature-copy" data-reveal>
+      <h2 id="features-title">Titles, not thumbnails <span>Every feed becomes a list you can scan in seconds: home, search, channels, history, subscriptions and watch later. You pick a video by what it is, not by who shouts loudest.</span></h2>
+      <a class="link" href="#looks">See the layouts<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </div>
+    <div class="canvas canvas-side" data-reveal>
+      <figure class="window">
+        <div class="window-bar"><i></i><i></i><i></i><span>History</span></div>
+        <img src="site/shots/history.webp" width="2560" height="1600" alt="History as a text list grouped by day, with an afternoon of Shorts folded into one line." loading="lazy" decoding="async">
       </figure>
     </div>
   </section>
 
-  <section class="section" id="watch" aria-labelledby="watch-title">
-    <div class="wrap">
-      <div class="copy copy-center" data-reveal>
-        <span class="chip">Watch page</span>
-        <h2 id="watch-title">The player stays. The rabbit hole goes.</h2>
-        <p>YouTube's own player, with quality, speed, captions and fullscreen intact, in a quiet frame with the description and comments. No autoplay, no end screens, no Up next.</p>
-      </div>
-      <div class="watch" data-reveal>
-        <fieldset class="seg seg-lg">
-          <legend class="sr-only">Watch page layout</legend>
-          <label><input class="sr-only" type="radio" name="watch-layout" value="classic" checked><span>Classic</span></label>
-          <label><input class="sr-only" type="radio" name="watch-layout" value="theater"><span>Theater</span></label>
-          <label><input class="sr-only" type="radio" name="watch-layout" value="split"><span>Split</span></label>
-        </fieldset>
-        <div class="shot">
-          <img data-layout="classic" src="site/shots/watch-classic.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="The watch page in the Classic layout: the player, the title, channel and actions, and the description, with comments below.">
-          <img data-layout="theater" src="site/shots/watch-theater.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="The watch page in the Theater layout: a wide player across the page, with the title and details beneath it.">
-          <img data-layout="split" src="site/shots/watch-split.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="The watch page in the Split layout: the player and details on the left, and the comments in a column beside them.">
-        </div>
+  <section class="feature wrap" id="looks" aria-labelledby="looks-title">
+    <div class="feature-copy" data-reveal>
+      <h2 id="looks-title">Make it yours <span>Nineteen themes, six finished looks, list, cards or table, and wallpapers down to your own GIF. Every theme is tested for contrast, frosted glass included.</span></h2>
+      <div class="tabs" role="tablist" aria-label="Looks">
+        <button role="tab" type="button" aria-selected="true" data-shot="aurora">Aurora</button>
+        <button role="tab" type="button" aria-selected="false" data-shot="library">Library</button>
+        <button role="tab" type="button" aria-selected="false" data-shot="terminal">Terminal</button>
+        <button role="tab" type="button" aria-selected="false" data-shot="sunset">Sunset</button>
       </div>
     </div>
-  </section>
-
-  <section class="section" id="looks" aria-labelledby="looks-title">
-    <div class="wrap">
-      <div class="copy copy-center" data-reveal>
-        <span class="chip">Looks</span>
-        <h2 id="looks-title">Nineteen themes. Six looks. One click.</h2>
-        <p>Start from a finished look, then tune the theme, accent, typeface, layout and wallpaper. Every theme is tested for contrast, text on frosted glass included.</p>
-      </div>
-      <div class="bento">
-        <figure class="tile tile-lg" data-reveal>
-          <img src="site/shots/look-aurora.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="The Aurora look: frosted-glass cards over a moving aurora wallpaper, in the dark Midnight theme.">
-          <figcaption><span><b>Aurora</b><small>Frosted glass on moving light</small></span><button class="try" type="button" data-try="aurora">Try it<svg class="i" aria-hidden="true"><use href="#i-up"/></svg></button></figcaption>
-        </figure>
-        <figure class="tile" data-reveal>
-          <img src="site/shots/look-library.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="The Library look: a serif list on warm sepia under a peach page cover.">
-          <figcaption><span><b>Library</b><small>Serif on sepia, room to read</small></span><button class="try" type="button" data-try="library">Try it<svg class="i" aria-hidden="true"><use href="#i-up"/></svg></button></figcaption>
-        </figure>
-        <figure class="tile" data-reveal>
-          <img src="site/shots/look-sunset.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="The Sunset look: rounded glass cards over a warm pink and orange wallpaper.">
-          <figcaption><span><b>Sunset</b><small>Warm glass, soft corners</small></span><button class="try" type="button" data-try="sunset">Try it<svg class="i" aria-hidden="true"><use href="#i-up"/></svg></button></figcaption>
-        </figure>
-        <figure class="tile" data-reveal>
-          <img src="site/shots/look-terminal.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="The Terminal look: a dense monospace table on the dark Gruvbox theme.">
-          <figcaption><span><b>Terminal</b><small>Mono, dense, a table</small></span><button class="try" type="button" data-try="terminal">Try it<svg class="i" aria-hidden="true"><use href="#i-up"/></svg></button></figcaption>
-        </figure>
-        <figure class="tile" data-reveal>
-          <img src="site/shots/look-notebook.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="The Notebook look: a clean white list under a deep blue page cover.">
-          <figcaption><span><b>Notebook</b><small>A cover on every page</small></span><button class="try" type="button" data-try="notebook">Try it<svg class="i" aria-hidden="true"><use href="#i-up"/></svg></button></figcaption>
-        </figure>
-        <figure class="tile" data-reveal>
-          <img src="site/shots/look-paper.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="The Paper look: the default numbered list on warm off-white paper.">
-          <figcaption><span><b>Paper</b><small>The calm default</small></span><button class="try" type="button" data-try="paper">Try it<svg class="i" aria-hidden="true"><use href="#i-up"/></svg></button></figcaption>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="settings" aria-labelledby="settings-title">
-    <div class="wrap pair pair-flip">
-      <div class="copy" data-reveal>
-        <span class="chip">Make it yours</span>
-        <h2 id="settings-title">Tuned on a settings page with a live preview.</h2>
-        <p>Every change shows up in the preview as you make it, and in open YouTube tabs straight away. The quick ones live in the toolbar popup.</p>
-        <ul class="ticks">
-          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Wallpapers: a photo, an animated GIF, an MP4 loop, or a built-in live gradient</li>
-          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Panels that are solid, frosted glass or clear, with text that stays readable</li>
-          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Sans, serif and mono faces built in, from 12 to 32 px</li>
-          <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>An accent from the theme, from a palette, or from your wallpaper</li>
-        </ul>
-      </div>
-      <figure class="figure duo" data-reveal>
-        <div class="shot tilt tilt-flip"><img src="site/shots/settings.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="Dumbify's settings page in the Rosé Pine theme: the six looks as cards, the mode switch, and a live preview of the reading view beside them."></div>
-        <div class="shot shot-popup"><img src="site/shots/popup.webp" width="696" height="1200" loading="lazy" decoding="async" alt="The toolbar popup: an on/off switch and quick controls for mode, theme, accent, text size, font, layout and wallpaper."></div>
-        <figcaption>Settings in Rosé Pine, and the toolbar popup</figcaption>
+    <div class="canvas canvas-side" data-reveal>
+      <figure class="window shots" data-group="looks">
+        <div class="window-bar"><i></i><i></i><i></i><span>Home</span></div>
+        <img data-shot="aurora" src="site/shots/look-aurora.webp" width="2560" height="1600" alt="The Aurora look: frosted-glass cards over a moving aurora wallpaper." loading="lazy" decoding="async">
+        <img data-shot="library" src="site/shots/look-library.webp" width="2560" height="1600" alt="The Library look: a serif list on warm sepia under a peach page cover." loading="lazy" decoding="async">
+        <img data-shot="terminal" src="site/shots/look-terminal.webp" width="2560" height="1600" alt="The Terminal look: a dense monospace table on the dark Gruvbox theme." loading="lazy" decoding="async">
+        <img data-shot="sunset" src="site/shots/look-sunset.webp" width="2560" height="1600" alt="The Sunset look: rounded glass cards over a warm pink and orange wallpaper." loading="lazy" decoding="async">
       </figure>
     </div>
   </section>
 
-  <section class="section" id="features" aria-labelledby="features-title">
-    <div class="wrap">
-      <div class="pair pair-top">
-        <div class="copy" data-reveal>
-          <span class="chip">Under the hood</span>
-          <h2 id="features-title">A real client, not a mirror.</h2>
-          <p>Dumbify reads the same data YouTube builds its own page from, and calls the same API YouTube's own site uses, with your signed-in session. Subscribing, liking, replying and saving all go straight to YouTube. There is no shadow account and no second copy of anything.</p>
-        </div>
-        <pre class="diagram" data-reveal role="img" aria-label="youtube.com sends its page data to Dumbify, which shows it as a list you can read. Your subscribes, likes, replies and saves go back to YouTube through its own API, with your session."><span class="hl">youtube.com</span>
-  |
-  |  the page's own data
-  v
-<span class="red">dumbify</span> ------&gt; <span class="hl">a list you can read</span>
-  |
-  |  YouTube's own API, your session
-  v
-<span class="hl">subscribe · like · reply · save</span></pre>
+  <section class="feature wrap" id="watch" aria-labelledby="watch-title">
+    <div class="feature-copy" data-reveal>
+      <h2 id="watch-title">The player stays. The rabbit hole goes. <span>YouTube's own player, with quality, speed, captions and fullscreen intact, in a quiet frame. No autoplay, no end screens, no Up next.</span></h2>
+      <div class="tabs" role="tablist" aria-label="Watch page layout">
+        <button role="tab" type="button" aria-selected="true" data-shot="classic">Classic</button>
+        <button role="tab" type="button" aria-selected="false" data-shot="theater">Theater</button>
+        <button role="tab" type="button" aria-selected="false" data-shot="split">Split</button>
       </div>
-      <div class="features">
-        <article class="feature" data-reveal>
-          <svg class="i" aria-hidden="true"><use href="#i-keys"/></svg>
-          <h3>Keyboard first</h3>
-          <p><kbd>⌘K</kbd> search, <kbd>⌘\</kbd> sidebar, <kbd>⌘⇧L</kbd> dark mode, <kbd>F</kbd> full screen. Ctrl on Windows and Linux.</p>
-        </article>
-        <article class="feature" data-reveal>
-          <svg class="i" aria-hidden="true"><use href="#i-power"/></svg>
-          <h3>An off switch</h3>
-          <p>One click in the toolbar. Switched off, Dumbify injects nothing at all, and there's no blank frame before YouTube appears.</p>
-        </article>
-        <article class="feature" data-reveal>
-          <svg class="i" aria-hidden="true"><use href="#i-layers"/></svg>
-          <h3>Shorts, folded</h3>
-          <p>An afternoon of Shorts is one line in History, so the video you were looking for isn't pushed down to row 47.</p>
-        </article>
-        <article class="feature" data-reveal>
-          <svg class="i" aria-hidden="true"><use href="#i-infinity"/></svg>
-          <h3>Infinite scroll</h3>
-          <p>More of the real feed loads as you read, even when the first page is too short to scroll.</p>
-        </article>
-        <article class="feature" data-reveal>
-          <svg class="i" aria-hidden="true"><use href="#i-shield"/></svg>
-          <h3>Fails politely</h3>
-          <p>YouTube changes all the time. When something Dumbify needs goes missing, it steps aside and hands you regular YouTube.</p>
-        </article>
-        <article class="feature" data-reveal>
-          <svg class="i" aria-hidden="true"><use href="#i-download"/></svg>
-          <h3>Backup</h3>
-          <p>Export your settings, wallpaper included, to a file, and import them on another computer.</p>
-        </article>
-      </div>
+    </div>
+    <div class="canvas canvas-side" data-reveal>
+      <figure class="window shots" data-group="watch">
+        <div class="window-bar"><i></i><i></i><i></i><span>Watch</span></div>
+        <img data-shot="classic" src="site/shots/watch-classic.webp" width="2560" height="1600" alt="The Classic watch layout: the player, title, actions and description, with comments below." loading="lazy" decoding="async">
+        <img data-shot="theater" src="site/shots/watch-theater.webp" width="2560" height="1600" alt="The Theater watch layout: a wide player across the page with details beneath." loading="lazy" decoding="async">
+        <img data-shot="split" src="site/shots/watch-split.webp" width="2560" height="1600" alt="The Split watch layout: the player on the left and comments in a column beside it." loading="lazy" decoding="async">
+      </figure>
     </div>
   </section>
 
-  <section class="section" id="privacy" aria-labelledby="privacy-title">
-    <div class="wrap pair">
-      <div class="copy" data-reveal>
-        <span class="chip">Privacy</span>
-        <h2 id="privacy-title">Nothing leaves the tab.</h2>
-        <p>Dumbify has no server and collects nothing. Your settings live in your browser, and the only requests it makes go to youtube.com.</p>
-        <a class="link" href="PRIVACY">Read the privacy policy<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a>
-      </div>
-      <div class="term" data-reveal>
-        <div class="term-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span>privacy</span></div>
-<pre><span class="p">$</span> <span class="k">dumbify --privacy</span>
-servers ........... <span class="ok">none</span>
-analytics ......... <span class="ok">none</span>
-tracking .......... <span class="ok">none</span>
-requests .......... <span class="k">youtube.com only</span>
-settings .......... <span class="k">on this device</span>
-permissions ....... <span class="k">storage, scripting,</span>
-                    <span class="k">unlimitedStorage</span>
-<span class="p">$</span> <span class="cursor" aria-hidden="true"></span></pre>
-      </div>
+  <section class="cards-section wrap" aria-labelledby="calm-title">
+    <h2 class="center-title" id="calm-title">The calm way to watch YouTube.</h2>
+    <div class="cards">
+      <article class="card" data-reveal>
+        <p>A real client, not a mirror. Subscribing, liking, replying and saving go straight to YouTube with your signed-in session. There's no shadow account.</p>
+        <div class="card-foot"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg><span><b>Real interactions</b><small>Everything still works</small></span></div>
+      </article>
+      <article class="card" data-reveal>
+        <p><kbd>⌘K</kbd> search, <kbd>⌘\</kbd> sidebar, <kbd>⌘⇧L</kbd> dark mode, <kbd>F</kbd> full screen. Ctrl on Windows and Linux.</p>
+        <div class="card-foot"><svg class="i" aria-hidden="true"><use href="#i-keys"/></svg><span><b>Keyboard first</b><small>Hands stay on the keys</small></span></div>
+      </article>
+      <article class="card" data-reveal>
+        <p>One click in the toolbar. Switched off, Dumbify injects nothing at all, and YouTube comes back exactly as it was.</p>
+        <div class="card-foot"><svg class="i" aria-hidden="true"><use href="#i-power"/></svg><span><b>An off switch</b><small>The switch is the logo</small></span></div>
+      </article>
+      <article class="card" data-reveal>
+        <p>An afternoon of Shorts is one line in History, so the video you were looking for isn't pushed down to row 47.</p>
+        <div class="card-foot"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg><span><b>Shorts, folded</b><small>History grouped by day</small></span></div>
+      </article>
+      <article class="card" data-reveal>
+        <p>More of the real feed loads as you read. When YouTube changes something Dumbify needs, it steps aside and hands you regular YouTube.</p>
+        <div class="card-foot"><svg class="i" aria-hidden="true"><use href="#i-infinity"/></svg><span><b>Infinite scroll</b><small>And it fails politely</small></span></div>
+      </article>
+      <article class="card" data-reveal>
+        <p>Export your settings, wallpaper included, to a file, and bring your whole setup to another computer.</p>
+        <div class="card-foot"><svg class="i" aria-hidden="true"><use href="#i-save"/></svg><span><b>Backup</b><small>Your setup, portable</small></span></div>
+      </article>
     </div>
   </section>
 
-  <section class="finale" aria-labelledby="finale-title">
-    <canvas class="ascii" data-shape="switch" aria-hidden="true"></canvas>
-    <div class="wrap" data-reveal>
-      <h2 id="finale-title">Open YouTube and feel nothing trying to grab you.</h2>
-      <div class="cta cta-center">
-        <a class="btn btn-light" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add to Chrome<span class="tag">Free</span></a>
-        <a class="btn btn-dark" href="https://github.com/edenreb/dumbify"><svg class="i" aria-hidden="true"><use href="#i-github"/></svg>Star on GitHub</a>
-      </div>
+  <section class="cards-section wrap" id="privacy" aria-labelledby="privacy-title">
+    <h2 class="left-title" id="privacy-title">Private by design</h2>
+    <div class="cards cards-3">
+      <article class="card card-link" data-reveal>
+        <h3>Nothing leaves the tab <span>No server, no analytics, no account. Your settings live in your browser, and the only requests go to youtube.com.</span></h3>
+        <a class="link" href="privacy/">Read the privacy policy<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </article>
+      <article class="card card-link" data-reveal>
+        <h3>Open source <span>Every line is on GitHub under GPL-3.0. Read it, build it, change it.</span></h3>
+        <a class="link" href="https://github.com/edenreb/dumbify">View the source<svg class="i" aria-hidden="true"><use href="#i-out"/></svg></a>
+      </article>
+      <article class="card card-link" data-reveal>
+        <h3>Free, forever <span>No ads, no premium tier, no upsell. Just a calmer YouTube.</span></h3>
+        <a class="link only-chrome" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf"><svg class="i i-brand" aria-hidden="true"><use href="#i-chrome"/></svg>Add to Chrome</a>
+        <a class="link only-firefox" href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/"><svg class="i i-brand" aria-hidden="true"><use href="#i-firefox"/></svg>Add to Firefox</a>
+      </article>
+    </div>
+  </section>
+
+  <section class="finale wrap" aria-labelledby="finale-title" data-reveal>
+    <h2 id="finale-title">Open YouTube and feel nothing trying to grab you.</h2>
+    <div class="cta cta-center">
+      <a class="pill pill-light" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf"><svg class="i i-brand" aria-hidden="true"><use href="#i-chrome"/></svg>Add to Chrome</a>
+      <a class="pill pill-dark" href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/"><svg class="i i-brand" aria-hidden="true"><use href="#i-firefox"/></svg>Add to Firefox</a>
     </div>
   </section>
 </main>
 
-<footer class="foot">
-  <div class="wrap foot-grid">
-    <div>
-      <a class="brand" href="./" aria-label="Dumbify home">
-        <svg class="mark" viewBox="0 0 28 16" aria-hidden="true"><rect x=".5" y=".5" width="27" height="15" rx="7.5"/><circle cx="20" cy="8" r="5"/></svg>
-        <span>dumbify</span>
-      </a>
-      <p>A calm, text-first YouTube.<br>Not affiliated with YouTube or Google.</p>
-    </div>
-    <nav aria-label="Footer">
-      <a href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Chrome Web Store</a>
-      <a href="https://github.com/edenreb/dumbify">GitHub</a>
-      <a href="https://github.com/edenreb/dumbify/releases">Releases</a>
-      <a href="PRIVACY">Privacy policy</a>
-      <a href="https://github.com/edenreb/dumbify/blob/main/LICENSE">GPL-3.0</a>
-    </nav>
+<footer class="foot wrap">
+  <div>
+    <a class="brand" href="./" aria-label="Dumbify home">
+      <svg class="mark" viewBox="0 0 28 16" aria-hidden="true"><rect x=".5" y=".5" width="27" height="15" rx="7.5"/><circle cx="20" cy="8" r="5"/></svg>
+      <span>dumbify</span>
+    </a>
+    <p>YouTube, without the noise.<br>Built by Eden Rebello and Gabriel Tan. Not affiliated with YouTube or Google.</p>
   </div>
+  <nav aria-label="Footer">
+    <a href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Chrome Web Store</a>
+    <a href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/">Firefox Add-ons</a>
+    <a href="https://github.com/edenreb/dumbify">GitHub</a>
+    <a href="https://github.com/edenreb/dumbify/releases">Releases</a>
+    <a href="privacy/">Privacy policy</a>
+    <a href="https://github.com/edenreb/dumbify/blob/main/LICENSE">GPL-3.0</a>
+  </nav>
 </footer>
+<script src="site/site.js" type="module"></script>
+<script src="site/backdrop.js" type="module"></script>
+<script src="site/trail.js" type="module"></script>
 </body>
 </html>
