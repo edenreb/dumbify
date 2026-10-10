@@ -12,7 +12,8 @@
     "test": "node --experimental-strip-types --test 'tests/*.test.ts'",
     "test:e2e": "node --test 'tests/e2e/*.test.mjs'",
     "screenshots": "node tests/e2e/screenshots.mjs",
-    "site": "vite build --config vite.site.config.ts",
+    "site": "vite build --config src/demo/vite.config.ts",
+    "site:privacy": "node docs/build-privacy.mjs",
     "site:shots": "node tests/e2e/site-shots.mjs",
     "store:shots": "node tests/e2e/store-shots.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit"

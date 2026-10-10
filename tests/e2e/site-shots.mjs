@@ -1,4 +1,4 @@
-// Captures the website's screenshots into site/shots, as WebP at 2x:
+// Captures the website's screenshots into docs/site/shots, as WebP at 2x:
 //   npm run build && npm run site:shots
 // The looks come straight from src/core/looks.ts, so the pictures are the looks as shipped.
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -7,7 +7,7 @@ import { launch } from './harness.mjs'
 import { LOOKS, lookPatch } from '../../src/core/looks.ts'
 import { DEFAULT_SETTINGS } from '../../src/core/settings.ts'
 
-const out = resolve(process.argv[2] ?? 'site/shots')
+const out = resolve(process.argv[2] ?? 'docs/site/shots')
 mkdirSync(out, { recursive: true })
 const settle = (page, ms = 800) => page.waitForTimeout(ms)
 const withLook = (look) => ({ ...DEFAULT_SETTINGS, ...lookPatch(look, DEFAULT_SETTINGS) })
@@ -80,7 +80,7 @@ try {
   // The social card is the site's own hero, served straight from the working tree.
   await h.context.route('https://site.test/**', (route) => {
     const path = new URL(route.request().url()).pathname
-    return route.fulfill({ path: resolve(`.${path.endsWith('/') ? `${path}index.html` : path}`) })
+    return route.fulfill({ path: resolve(`docs${path.endsWith('/') ? `${path}index.html` : path}`) })
   })
   const og = await h.context.newPage()
   await og.setViewportSize({ width: 1200, height: 630 })
