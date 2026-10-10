@@ -53,12 +53,19 @@ const hidden = (path) => /(^|[\\/])\./.test(path)
 /* ---- Open pages reload when the site's files change ---- */
 
 const pages = new Set()
+/**
+ * Which state of the files a page was served from. A page hears the current one when it
+ * connects, as well as at every change, so it also catches what changed while it was
+ * still loading, or while this server was down.
+ */
+let version = String(Date.now())
 let pending
 function changed() {
   // A pull or a save writes several files at once: reload once, after the last of them.
   clearTimeout(pending)
   pending = setTimeout(() => {
-    for (const page of pages) page.write('data: reload\n\n')
+    version = String(Date.now())
+    for (const page of pages) page.write(`data: ${version}\n\n`)
   }, 200)
 }
 // Now and then a comment, so an idle connection stays open.
@@ -68,9 +75,13 @@ setInterval(() => {
 
 const RELOADER = `// Added by scripts/serve-site.mjs: reload when the site's files change. The demo's
 // frame reloads with the page around it.
-if (window === window.top) new EventSource('/__serve/events').onmessage = () => location.reload()
+if (window === window.top) {
+  const served = document.currentScript.dataset.version
+  new EventSource('/__serve/events').onmessage = (e) => {
+    if (e.data !== served) location.reload()
+  }
+}
 `
-const TAG = '<script src="/__serve/reload.js"></script>'
 
 // What the page is made of: index.html and PRIVACY.md at the top, then site/ and public/.
 // Not the whole tree, where node_modules would cost Linux a watcher for every folder.
@@ -101,7 +112,7 @@ async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost')
   if (url.pathname === '/__serve/events') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' })
-    res.write('retry: 1000\n\n')
+    res.write(`retry: 1000\ndata: ${version}\n\n`)
     pages.add(res)
     res.on('close', () => pages.delete(res))
     return
@@ -139,8 +150,9 @@ async function handle(req, res) {
   // Only into the page itself; the demo's frame is reloaded along with it.
   if (type === TYPES['.html'] && req.headers['sec-fetch-dest'] !== 'iframe') {
     const html = body.toString()
+    const tag = `<script src="/__serve/reload.js" data-version="${version}"></script>`
     const at = html.toLowerCase().lastIndexOf('</body>')
-    body = at < 0 ? html + TAG : html.slice(0, at) + TAG + html.slice(at)
+    body = at < 0 ? html + tag : html.slice(0, at) + tag + html.slice(at)
   }
   send(req, res, 200, type, body)
 }
