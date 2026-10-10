@@ -12,6 +12,7 @@
     "screenshots": "node tests/e2e/screenshots.mjs",
     "site": "vite build --config vite.site.config.ts",
     "site:shots": "node tests/e2e/site-shots.mjs",
+    "site:serve": "node scripts/serve-site.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit"
   },
   "devDependencies": {

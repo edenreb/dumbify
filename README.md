@@ -79,11 +79,12 @@ The end-to-end suites load `dist/` into a real Chromium and serve `youtube.com` 
 The GitHub Pages site is `index.html` and `site/` at the repo root; Pages serves `main` as it is, so the built parts are committed. Its live demo is the settings page's preview, built from `src/demo`.
 
 ```bash
+npm run site:serve                    # the site on http://localhost:8000, kept current - see below
 npm run site                          # build the demo into site/demo - after any change to src/
 npm run build && npm run site:shots   # re-take site/shots: the looks, watch layouts, settings, popup and social card
 ```
 
-To try it locally, serve the repo root (`python3 -m http.server`) - the demo talks to the page with `postMessage`, which needs a real origin rather than `file://`.
+`npm run site:serve` reloads open pages when the site's files change. Every 10 seconds it also fetches the checked-out branch and fast-forwards to any new commits, so a pushed change shows up without a `git pull`. It only ever fast-forwards: uncommitted work is left alone, and if it's in the way the server says so and waits. `-- --no-pull` turns that off, and `-- --port 8001` picks another port. Any static server works too (`python3 -m http.server`); the demo talks to the page with `postMessage`, which needs a real origin rather than `file://`.
 
 ## Tech stack
 
@@ -118,6 +119,7 @@ src/
   popup/             toolbar popup
 tests/               unit tests (node --test)
 tests/e2e/           end-to-end tests (Playwright + fixtures)
+scripts/             serve-site.mjs: the website on localhost, kept current
 ```
 
 
