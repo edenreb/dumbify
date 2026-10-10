@@ -68,7 +68,7 @@ After any change: `npm run build`, then reload the extension from `chrome://exte
 
 ```bash
 npm test                 # unit tests: data extraction, settings + migration, themes, looks, colour, legibility, wallpapers, storage
-npm run build && npm run test:e2e   # end-to-end: the built extension in headless Chromium, plus the wallpaper layer on its own
+npm run build && npm run test:e2e   # end-to-end: the built extension in headless Chromium, the wallpaper layer on its own, and npm run site:serve
 npm run screenshots -- out/          # capture the main screens for review
 ```
 
