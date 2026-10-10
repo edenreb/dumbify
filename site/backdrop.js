@@ -1,12 +1,16 @@
 // The page's backdrop: the hands from The Creation of Adam, as an ordered dither in their
 // own colours, breathing out from the centre. Michelangelo's fresco is public domain.
-// Cells are 9 device pixels, so the grid stays fine on a high-density screen.
+//
+// It is cheap by construction. Each frame writes one pixel a cell into a small canvas, and
+// the GPU scales it up, crisp, to 8-device-pixel cells. The gaps between the dots are a
+// fixed CSS mask over it, so they are never drawn at all.
 
-const CELL = 9                           // device pixels
+const CELL = 8                           // device pixels
+const DOT = 0.75                         // of the cell lit, in each direction
 const CONTRAST = 1.58
 const BIAS = 0.1                         // density 20: a little more lit than the tone alone
 const PULSE = 0.3                        // brightness swings by ±30%
-const FPS = 30
+const FPS = 24
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16)
 
 const still = matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -20,16 +24,28 @@ const photo = new Image()
 let cols = 0
 let rows = 0
 let lums = null
-let dists = null
+let rings = null        // each cell's distance from the centre, in whole cells
+let wave = null         // the pulse at each distance, this frame
 let thresholds = null
-let colours = []        // the distinct colours in use, each with the cells that wear it
+let colours = null      // each cell's colour as one 32-bit RGBA pixel
+let image = null
+let pixels = null
 
 function layout() {
   const dpr = devicePixelRatio || 1
-  canvas.width = Math.round(innerWidth * dpr)
-  canvas.height = Math.round(innerHeight * dpr)
-  cols = Math.ceil(canvas.width / CELL)
-  rows = Math.ceil(canvas.height / CELL)
+  cols = Math.ceil((innerWidth * dpr) / CELL)
+  rows = Math.ceil((innerHeight * dpr) / CELL)
+  canvas.width = cols
+  canvas.height = rows
+  const cell = CELL / dpr
+  canvas.style.width = `${cols * cell}px`
+  canvas.style.height = `${rows * cell}px`
+  // The gaps: a mask of one square dot a cell.
+  const dot = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3Crect width='${DOT}' height='${DOT}'/%3E%3C/svg%3E")`
+  for (const prop of ['maskImage', 'webkitMaskImage']) canvas.style[prop] = dot
+  for (const prop of ['maskSize', 'webkitMaskSize']) canvas.style[prop] = `${cell}px ${cell}px`
+  image = ctx.createImageData(canvas.width, canvas.height)
+  pixels = new Uint32Array(image.data.buffer)
 
   // One pixel per cell, covering the window: the browser averages each cell for us.
   const grid = document.createElement('canvas')
@@ -43,48 +59,46 @@ function layout() {
   g.drawImage(photo, (cols - w) / 2, (rows - h) / 2, w, h)
   const d = g.getImageData(0, 0, cols, rows).data
 
-  lums = new Float32Array(cols * rows)
-  dists = new Float32Array(cols * rows)
-  thresholds = new Float32Array(cols * rows)
-  const byColour = new Map()
-  for (let i = 0; i < cols * rows; i++) {
+  const n = cols * rows
+  lums = new Float32Array(n)
+  rings = new Uint16Array(n)
+  thresholds = new Float32Array(n)
+  colours = new Uint32Array(n)
+  wave = new Float32Array(Math.ceil(Math.hypot(cols, rows) / 2) + 2)
+  const bytes = new Uint8Array(colours.buffer)
+  for (let i = 0; i < n; i++) {
     const [r, gg, b] = [d[i * 4], d[i * 4 + 1], d[i * 4 + 2]].map((v) => Math.min(255, Math.max(0, (v - 128) * CONTRAST + 128)))
     const c = i % cols
     const row = (i / cols) | 0
     lums[i] = (0.2126 * r + 0.7152 * gg + 0.0722 * b) / 255
-    dists[i] = Math.hypot(c - cols / 2, row - rows / 2)
+    rings[i] = Math.round(Math.hypot(c - cols / 2, row - rows / 2))
     thresholds[i] = BAYER[(row % 4) * 4 + (c % 4)] - BIAS
-    // Colours rounded to 16 steps a channel, so a frame is a few hundred fills, not thousands.
-    const key = `rgb(${(r >> 4) * 17},${(gg >> 4) * 17},${(b >> 4) * 17})`
-    if (!byColour.has(key)) byColour.set(key, [])
-    byColour.get(key).push(i)
+    bytes.set([r, gg, b, 255], i * 4)
   }
-  colours = [...byColour].map(([css, cells]) => ({ css, cells: Int32Array.from(cells) }))
 }
 
 function draw(t) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  // One sine per ring out from the centre, not one per cell.
   const phase = t * Math.PI * 1.6
-  for (const { css, cells } of colours) {
-    const path = new Path2D()
-    let any = false
-    for (const i of cells) {
-      const lum = still ? lums[i] : lums[i] * (1 + PULSE * Math.sin(phase - dists[i] * 0.04))
-      if (lum <= thresholds[i]) continue
-      path.rect((i % cols) * CELL + 1, ((i / cols) | 0) * CELL + 1, CELL - 2, CELL - 2)
-      any = true
-    }
-    if (!any) continue
-    ctx.fillStyle = css
-    ctx.fill(path)
-  }
+  for (let d = 0; d < wave.length; d++) wave[d] = still ? 1 : 1 + PULSE * Math.sin(phase - d * 0.04)
+  for (let i = 0; i < pixels.length; i++) pixels[i] = lums[i] * wave[rings[i]] > thresholds[i] ? colours[i] : 0
+  ctx.putImageData(image, 0, 0)
 }
 
+// A device that can't keep up gets a still frame rather than a slow page: if frames
+// keep arriving far apart, the backdrop stops moving.
 let last = 0
+let gaps = []
 function loop(now) {
   if (now - last >= 1000 / FPS) {
+    if (last) gaps.push(now - last)
     last = now
     draw(now / 1000)
+  }
+  if (gaps.length >= 48) {
+    const median = gaps.sort((a, b) => a - b)[gaps.length >> 1]
+    if (median > 80) return
+    gaps = []
   }
   requestAnimationFrame(loop)
 }
