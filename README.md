@@ -54,12 +54,25 @@ Dumbify doesn't scrape the rendered page or replace YouTube's backend. On page l
 3. `npm run build`
 4. Open `chrome://extensions`, enable **Developer Mode**, click **Load unpacked**, and select the `dist/` folder
 
+For Firefox 140 or later: `npm run build:firefox`, then open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick `dist-firefox/manifest.json`. Firefox removes temporary add-ons when it restarts.
+
 ## Development
 
 ```bash
-npm run dev        # vite dev, watch mode with HMR
-npm run build      # production build to dist/ (reload the unpacked extension after)
-npm run typecheck  # src/, plus vite.config.ts and manifest.ts
+npm run dev            # vite dev, watch mode with HMR
+npm run build          # production build to dist/ (reload the unpacked extension after)
+npm run build:firefox  # the same code built for Firefox, to dist-firefox/
+npm run typecheck      # src/, plus vite.config.ts and manifest.ts
+```
+
+### Firefox
+
+The Firefox build is the same code with a different manifest (`src/manifest.ts` switches on the build mode). It runs the background as an event page instead of a service worker, uses a name short enough for addons.mozilla.org's 50-character limit, and adds the add-on ID and the data collection declaration Firefox requires. To reproduce the addons.mozilla.org package from this source (built with Node 26.10.0 and npm 11.19.1):
+
+```bash
+npm ci
+npm run build:firefox                         # the package is the contents of dist-firefox/
+npx web-ext lint --source-dir dist-firefox    # Mozilla's validator, the same checks as on upload
 ```
 
 After any change: `npm run build`, then reload the extension from `chrome://extensions` and check the console for `[Dumbify]`-prefixed errors.

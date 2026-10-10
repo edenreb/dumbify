@@ -13,11 +13,11 @@ import { h } from '../ui/dom'
 import { icon } from '../ui/icons'
 import { cardGroup, checkboxChips, colorChoice, row, segmented, slider, toggle } from '../ui/controls'
 import { shortcutLabel } from '../ui/routes'
+import { RATE_URL } from '../ui/rate'
 import { confirmDialog, groupTitle, section, toast } from './feedback'
 
 type S = DumbifySettings
 
-const STORE_URL = 'https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf'
 const REPO_URL = 'https://github.com/edenreb/dumbify'
 
 // ---- Appearance ----
@@ -483,7 +483,7 @@ export function aboutSection(): HTMLElement {
   const credits = [...new Set(THEMES.map((t) => t.credit).filter(Boolean))].join(', ')
   return section('about', 'info', 'About', `Dumbify ${version} - a calm, text-first YouTube.`,
     h('div', { class: 'links about-links' },
-      link(`${STORE_URL}/reviews`, 'star', 'Rate Dumbify'),
+      link(RATE_URL, 'star', 'Rate Dumbify'),
       link(REPO_URL, 'code', 'Source code'),
       link(`${REPO_URL}/blob/main/PRIVACY.md`, 'shield', 'Privacy'),
     ),

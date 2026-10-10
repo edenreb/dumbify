@@ -10,10 +10,7 @@ import { followSystem, paintFromCache, themePage } from '../ui/page-theme'
 import { h } from '../ui/dom'
 import { brandMark, icon } from '../ui/icons'
 import { segmented, toggle } from '../ui/controls'
-
-// The Chrome Web Store listing. "Rate" is the review tab of that same page.
-const STORE_URL =
-  'https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf'
+import { RATE_URL } from '../ui/rate'
 
 paintFromCache()
 
@@ -202,8 +199,8 @@ async function main() {
   const footer = h('footer', { class: 'pop-footer' },
     h('button', { class: 'btn', type: 'button', onclick: () => openSettings() }, icon('sliders'), 'All settings'),
     h('button', {
-      class: 'btn btn-quiet', type: 'button', title: 'Rate Dumbify on the Chrome Web Store',
-      onclick: () => { chrome.tabs.create({ url: `${STORE_URL}/reviews` }); window.close() },
+      class: 'btn btn-quiet', type: 'button', title: 'Rate Dumbify',
+      onclick: () => { chrome.tabs.create({ url: RATE_URL }); window.close() },
     }, icon('star'), 'Rate'),
   )
 

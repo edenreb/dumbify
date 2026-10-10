@@ -6,6 +6,7 @@ import { followSystem, paintFromCache, themePage } from '../ui/page-theme'
 import { h } from '../ui/dom'
 import { brandMark, icon, type IconName } from '../ui/icons'
 import { toggle } from '../ui/controls'
+import { RATE_URL } from '../ui/rate'
 import { runToastAction, saveStatus } from './feedback'
 import { isModKey } from '../ui/routes'
 import {
@@ -59,7 +60,7 @@ async function main() {
     nav.appendChild(a)
   }
   nav.appendChild(h('div', { class: 'nav-foot' },
-    h('a', { class: 'nav-item', href: 'https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf/reviews', target: '_blank', rel: 'noopener noreferrer', title: 'Rate Dumbify' }, icon('star'), h('span', { class: 'nav-label', text: 'Rate Dumbify' })),
+    h('a', { class: 'nav-item', href: RATE_URL, target: '_blank', rel: 'noopener noreferrer', title: 'Rate Dumbify' }, icon('star'), h('span', { class: 'nav-label', text: 'Rate Dumbify' })),
   ))
 
   const preview = createPreview(store)
