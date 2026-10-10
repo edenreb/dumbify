@@ -3,6 +3,12 @@
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// A Firefox visitor sees Add to Firefox first. The stylesheet does that before the first
+// paint; moving the button puts it first for the keyboard too.
+if (document.documentElement.classList.contains('firefox')) {
+  for (const ff of document.querySelectorAll('.cta [data-store="firefox"]')) ff.parentElement.prepend(ff)
+}
+
 /* ---- YouTube, as shipped: the busy half of the demo. Stand-ins, no real channels. ---- */
 
 const CARDS = [

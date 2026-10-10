@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dumbify · A calm, text-first YouTube</title>
-<meta name="description" content="Dumbify is a free Chrome extension that turns YouTube into a calm, readable list: no thumbnails, no autoplay, no rabbit holes. You stay signed in, and everything still works.">
+<meta name="description" content="Dumbify is a free extension for Chrome and Firefox that turns YouTube into a calm, readable list: no thumbnails, no autoplay, no rabbit holes. You stay signed in, and everything still works.">
 <meta name="theme-color" content="#000000">
 <link rel="canonical" href="https://edenrebello.me/dumbify/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://edenrebello.me/dumbify/">
 <meta property="og:title" content="Dumbify · A calm, text-first YouTube">
-<meta property="og:description" content="A free Chrome extension that turns YouTube into a calm, readable list. No thumbnails, no autoplay, no rabbit holes.">
+<meta property="og:description" content="A free extension for Chrome and Firefox that turns YouTube into a calm, readable list. No thumbnails, no autoplay, no rabbit holes.">
 <meta property="og:image" content="https://edenrebello.me/dumbify/site/shots/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/png" sizes="32x32" href="public/icons/icon-32.png">
 <link rel="apple-touch-icon" href="public/icons/icon-128.png">
 <link rel="preload" href="site/demo/fonts/inter-tight-400-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="site/site.css?v=6">
-<script>document.documentElement.classList.add('js')</script>
-<script type="module" src="site/site.js?v=6"></script>
+<link rel="stylesheet" href="site/site.css?v=7">
+<script>document.documentElement.classList.add('js'); if (/\bFirefox\//.test(navigator.userAgent)) document.documentElement.classList.add('firefox')</script>
+<script type="module" src="site/site.js?v=7"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -35,17 +35,19 @@
       <a href="#privacy">Privacy</a>
       <a href="https://github.com/edenreb/dumbify">GitHub</a>
     </nav>
-    <a class="btn btn-sm" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Add to Chrome</a>
+    <a class="btn btn-sm" data-store="chrome" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Add to Chrome</a>
+    <a class="btn btn-sm" data-store="firefox" href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/">Add to Firefox</a>
   </div>
 </header>
 
 <main id="main">
   <section class="hero wrap" aria-labelledby="hero-title">
-    <h1 id="hero-title">YouTube, as a calm list<br class="br-wide">you can actually read.</h1>
+    <h1 id="hero-title">YouTube, as a calm list <br class="br-wide">you can actually read.</h1>
     <p class="lede">No thumbnails, no autoplay, no rabbit holes. You stay signed in, and everything still works.</p>
     <div class="cta">
-      <a class="btn" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Add to Chrome</a>
-      <a class="btn btn-ghost" href="https://github.com/edenreb/dumbify">View on GitHub <span aria-hidden="true">→</span></a>
+      <a class="btn" data-store="chrome" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Add to Chrome</a>
+      <a class="btn btn-ghost" data-store="firefox" href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/">Add to Firefox</a>
+      <a class="cta-link" href="https://github.com/edenreb/dumbify">View on GitHub <span aria-hidden="true">→</span></a>
     </div>
   </section>
 
@@ -82,34 +84,20 @@
 
   <section class="works" aria-labelledby="works-title">
     <p class="works-title" id="works-title">Works with your favorite YouTube extensions</p>
-    <div class="marquee">
-      <div class="marquee-track">
-        <ul>
-          <li><img src="site/logos/ublock-origin.svg" width="28" height="28" alt="">uBlock Origin</li>
-          <li><img src="site/logos/sponsorblock.png" width="28" height="28" alt="">SponsorBlock</li>
-          <li><img src="site/logos/video-speed-controller.png" width="28" height="28" alt="">Video Speed Controller</li>
-          <li><img src="site/logos/adguard.png" width="28" height="28" alt="">AdGuard</li>
-          <li><img src="site/logos/privacy-badger.png" width="28" height="28" alt="">Privacy Badger</li>
-          <li><img src="site/logos/ghostery.svg" width="28" height="28" alt="">Ghostery</li>
-          <li>Enhancer for YouTube</li>
-          <li>AdBlock for YouTube</li>
-        </ul>
-        <ul aria-hidden="true">
-          <li><img src="site/logos/ublock-origin.svg" width="28" height="28" alt="">uBlock Origin</li>
-          <li><img src="site/logos/sponsorblock.png" width="28" height="28" alt="">SponsorBlock</li>
-          <li><img src="site/logos/video-speed-controller.png" width="28" height="28" alt="">Video Speed Controller</li>
-          <li><img src="site/logos/adguard.png" width="28" height="28" alt="">AdGuard</li>
-          <li><img src="site/logos/privacy-badger.png" width="28" height="28" alt="">Privacy Badger</li>
-          <li><img src="site/logos/ghostery.svg" width="28" height="28" alt="">Ghostery</li>
-          <li>Enhancer for YouTube</li>
-          <li>AdBlock for YouTube</li>
-        </ul>
-      </div>
-    </div>
+    <ul class="logos">
+      <li><img src="site/logos/ublock-origin.svg" width="28" height="28" alt="">uBlock Origin</li>
+      <li><img src="site/logos/sponsorblock.png" width="28" height="28" alt="">SponsorBlock</li>
+      <li><img src="site/logos/video-speed-controller.png" width="28" height="28" alt="">Video Speed Controller</li>
+      <li><img src="site/logos/adguard.png" width="28" height="28" alt="">AdGuard</li>
+      <li><img src="site/logos/privacy-badger.png" width="28" height="28" alt="">Privacy Badger</li>
+      <li><img src="site/logos/ghostery.svg" width="28" height="28" alt="">Ghostery</li>
+      <li>Enhancer for YouTube</li>
+      <li>AdBlock for YouTube</li>
+    </ul>
   </section>
 
   <section class="wrap section" id="features" aria-labelledby="features-title">
-    <h2 id="features-title">Everything YouTube does.<br class="br-wide"><span class="dim">None of the noise.</span></h2>
+    <h2 id="features-title">Everything YouTube does. <br class="br-wide"><span class="dim">None of the noise.</span></h2>
     <div class="grid3">
       <div>
         <h3>A list, not a wall</h3>
@@ -127,22 +115,23 @@
   </section>
 
   <section class="wrap section" id="looks" aria-labelledby="looks-title">
-    <h2 id="looks-title">Make it yours.<br class="br-wide"><span class="dim">Nineteen themes, six looks, one click.</span></h2>
+    <h2 id="looks-title">Make it yours. <br class="br-wide"><span class="dim">Nineteen themes, six looks, one click.</span></h2>
     <figure class="shot">
       <img src="site/shots/settings.webp" width="2560" height="1600" loading="lazy" decoding="async" alt="Dumbify's settings page: the six looks as cards, the mode switch, and a live preview of the reading view.">
     </figure>
   </section>
 
   <section class="wrap section" id="privacy" aria-labelledby="privacy-title">
-    <h2 id="privacy-title">Nothing leaves your browser.<br class="br-wide"><span class="dim">No servers, no tracking, no account.</span></h2>
+    <h2 id="privacy-title">Nothing leaves your browser. <br class="br-wide"><span class="dim">No servers, no tracking, no account.</span></h2>
     <a class="link" href="PRIVACY">Read the privacy policy <span aria-hidden="true">→</span></a>
   </section>
 
   <section class="wrap close" aria-labelledby="close-title">
     <h2 id="close-title">Open YouTube. Feel nothing grab you.</h2>
     <div class="cta">
-      <a class="btn" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Add to Chrome</a>
-      <a class="btn btn-ghost" href="https://github.com/edenreb/dumbify">View on GitHub <span aria-hidden="true">→</span></a>
+      <a class="btn" data-store="chrome" href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Add to Chrome</a>
+      <a class="btn btn-ghost" data-store="firefox" href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/">Add to Firefox</a>
+      <a class="cta-link" href="https://github.com/edenreb/dumbify">View on GitHub <span aria-hidden="true">→</span></a>
     </div>
   </section>
 </main>
@@ -150,6 +139,9 @@
 <footer class="wrap foot">
   <span>Dumbify · Not affiliated with YouTube or Google.</span>
   <nav aria-label="Footer">
+    <a href="https://chromewebstore.google.com/detail/dumbify-customizable-text/lhnjjldhbllcdfdldeacdgalkkofhicf">Chrome Web Store</a>
+    <a href="https://addons.mozilla.org/en-US/firefox/addon/dumbify/">Firefox Add-ons</a>
+    <a href="https://github.com/edenreb/dumbify">GitHub</a>
     <a href="https://github.com/edenreb/dumbify/releases">Releases</a>
     <a href="PRIVACY">Privacy</a>
     <a href="https://github.com/edenreb/dumbify/blob/main/LICENSE">GPL-3.0</a>

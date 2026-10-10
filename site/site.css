@@ -101,33 +101,73 @@ button {
 /* ---- Buttons ---- */
 
 .btn {
+  --btn-bg: #fff;
+  --btn-fg: #000;
+  --btn-line: #fff;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 44px;
   padding: 0 20px;
-  border: 1px solid #fff;
+  border: 1px solid var(--btn-line);
   border-radius: 999px;
-  background: #fff;
-  color: #000;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
   font-size: 15px;
   font-weight: 500;
   transition: opacity 150ms;
 }
 
 .btn:hover {
-  opacity: 0.85;
+  opacity: 0.8;
 }
 
 .btn-ghost {
-  border-color: var(--line);
-  background: transparent;
-  color: var(--text);
+  --btn-bg: transparent;
+  --btn-fg: var(--text);
+  --btn-line: rgb(255 255 255 / 0.18);
 }
 
-.btn-ghost:hover {
-  opacity: 1;
-  border-color: rgb(255 255 255 / 0.3);
+/* Firefox readers (flagged in <head>, before the page paints) get Firefox as the main
+   button and first in line; everyone else gets Chrome. */
+.firefox [data-store='firefox'] {
+  --btn-bg: #fff;
+  --btn-fg: #000;
+  --btn-line: #fff;
+}
+
+.firefox .cta [data-store='firefox'] {
+  order: -1;
+}
+
+.firefox [data-store='chrome'] {
+  --btn-bg: transparent;
+  --btn-fg: var(--text);
+  --btn-line: rgb(255 255 255 / 0.18);
+}
+
+.nav [data-store='firefox'],
+.firefox .nav [data-store='chrome'] {
+  display: none;
+}
+
+.firefox .nav [data-store='firefox'] {
+  display: inline-flex;
+}
+
+.cta-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 6px;
+  color: var(--dim);
+  font-size: 15px;
+  transition: color 150ms;
+}
+
+.cta-link:hover {
+  color: var(--text);
 }
 
 .btn-sm {
@@ -440,7 +480,7 @@ h1 {
   pointer-events: none;
 }
 
-/* ---- Works with: a slow, quiet marquee of other extensions ---- */
+/* ---- Works with: other extensions, as a still row of logos ---- */
 
 .works {
   padding-top: clamp(96px, 12vw, 140px);
@@ -452,89 +492,53 @@ h1 {
   text-align: center;
 }
 
-.marquee {
-  overflow: hidden;
-  margin-top: 32px;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent);
-}
-
-.marquee-track {
+/* Wrapping and centred on narrow screens; four even columns once there's room. */
+.logos {
   display: flex;
-  width: max-content;
-  animation: marquee 40s linear infinite;
-}
-
-.marquee:hover .marquee-track {
-  animation-play-state: paused;
-}
-
-.marquee ul {
-  display: flex;
-  align-items: center;
-  gap: 72px;
-  margin: 0;
-  padding: 0 36px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px 36px;
+  width: min(1120px, 100% - 48px);
+  margin: 40px auto 0;
+  padding: 0;
   list-style: none;
 }
 
-.marquee li {
+.logos li {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   color: var(--dim);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 500;
   letter-spacing: -0.01em;
   white-space: nowrap;
   transition: color 200ms;
 }
 
-.marquee img {
-  width: 28px;
-  height: 28px;
+.logos img {
+  width: 26px;
+  height: 26px;
   filter: grayscale(1);
   opacity: 0.7;
   transition: filter 200ms, opacity 200ms;
 }
 
-.marquee li:hover {
+.logos li:hover {
   color: var(--text);
 }
 
-.marquee li:hover img {
+.logos li:hover img {
   filter: none;
   opacity: 1;
 }
 
-/* Each list is one full loop, so sliding by one list's width joins end to start. */
-@keyframes marquee {
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .marquee {
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-
-  .marquee-track {
-    width: auto;
-    justify-content: center;
-    animation: none;
-  }
-
-  .marquee ul {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 20px 48px;
-  }
-
-  .marquee ul[aria-hidden],
-  .marquee li[aria-hidden] {
-    display: none;
+@media (min-width: 900px) {
+  .logos {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 36px 24px;
   }
 }
 
@@ -616,7 +620,8 @@ h3 {
 
 .foot nav {
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 12px 24px;
 }
 
 .foot a:hover {
