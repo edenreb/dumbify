@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/marquee.png" alt="Dumbify 2.0: YouTube, without the noise. A calm, text-first YouTube home feed." width="100%">
+  <img src="assets/readme/marquee.png" alt="Dumbify 2.0: YouTube, without the noise. A calm, text-first YouTube home feed." width="100%">
 </p>
 
 <p align="center">
@@ -27,13 +27,13 @@
 
 It isn't a separate site. Dumbify sits on top of `youtube.com` and reads YouTube's own data, so you stay signed in and subscriptions, history, likes and comments all still work. You just stop getting yelled at by the UI.
 
-![Dumbify's home feed: a numbered, text-only list in the Paper theme](docs/screenshots/home-list.png)
+![Dumbify's home feed: a numbered, text-only list in the Paper theme](assets/readme/screenshots/home-list.png)
 
 | Cards over a frosted-glass wallpaper | Table layout, Mocha theme, serif |
 | --- | --- |
-| ![Card layout with frosted glass panels over the Aurora wallpaper](docs/screenshots/cards-glass.png) | ![Dense table layout in the dark Mocha theme](docs/screenshots/table-dark.png) |
+| ![Card layout with frosted glass panels over the Aurora wallpaper](assets/readme/screenshots/cards-glass.png) | ![Dense table layout in the dark Mocha theme](assets/readme/screenshots/table-dark.png) |
 | **Split watch page** | **Settings, with a live preview** |
-| ![Watch page with comments in a side column](docs/screenshots/watch-split.png) | ![The settings page: theme cards and a live preview](docs/screenshots/settings.png) |
+| ![Watch page with comments in a side column](assets/readme/screenshots/watch-split.png) | ![The settings page: theme cards and a live preview](assets/readme/screenshots/settings.png) |
 
 ## Why
 
@@ -131,14 +131,15 @@ npm run build:firefox                         # the package is the contents of d
 npx web-ext lint --source-dir dist-firefox    # Mozilla's validator, the same checks as on upload
 ```
 
-**Website.** The GitHub Pages site is `index.html` and `site/` at the repo root; Pages serves `main` as it is, so the built parts are committed. Its live demo is the settings page's preview, built from `src/demo`.
+**Website.** The GitHub Pages site lives in `docs/` (the landing page, `docs/privacy/` and `docs/site/`); Pages serves that folder as it is, so the built parts are committed. Its live demo is the settings page's preview, built from `src/demo`.
 
 ```bash
-npm run site                          # build the demo into site/demo, after any change to src/
-npm run build && npm run site:shots   # re-take site/shots
+npm run site                          # build the demo into docs/site/demo, after any change to src/
+npm run site:privacy                  # rebuild docs/privacy/ after editing PRIVACY.md
+npm run build && npm run site:shots   # re-take docs/site/shots
 ```
 
-To try it locally, serve the repo root (`python3 -m http.server`): the demo talks to the page with `postMessage`, which needs a real origin rather than `file://`.
+To try it locally, serve `docs/` (`python3 -m http.server -d docs`): the demo talks to the page with `postMessage`, which needs a real origin rather than `file://`.
 
 </details>
 
@@ -170,8 +171,11 @@ src/
   preview/           the settings page's live preview (real reading-view CSS, sample content)
   demo/              the website's live demo: the preview, driven by the page around it
   popup/             toolbar popup
+  public/            static files copied into the build: icons and bundled fonts
 tests/               unit tests (node --test)
 tests/e2e/           end-to-end tests (Playwright + fixtures)
+docs/                the website (GitHub Pages): landing page, privacy page, demo build
+assets/              brand artwork and the README's images
 ```
 
 </details>

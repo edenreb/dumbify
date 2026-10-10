@@ -73,6 +73,7 @@ export default defineConfig(({ mode }) => {
   const firefox = mode === 'firefox'
   return {
     plugins: [crx({ manifest, browser: firefox ? 'firefox' : 'chrome' }), deferContentScripts()],
+    publicDir: 'src/public',
     build: {
       outDir: firefox ? 'dist-firefox' : mode === 'edge' ? 'dist-edge' : 'dist',
       rollupOptions: {

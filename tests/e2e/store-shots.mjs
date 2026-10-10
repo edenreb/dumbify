@@ -13,7 +13,7 @@ mkdirSync(out, { recursive: true })
 const settle = (page, ms = 1000) => page.waitForTimeout(ms)
 const look = (id) => ({ ...DEFAULT_SETTINGS, ...lookPatch(LOOKS.find((l) => l.id === id), DEFAULT_SETTINGS) })
 const ink = { ...DEFAULT_SETTINGS, mode: 'dark', darkTheme: 'ink' }
-const font = readFileSync('site/demo/fonts/inter-tight-400-latin.woff2').toString('base64')
+const font = readFileSync('docs/site/demo/fonts/inter-tight-400-latin.woff2').toString('base64')
 
 const h = await launch({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 })
 const raw = {}
