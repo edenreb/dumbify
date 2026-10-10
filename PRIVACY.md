@@ -1,7 +1,7 @@
 # Privacy Policy for Dumbify
 
 **Effective date:** September 2, 2026
-**Last updated:** September 24, 2026
+**Last updated:** October 10, 2026
 
 This Privacy Policy describes how the Dumbify browser extension ("Dumbify", "the
 extension") handles information. Please read it before installing or using the
@@ -35,7 +35,7 @@ information; personal communications; location data; or device identifiers.
 
 ## 4. Information stored on your device
 
-Dumbify stores your display preferences locally on your device using Chrome's
+Dumbify stores your display preferences locally on your device using the browser's
 extension storage API (`chrome.storage.local`). These preferences comprise: the
 on/off switch; theme, mode and accent colour; font, text size, line spacing and
 text colours; layout choices (feed layout, page width, sidebar, density, corners,
@@ -86,7 +86,7 @@ Dumbify requests the minimum permissions necessary to function:
 | Permission | Purpose |
 | --- | --- |
 | `storage` | To save your display preferences locally on your device. |
-| `unlimitedStorage` | To let a wallpaper animation or video larger than Chrome's default 10 MB extension storage allowance be saved locally. It grants no access to anything else. |
+| `unlimitedStorage` | To let a wallpaper animation or video larger than the browser's default 10 MB extension storage allowance be saved locally. It grants no access to anything else. |
 | `scripting` | To read YouTube's own page data (`ytInitialData`, `ytcfg`) in order to render the simplified view. |
 | Host access to `https://www.youtube.com/*` | To operate on YouTube pages. The extension has no access to any other website. |
 

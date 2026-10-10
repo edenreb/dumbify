@@ -36,6 +36,8 @@ export async function launch({ colorScheme = 'light', reducedMotion = 'no-prefer
   const userDir = mkdtempSync(join(tmpdir(), 'dumbify-e2e-'))
   const context = await chromium.launchPersistentContext(userDir, {
     channel: 'chromium',
+    // Any other Chromium build, when Playwright's own can't be downloaded.
+    executablePath: process.env.CHROMIUM_PATH || undefined,
     headless: true,
     args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`],
     viewport,

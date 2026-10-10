@@ -297,6 +297,30 @@ textarea {
   box-shadow: 0 0 0 5px var(--df-accent-soft), 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
+/* Firefox's names for the same parts. A selector list mixing both prefixes is dropped by
+   both browsers, so these repeat the rules above. Firefox centres the thumb itself. */
+.range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--df-accent) var(--fill), color-mix(in srgb, var(--df-text) 16%, transparent) var(--fill));
+}
+
+.range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--df-text) 18%, transparent);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: box-shadow 120ms;
+}
+
+.range:focus-visible::-moz-range-thumb,
+.range:active::-moz-range-thumb {
+  box-shadow: 0 0 0 5px var(--df-accent-soft), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
 .range:disabled {
   opacity: 0.4;
   cursor: default;

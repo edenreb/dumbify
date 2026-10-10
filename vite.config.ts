@@ -68,13 +68,18 @@ function deferContentScripts(): Plugin {
   }
 }
 
-export default defineConfig({
-  plugins: [crx({ manifest }), deferContentScripts()],
-  build: {
-    rollupOptions: {
-      // The settings page's live preview is a page of its own, loaded in a frame, so
-      // nothing in the manifest points at it for crxjs to find.
-      input: { preview: 'src/preview/index.html' },
+// `--mode firefox` and `--mode edge` build into their own folders, so they never overwrite dist/.
+export default defineConfig(({ mode }) => {
+  const firefox = mode === 'firefox'
+  return {
+    plugins: [crx({ manifest, browser: firefox ? 'firefox' : 'chrome' }), deferContentScripts()],
+    build: {
+      outDir: firefox ? 'dist-firefox' : mode === 'edge' ? 'dist-edge' : 'dist',
+      rollupOptions: {
+        // The settings page's live preview is a page of its own, loaded in a frame, so
+        // nothing in the manifest points at it for crxjs to find.
+        input: { preview: 'src/preview/index.html' },
+      },
     },
-  },
+  }
 })
